@@ -7,3 +7,4 @@ release/
 .env
 .vscode/
 *.log
+scripts/private_key.pem

@@ -1,0 +1,15 @@
+CREATE INDEX IF NOT EXISTS idx_products_category        ON products(category_id);
+CREATE INDEX IF NOT EXISTS idx_products_supplier         ON products(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_variants_product           ON product_variants(product_id);
+CREATE INDEX IF NOT EXISTS idx_units_product              ON product_units(product_id);
+CREATE INDEX IF NOT EXISTS idx_stock_movements_variant    ON stock_movements(product_variant_id);
+CREATE INDEX IF NOT EXISTS idx_customers_category         ON customers(category_id);
+CREATE INDEX IF NOT EXISTS idx_sales_customer             ON sales(customer_id);
+CREATE INDEX IF NOT EXISTS idx_sales_created              ON sales(created_at);
+CREATE INDEX IF NOT EXISTS idx_sales_synced               ON sales(is_synced);
+CREATE INDEX IF NOT EXISTS idx_sale_items_sale             ON sale_items(sale_id);
+CREATE INDEX IF NOT EXISTS idx_payments_party              ON payments(party_type, party_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_category            ON expenses(category_id);
+CREATE INDEX IF NOT EXISTS idx_sync_queue_synced            ON sync_queue(is_synced);
+CREATE INDEX IF NOT EXISTS idx_category_prices_lookup       ON product_category_prices(product_unit_id, customer_category_id);
+CREATE INDEX IF NOT EXISTS idx_percentage_rules_product      ON percentage_pricing_rules(product_id);
