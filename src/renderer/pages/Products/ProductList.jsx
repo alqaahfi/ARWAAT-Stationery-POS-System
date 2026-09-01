@@ -38,7 +38,10 @@ function statusLabel(row) {
 // but resets on a real app restart since it's not persisted to storage.
 let rememberedState = null;
 
-export default function ProductList({ onNavigate }) {
+// focusProductId (from the top utility bar's global search) pre-filters the
+// list down to that one product and expands it, same destination a search
+// result promises without needing its own separate detail view.
+export default function ProductList({ onNavigate, focusProductId }) {
   const { user } = useAuth();
   const isAdmin = user.role === 'admin';
 
@@ -79,6 +82,26 @@ export default function ProductList({ onNavigate }) {
   useEffect(() => {
     window.api.categories.list().then(setCategories);
   }, []);
+
+  useEffect(() => {
+    if (!focusProductId) return;
+    (async () => {
+      const full = await window.api.products.getById({ id: focusProductId });
+      if (!full) return;
+      // Reset filters so the search hit is actually visible in the filtered
+      // list, then expand it and seed the detail cache with what was just
+      // fetched instead of a redundant second fetch.
+      setSearch(full.name);
+      setCategoryId('');
+      setLowStockOnly(false);
+      setDeadStockOnly(false);
+      setOutOfStockOnly(false);
+      setActiveFilter('all');
+      setExpandedIds(new Set([focusProductId]));
+      setDetailCache((prev) => ({ ...prev, [focusProductId]: full }));
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusProductId]);
 
   // Restore scroll position once on mount; remember it (plus expand/selection
   // state) on unmount so navigating to Edit and back lands where you left off.

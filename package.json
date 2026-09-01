@@ -30,13 +30,18 @@
     "express": "^5.2.1",
     "lucide-react": "^1.37.0",
     "node-machine-id": "^1.1.12",
+    "node-thermal-printer": "^4.6.1",
+    "pdf-lib": "^1.17.1",
+    "printer": "^0.4.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-is": "^19.2.8",
     "recharts": "^3.10.1"
   },
   "allowScripts": {
     "bcrypt@6.0.0": true,
     "better-sqlite3@13.0.3": true,
-    "electron-winstaller@5.4.0": true
+    "electron-winstaller@5.4.0": true,
+    "printer@0.4.0": true
   }
 }

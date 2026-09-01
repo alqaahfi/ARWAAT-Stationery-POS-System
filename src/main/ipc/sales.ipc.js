@@ -1,6 +1,7 @@
 const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
 const { resolveUnitPrice } = require('../pricing/priceEngine');
+const { getSaleDetail, buildReceiptData } = require('../printing/receiptData');
 
 // ---------- product search / barcode (feed the cart) ----------
 
@@ -23,6 +24,76 @@ function searchProducts(query) {
        LIMIT 30`
     )
     .all({ term });
+}
+
+// Grouped-by-product version of the search above, for the Cashier Mode
+// item-search dropdown: each matched product carries its own Types (matching
+// variants) and every active selling Unit (with list prices, for an
+// at-a-glance preview only — the price actually charged is still resolved
+// per-customer via resolvePrice() at the moment a line is added, same as
+// before).
+function searchProductsGrouped(query) {
+  const db = getDb();
+  const term = `%${query}%`;
+
+  const variantRows = db
+    .prepare(
+      `SELECT ${SEARCH_COLUMNS}
+       FROM product_variants pv
+       JOIN products p ON p.id = pv.product_id
+       WHERE pv.is_active = 1 AND p.is_active = 1
+         AND (p.name LIKE @term OR p.sku LIKE @term OR pv.barcode LIKE @term OR pv.variant_name LIKE @term)
+       ORDER BY p.name, pv.variant_name
+       LIMIT 60`
+    )
+    .all({ term });
+
+  if (variantRows.length === 0) return [];
+
+  const productIds = [...new Set(variantRows.map((r) => r.productId))];
+  const placeholders = productIds.map(() => '?').join(',');
+  const unitRows = db
+    .prepare(
+      `SELECT id, product_id, unit_name, conversion_factor, retail_price, wholesale_price, cost_price, is_default_sale_unit
+       FROM product_units WHERE product_id IN (${placeholders}) AND is_active = 1
+       ORDER BY id`
+    )
+    .all(...productIds);
+
+  const unitsByProduct = {};
+  for (const u of unitRows) {
+    (unitsByProduct[u.product_id] ||= []).push({
+      id: u.id,
+      unitName: u.unit_name,
+      conversionFactor: u.conversion_factor,
+      retailPrice: u.retail_price,
+      wholesalePrice: u.wholesale_price,
+      costPrice: u.cost_price,
+      isDefaultSaleUnit: !!u.is_default_sale_unit,
+    });
+  }
+
+  const byProduct = new Map();
+  for (const r of variantRows) {
+    if (!byProduct.has(r.productId)) {
+      byProduct.set(r.productId, {
+        productId: r.productId,
+        productName: r.productName,
+        sku: r.sku,
+        baseUnitName: r.baseUnitName,
+        types: [],
+        units: unitsByProduct[r.productId] || [],
+      });
+    }
+    byProduct.get(r.productId).types.push({
+      variantId: r.variantId,
+      variantName: r.variantName,
+      stockQty: r.stockQty,
+      barcode: r.barcode,
+    });
+  }
+
+  return [...byProduct.values()].slice(0, 20);
 }
 
 function getVariantByBarcode(barcode) {
@@ -245,6 +316,7 @@ function create(payload) {
 
 function registerSalesIpc() {
   ipcMain.handle('sales:search-products', (event, { query } = {}) => (query && query.trim() ? searchProducts(query.trim()) : []));
+  ipcMain.handle('sales:search-products-grouped', (event, { query } = {}) => (query && query.trim() ? searchProductsGrouped(query.trim()) : []));
   ipcMain.handle('sales:get-variant-by-barcode', (event, { barcode } = {}) => getVariantByBarcode(barcode));
   ipcMain.handle('sales:get-variant-for-cart', (event, { variantId } = {}) => getVariantForCart(variantId));
   ipcMain.handle('sales:resolve-price', (event, { productUnitId, customerId } = {}) => ({
@@ -258,6 +330,8 @@ function registerSalesIpc() {
   });
   ipcMain.handle('sales:get-cashier-discount-cap', (event, { userId } = {}) => ({ capPercentage: getCashierDiscountCap(userId) }));
   ipcMain.handle('sales:create', (event, payload) => create(payload || {}));
+  ipcMain.handle('sales:get-sale-detail', (event, { saleId } = {}) => getSaleDetail(saleId));
+  ipcMain.handle('sales:get-receipt-data', (event, { saleId, showDues } = {}) => buildReceiptData(saleId, { showDues }));
 }
 
-module.exports = { registerSalesIpc };
+module.exports = { registerSalesIpc, getSaleDetail };

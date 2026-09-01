@@ -5,12 +5,24 @@ const ProductModel = require('../db/models/Product');
 // ---------- shared validation / normalization ----------
 
 // Ensures there's at least one variant (auto-creates 'Standard' if the form
-// submitted none) and exactly one default sale unit (auto-picks the first).
-function normalizeVariantsAndUnits(variants, units, standardStartingStock) {
+// submitted none — the Product Form UI calls this the product's own top-level
+// "Barcode"/"Starting Stock" fields, shown only while zero Types exist)
+// and exactly one default sale unit (auto-picks the first).
+// standardVariantId, when present, is an existing product_variants.id to
+// update in place (preserving its stock_qty/history) rather than replacing —
+// set when editing a product that's still in single-item ("no Types") mode.
+function normalizeVariantsAndUnits(variants, units, standardStartingStock, standardBarcode, standardVariantId) {
   const normalizedVariants =
     variants && variants.length > 0
       ? variants
-      : [{ variantName: 'Standard', barcode: null, startingStock: Number(standardStartingStock) || 0 }];
+      : [
+          {
+            id: standardVariantId || undefined,
+            variantName: 'Standard',
+            barcode: standardBarcode || null,
+            startingStock: Number(standardStartingStock) || 0,
+          },
+        ];
 
   if (!units || units.length === 0) {
     return { error: 'At least one selling unit is required.' };
@@ -149,15 +161,15 @@ function getById(id) {
 function create(payload) {
   const db = getDb();
   const {
-    name, sku, categoryId, supplierId, baseUnitName, isActive, notes,
+    name, sku, companyName, categoryId, supplierId, baseUnitName, isActive, notes,
     minStockAlert, deadStockDays, pricingType, defaultPercentage, isAgencyItem,
-    variants, units, standardStartingStock,
+    variants, units, standardStartingStock, standardBarcode,
   } = payload;
 
   if (!name || !name.trim()) return { success: false, reason: 'Product name is required.' };
   if (isSkuTaken(db, sku)) return { success: false, reason: 'That SKU is already in use.' };
 
-  const normalized = normalizeVariantsAndUnits(variants, units, standardStartingStock);
+  const normalized = normalizeVariantsAndUnits(variants, units, standardStartingStock, standardBarcode);
   if (normalized.error) return { success: false, reason: normalized.error };
 
   for (const v of normalized.variants) {
@@ -170,19 +182,23 @@ function create(payload) {
     const productResult = db
       .prepare(
         `INSERT INTO products
-           (name, sku, category_id, supplier_id, base_unit_name, min_stock_alert,
+           (name, sku, company_name, category_id, supplier_id, base_unit_name, min_stock_alert,
             dead_stock_days, pricing_type, default_percentage, is_agency_item, notes, is_active)
-         VALUES (@name, @sku, @categoryId, @supplierId, @baseUnitName, @minStockAlert,
+         VALUES (@name, @sku, @companyName, @categoryId, @supplierId, @baseUnitName, @minStockAlert,
                  @deadStockDays, @pricingType, @defaultPercentage, @isAgencyItem, @notes, @isActive)`
       )
       .run({
         name: name.trim(),
         sku: sku || null,
+        companyName: companyName || null,
         categoryId: categoryId || null,
         supplierId: supplierId || null,
         baseUnitName: baseUnitName || 'Piece',
         minStockAlert: Number(minStockAlert) || 0,
         deadStockDays: deadStockDays || null,
+        // Product Form no longer exposes Pricing Type/Default Percentage —
+        // every product created there defaults to fixed pricing; percentage
+        // pricing is configured entirely via Percentage Pricing Rules now.
         pricingType: pricingType === 'percentage' ? 'percentage' : 'fixed',
         defaultPercentage: pricingType === 'percentage' ? Number(defaultPercentage) || 0 : null,
         isAgencyItem: isAgencyItem ? 1 : 0,
@@ -243,15 +259,15 @@ function create(payload) {
 function update(payload) {
   const db = getDb();
   const {
-    id, name, sku, categoryId, supplierId, baseUnitName, isActive, notes,
+    id, name, sku, companyName, categoryId, supplierId, baseUnitName, isActive, notes,
     minStockAlert, deadStockDays, pricingType, defaultPercentage, isAgencyItem,
-    variants, units, standardStartingStock,
+    variants, units, standardStartingStock, standardBarcode, standardVariantId,
   } = payload;
 
   if (!name || !name.trim()) return { success: false, reason: 'Product name is required.' };
   if (isSkuTaken(db, sku, id)) return { success: false, reason: 'That SKU is already in use.' };
 
-  const normalized = normalizeVariantsAndUnits(variants, units, standardStartingStock);
+  const normalized = normalizeVariantsAndUnits(variants, units, standardStartingStock, standardBarcode, standardVariantId);
   if (normalized.error) return { success: false, reason: normalized.error };
 
   for (const v of normalized.variants) {
@@ -260,10 +276,18 @@ function update(payload) {
     }
   }
 
+  // The redesigned Product Form no longer has a SKU field at all (the old
+  // top "Barcode" concept now maps to the implicit Standard variant's own
+  // barcode, not products.sku) — so `sku` simply isn't in its payload. Don't
+  // let that silently null out a value a product already has (e.g. from
+  // bulk import); only overwrite it when a caller explicitly sends one.
+  const existingProduct = db.prepare('SELECT sku FROM products WHERE id = ?').get(id);
+  const resolvedSku = sku !== undefined ? sku || null : existingProduct ? existingProduct.sku : null;
+
   const run = db.transaction(() => {
     db.prepare(
       `UPDATE products SET
-         name = @name, sku = @sku, category_id = @categoryId, supplier_id = @supplierId,
+         name = @name, sku = @sku, company_name = @companyName, category_id = @categoryId, supplier_id = @supplierId,
          base_unit_name = @baseUnitName, min_stock_alert = @minStockAlert, dead_stock_days = @deadStockDays,
          pricing_type = @pricingType, default_percentage = @defaultPercentage, is_agency_item = @isAgencyItem,
          notes = @notes, is_active = @isActive, updated_at = datetime('now')
@@ -271,7 +295,8 @@ function update(payload) {
     ).run({
       id,
       name: name.trim(),
-      sku: sku || null,
+      sku: resolvedSku,
+      companyName: companyName || null,
       categoryId: categoryId || null,
       supplierId: supplierId || null,
       baseUnitName: baseUnitName || 'Piece',

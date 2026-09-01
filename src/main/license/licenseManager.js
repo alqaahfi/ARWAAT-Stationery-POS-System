@@ -45,6 +45,8 @@ function getActivationStatus() {
     role: row.role,
     shopName: row.shop_name,
     adminHost: row.admin_host,
+    machineId: row.machine_id,
+    activatedAt: row.activated_at,
     stationCode: row.station_code,
   };
 }

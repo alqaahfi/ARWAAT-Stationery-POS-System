@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import theme from '../../config/theme';
 import { Card, PageHeader, tableStyles, Tr } from '../../components/ui';
 import { formatDateTime } from '../../utils/format';
@@ -9,6 +10,7 @@ const STATUS_STYLE = {
 };
 
 export default function SyncAndPcs() {
+  const { user } = useAuth();
   const [status, setStatus] = useState(null);
   const [log, setLog] = useState([]);
 
@@ -16,6 +18,14 @@ export default function SyncAndPcs() {
     window.api.sync.getStatus().then(setStatus);
     window.api.sync.getLog().then(setLog);
   }, []);
+
+  if (user.role !== 'admin') {
+    return (
+      <Card style={{ padding: '48px', textAlign: 'center' }}>
+        <h3 style={{ margin: 0, color: theme.colors.textPrimary }}>This section is restricted to Admin accounts</h3>
+      </Card>
+    );
+  }
 
   if (!status) return <Card>Loading…</Card>;
 

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import Sidebar from '../../layout/Sidebar';
+import Sidebar, { SIDEBAR_WIDTH } from '../../layout/Sidebar';
+import TopUtilityBar from '../../layout/TopUtilityBar';
 import { ROUTE_TITLES } from '../../config/navConfig';
 import PlaceholderPage from '../../components/PlaceholderPage';
 import Overview from './Overview';
@@ -13,16 +14,24 @@ import BulkImport from '../Products/BulkImport';
 import PurchaseEntry from '../Products/PurchaseEntry';
 import StockAdjustment from '../Products/StockAdjustment';
 import MovementHistory from '../Products/MovementHistory';
-import Sale from '../POS/Sale';
+import Sale, { isPosSaleInProgress } from '../POS/Sale';
 import CustomerList from '../Customers/CustomerList';
 import CustomerForm from '../Customers/CustomerForm';
-import CustomerLedger from '../Customers/CustomerLedger';
 import CategoryManager from '../Customers/CategoryManager';
 import PercentageRules from '../Customers/PercentageRules';
 import SupplierList from '../Suppliers/SupplierList';
 import SupplierForm from '../Suppliers/SupplierForm';
-import SupplierLedger from '../Suppliers/SupplierLedger';
+import LedgersOverview from '../Ledgers/Overview';
+import CustomerLedger from '../Ledgers/CustomerLedger';
+import SupplierLedger from '../Ledgers/SupplierLedger';
+import PaymentHistory from '../Ledgers/PaymentHistory';
+import AdvancesAndCredits from '../Ledgers/AdvancesAndCredits';
+import AgingReport from '../Ledgers/AgingReport';
+import LedgerAdjustments from '../Ledgers/Adjustments';
 import RecordPayment from '../Payments/RecordPayment';
+import ExpenseList from '../Expenses/ExpenseList';
+import ExpenseForm from '../Expenses/ExpenseForm';
+import ExpenseCategories from '../Expenses/ExpenseCategories';
 import UserList from '../Users/UserList';
 import UserForm from '../Users/UserForm';
 import PermissionsManager from '../Users/PermissionsManager';
@@ -35,6 +44,11 @@ import CashierPerformance from '../Reports/CashierPerformance';
 import ExpenseReport from '../Reports/ExpenseReport';
 import Letterheads from '../Settings/Letterheads';
 import SyncAndPcs from '../Settings/SyncAndPcs';
+import ShopInfo from '../Settings/ShopInfo';
+import PrinterSettings from '../Settings/PrinterSettings';
+import BackupRestore from '../Settings/BackupRestore';
+import LicenseInfo from '../Settings/LicenseInfo';
+import Preferences from '../Settings/Preferences';
 import theme from '../../config/theme';
 
 // Simple state-based router (no react-router in this project): `nav.route`
@@ -45,15 +59,27 @@ export default function AdminDashboard({ shopName }) {
   const [nav, setNav] = useState({ route: '/dashboard', params: {} });
 
   function navigate(route, params = {}) {
+    // Leaving Cashier Mode mid-sale (cart has items) would otherwise silently
+    // discard it — Sale.jsx registers whether that's currently true so this
+    // router can guard the one route that needs it, without every page
+    // needing its own leave-confirmation wiring.
+    if (nav.route === '/pos' && route !== '/pos' && isPosSaleInProgress()) {
+      const proceed = window.confirm("You have an unfinished sale — leave anyway? It'll be saved as a draft.");
+      if (!proceed) return;
+    }
     setNav({ route, params });
   }
 
   function pageTitle() {
+    // No longer a navConfig entry (Cashier Mode moved to the top utility
+    // bar's POS icon), so ROUTE_TITLES has nothing for '/pos' — set here.
+    if (nav.route === '/pos') return 'Cashier Mode';
     if (nav.route === '/products/edit') return nav.params.id ? 'Edit Product' : 'Add New Product';
     if (nav.route === '/customers/edit') return 'Edit Customer';
-    if (nav.route === '/customers/ledger-view') return nav.params.name ? `Ledger — ${nav.params.name}` : 'Customer Ledger';
     if (nav.route === '/suppliers/edit') return 'Edit Supplier';
-    if (nav.route === '/suppliers/ledger-view') return nav.params.name ? `Ledger — ${nav.params.name}` : 'Supplier Ledger';
+    if (nav.route === '/ledgers/customers') return nav.params.name ? `Ledger — ${nav.params.name}` : 'Customer Ledger';
+    if (nav.route === '/ledgers/suppliers') return nav.params.name ? `Ledger — ${nav.params.name}` : 'Supplier Ledger';
+    if (nav.route === '/expenses/edit') return 'Edit Expense';
     if (nav.route === '/users/edit') return 'Edit Cashier';
     return ROUTE_TITLES[nav.route] || nav.route;
   }
@@ -67,7 +93,7 @@ export default function AdminDashboard({ shopName }) {
         return <Sale />;
 
       case '/products':
-        return <ProductList onNavigate={navigate} />;
+        return <ProductList onNavigate={navigate} focusProductId={nav.params.focusProductId} />;
       case '/products/new':
         return <ProductForm onDone={() => navigate('/products')} onCancel={() => navigate('/products')} />;
       case '/products/edit':
@@ -105,10 +131,6 @@ export default function AdminDashboard({ shopName }) {
             onCancel={() => navigate('/customers')}
           />
         );
-      case '/customers/ledger':
-        return <CustomerLedger onNavigate={navigate} />;
-      case '/customers/ledger-view':
-        return <CustomerLedger customerId={nav.params.id} onNavigate={navigate} />;
       case '/customers/categories':
         return <CategoryManager />;
       case '/customers/percentage-rules':
@@ -126,13 +148,34 @@ export default function AdminDashboard({ shopName }) {
             onCancel={() => navigate('/suppliers')}
           />
         );
-      case '/suppliers/ledger':
-        return <SupplierLedger onNavigate={navigate} />;
-      case '/suppliers/ledger-view':
+      case '/ledgers':
+        return <LedgersOverview onNavigate={navigate} />;
+      case '/ledgers/customers':
+        return <CustomerLedger customerId={nav.params.id} onNavigate={navigate} />;
+      case '/ledgers/suppliers':
         return <SupplierLedger supplierId={nav.params.id} onNavigate={navigate} />;
+      case '/ledgers/payments':
+        return <PaymentHistory onNavigate={navigate} />;
+      case '/ledgers/advances':
+        return <AdvancesAndCredits onNavigate={navigate} />;
+      case '/ledgers/aging':
+        return <AgingReport onNavigate={navigate} />;
+      case '/ledgers/adjustments':
+        return <LedgerAdjustments />;
 
       case '/payments/record':
         return <RecordPayment />;
+
+      case '/expenses':
+        return <ExpenseList onNavigate={navigate} />;
+      case '/expenses/new':
+        return <ExpenseForm onDone={() => navigate('/expenses')} onCancel={() => navigate('/expenses')} />;
+      case '/expenses/edit':
+        return (
+          <ExpenseForm expenseId={nav.params.id} onDone={() => navigate('/expenses')} onCancel={() => navigate('/expenses')} />
+        );
+      case '/expenses/categories':
+        return <ExpenseCategories onNavigate={navigate} />;
 
       case '/users':
         return <UserList onNavigate={navigate} />;
@@ -158,10 +201,20 @@ export default function AdminDashboard({ shopName }) {
       case '/reports/expenses':
         return <ExpenseReport />;
 
+      case '/settings/shop':
+        return <ShopInfo />;
       case '/settings/letterheads':
         return <Letterheads />;
+      case '/settings/printers':
+        return <PrinterSettings />;
       case '/settings/sync':
         return <SyncAndPcs />;
+      case '/settings/backup':
+        return <BackupRestore />;
+      case '/settings/license':
+        return <LicenseInfo />;
+      case '/settings/preferences':
+        return <Preferences />;
 
       default:
         return <PlaceholderPage title={ROUTE_TITLES[nav.route] || nav.route} />;
@@ -179,14 +232,7 @@ export default function AdminDashboard({ shopName }) {
       />
 
       <div style={styles.main}>
-        <div style={styles.topbar}>
-          <h2 style={styles.pageTitle}>{pageTitle()}</h2>
-          <div style={styles.topbarRight}>
-            <span>{today}</span>
-            <span style={styles.divider}>|</span>
-            <span>Logged in as {user.fullName}</span>
-          </div>
-        </div>
+        <TopUtilityBar pageTitle={pageTitle()} activeRoute={nav.route} onNavigate={navigate} />
 
         <div style={styles.content}>{renderContent()}</div>
       </div>
@@ -194,24 +240,17 @@ export default function AdminDashboard({ shopName }) {
   );
 }
 
-const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-
+// Sidebar is `position: fixed` and always fully open at a steady width —
+// main content's margin-left matches that width so it never sits underneath it.
 const styles = {
-  container: { display: 'flex', height: '100vh', backgroundColor: theme.colors.appBackground, fontFamily: theme.font.family },
-  main: { flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' },
-  topbar: {
+  container: { height: '100vh', backgroundColor: theme.colors.appBackground, fontFamily: theme.font.family },
+  main: {
+    marginLeft: SIDEBAR_WIDTH,
+    height: '100vh',
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '0 28px',
-    height: '56px',
-    minHeight: '56px',
-    backgroundColor: theme.colors.cardBackground,
-    borderBottom: `1px solid ${theme.colors.border}`,
-    flexShrink: 0,
+    flexDirection: 'column',
+    minWidth: 0,
+    overflow: 'hidden',
   },
-  pageTitle: { color: theme.colors.textPrimary, fontSize: theme.font.sizeMd, fontWeight: theme.font.weightSemibold, margin: 0 },
-  topbarRight: { display: 'flex', alignItems: 'center', gap: '10px', color: theme.colors.textSecondary, fontSize: theme.font.sizeSm },
-  divider: { color: theme.colors.border },
   content: { flex: 1, overflowY: 'auto', padding: '24px 28px' },
 };

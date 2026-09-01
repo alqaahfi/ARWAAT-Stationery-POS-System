@@ -2,12 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import theme from '../../config/theme';
 import { Card, PageHeader, Button, tableStyles, Tr, Label, TextInput, Select, TextArea, Banner } from '../../components/ui';
+import PrintChoice from '../../components/PrintChoice';
 import { formatCurrency, formatDateTime } from '../../utils/format';
 
-// Mounted at both /suppliers/ledger (no supplierId — picker mode) and
-// /suppliers/ledger-view (supplierId from a Supplier List row click —
-// preselected mode). Switching the picker's selection while already viewing
-// a ledger just reloads for the newly picked supplier, no navigating away.
+// Mounted at /ledgers/suppliers, with or without a supplierId param — no id
+// is picker mode (reached from the nav item), an id from a Supplier List row
+// click is preselected mode. Switching the picker's selection while already
+// viewing a ledger just reloads for the newly picked supplier, no navigating
+// away.
 export default function SupplierLedger({ supplierId, onNavigate }) {
   const { user } = useAuth();
 
@@ -73,8 +75,8 @@ export default function SupplierLedger({ supplierId, onNavigate }) {
       <PageHeader
         title="Supplier Ledger"
         actions={
-          <Button variant="ghost" onClick={() => onNavigate('/suppliers')}>
-            ← Back to Suppliers
+          <Button variant="ghost" onClick={() => onNavigate('/ledgers')}>
+            ← Back to Ledgers
           </Button>
         }
       />
@@ -97,7 +99,7 @@ export default function SupplierLedger({ supplierId, onNavigate }) {
                   {r.phone ? ` · ${r.phone}` : ''}
                 </div>
                 <div style={{ color: r.balance_owed > 0 ? theme.colors.danger : theme.colors.success, fontWeight: theme.font.weightMedium }}>
-                  {formatCurrency(r.balance_owed)}
+                  {formatCurrency(Math.abs(r.balance_owed))}
                 </div>
               </div>
             ))}
@@ -127,9 +129,9 @@ export default function SupplierLedger({ supplierId, onNavigate }) {
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={styles.balanceLabel}>Current Balance</div>
+                <div style={styles.balanceLabel}>{data.balance < 0 ? 'Advance Held' : 'Current Balance'}</div>
                 <div style={{ ...styles.balanceValue, color: data.balance > 0 ? theme.colors.danger : theme.colors.success }}>
-                  {formatCurrency(data.balance)}
+                  {formatCurrency(Math.abs(data.balance))}
                 </div>
               </div>
             </div>
@@ -211,6 +213,7 @@ function PaymentModal({ supplier, balance, onClose, onRecorded }) {
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [recordedPaymentId, setRecordedPaymentId] = useState(null);
 
   async function handleSave() {
     setError('');
@@ -239,37 +242,50 @@ function PaymentModal({ supplier, balance, onClose, onRecorded }) {
       setError(res.reason || 'Could not record payment.');
       return;
     }
-    onRecorded();
+    // Payment saved — offer the Thermal/A4/Don't Print step before closing.
+    setRecordedPaymentId(res.paymentId);
   }
 
   return (
     <div style={modalStyles.overlay}>
       <div style={modalStyles.card}>
-        <h3 style={modalStyles.title}>Record Payment — {supplier.name}</h3>
+        {!recordedPaymentId ? (
+          <>
+            <h3 style={modalStyles.title}>Record Payment — {supplier.name}</h3>
 
-        <Label>Amount</Label>
-        <TextInput type="number" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
+            <Label>Amount</Label>
+            <TextInput type="number" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
 
-        <Label>Payment Method</Label>
-        <Select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-          <option value="cash">Cash</option>
-          <option value="bank">Bank</option>
-          <option value="other">Other</option>
-        </Select>
+            <Label>Payment Method</Label>
+            <Select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+              <option value="cash">Cash</option>
+              <option value="bank">Bank</option>
+              <option value="other">Other</option>
+            </Select>
 
-        <Label>Note (optional)</Label>
-        <TextArea value={note} onChange={(e) => setNote(e.target.value)} />
+            <Label>Note (optional)</Label>
+            <TextArea value={note} onChange={(e) => setNote(e.target.value)} />
 
-        <Banner>{error}</Banner>
+            <Banner>{error}</Banner>
 
-        <div style={{ display: 'flex', gap: theme.spacing.sm, marginTop: theme.spacing.lg }}>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Record Payment'}
-          </Button>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-        </div>
+            <div style={{ display: 'flex', gap: theme.spacing.sm, marginTop: theme.spacing.lg }}>
+              <Button onClick={handleSave} disabled={saving}>
+                {saving ? 'Saving…' : 'Record Payment'}
+              </Button>
+              <Button variant="ghost" onClick={onClose}>
+                Cancel
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <h3 style={modalStyles.title}>Payment Recorded</h3>
+            <div style={{ color: theme.colors.textSecondary, fontSize: theme.font.sizeSm, marginTop: '4px' }}>
+              Print a receipt for this payment?
+            </div>
+            <PrintChoice paymentId={recordedPaymentId} onDone={onRecorded} />
+          </>
+        )}
       </div>
     </div>
   );

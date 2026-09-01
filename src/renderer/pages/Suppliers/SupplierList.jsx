@@ -69,7 +69,7 @@ export default function SupplierList({ onNavigate }) {
             </thead>
             <tbody>
               {suppliers.map((s) => (
-                <Tr key={s.id} onClick={() => onNavigate('/suppliers/ledger-view', { id: s.id, name: s.name })}>
+                <Tr key={s.id} onClick={() => onNavigate('/ledgers/suppliers', { id: s.id, name: s.name })}>
                   <td style={tableStyles.td}>{s.name}</td>
                   <td style={tableStyles.td}>{s.contact_person || '—'}</td>
                   <td style={tableStyles.td}>{s.phone || '—'}</td>

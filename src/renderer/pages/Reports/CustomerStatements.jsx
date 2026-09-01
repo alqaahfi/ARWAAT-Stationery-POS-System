@@ -56,7 +56,7 @@ export default function CustomerStatements({ onNavigate }) {
         <ReportTable
           columns={data.columns.filter((c) => c.key !== 'id')}
           rows={data.rows}
-          onRowClick={(row) => onNavigate('/customers/ledger-view', { id: row.id, name: row.name })}
+          onRowClick={(row) => onNavigate('/ledgers/customers', { id: row.id, name: row.name })}
         />
       </Card>
     </div>

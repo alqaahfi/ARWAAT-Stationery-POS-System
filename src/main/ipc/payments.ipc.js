@@ -13,12 +13,12 @@ function createStandalone({ customerId, amount, paymentMethod, note, receivedBy 
   if (!amt || amt <= 0) return { success: false, reason: 'Enter an amount greater than zero.' };
   if (!['cash', 'bank', 'other'].includes(paymentMethod)) return { success: false, reason: 'Invalid payment method.' };
 
-  db.prepare(
+  const result = db.prepare(
     `INSERT INTO payments (party_type, party_id, sale_id, amount, payment_method, note, received_by)
      VALUES ('customer', ?, NULL, ?, ?, ?, ?)`
   ).run(customerId, amt, paymentMethod, note || null, receivedBy || null);
 
-  return { success: true, newBalance: getCustomerBalance(db, customerId) };
+  return { success: true, paymentId: result.lastInsertRowid, newBalance: getCustomerBalance(db, customerId) };
 }
 
 // Admin-only, enforced here rather than just hidden in the UI — the
@@ -38,12 +38,12 @@ function createSupplierPayment({ supplierId, amount, paymentMethod, note, receiv
 
   // received_by is reused as-is even though this is an outgoing payment —
   // the direction is implied by party_type, so no schema change is needed.
-  db.prepare(
+  const result = db.prepare(
     `INSERT INTO payments (party_type, party_id, sale_id, amount, payment_method, note, received_by)
      VALUES ('supplier', ?, NULL, ?, ?, ?, ?)`
   ).run(supplierId, amt, paymentMethod, note || null, receivedBy || null);
 
-  return { success: true, newBalance: getSupplierBalance(db, supplierId) };
+  return { success: true, paymentId: result.lastInsertRowid, newBalance: getSupplierBalance(db, supplierId) };
 }
 
 function registerPaymentsIpc() {

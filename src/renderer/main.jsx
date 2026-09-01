@@ -2,22 +2,33 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './app.jsx';
 import PrintReport from './pages/Print/PrintReport.jsx';
+import PrintReceipt from './pages/Print/PrintReceipt.jsx';
+import PrintPaymentReceipt from './pages/Print/PrintPaymentReceipt.jsx';
 
-// A hidden BrowserWindow used for PDF export (see exportReportPdf.js on the
-// main process side) loads this exact same bundle with `?print=1` on the
-// query string, instead of a second Vite entry point — cheaper than wiring a
-// whole separate HTML/build target for one print-only view. When present, it
-// bypasses AuthProvider/the sidebar app entirely and renders just the plain,
-// printable report.
+// A hidden/standalone BrowserWindow used for PDF export, payment-receipt
+// printing, or (dev-mode) the sale receipt preview loads this exact same
+// bundle with `?print=1` on the query string, instead of a second Vite entry
+// point — cheaper than wiring a whole separate HTML/build target per
+// print-only view. When present, it bypasses AuthProvider/the sidebar app
+// entirely and renders just the relevant print/preview page — which one
+// depends on `printMode` (defaults to 'report' for backward compatibility
+// with the Reports PDF flow, which doesn't set it). A4 sale invoices are the
+// one exception: they're a merged PDF file printed directly (see
+// printA4Invoice.js), not an HTML page rendered through this bundle.
 const params = new URLSearchParams(window.location.search);
 const isPrintMode = params.get('print') === '1';
+const printMode = params.get('printMode') || 'report';
+
+function PrintRoot() {
+  if (printMode === 'receipt') {
+    return <PrintReceipt saleId={params.get('saleId')} showDues={params.get('showDues') === '1'} />;
+  }
+  if (printMode === 'payment-receipt') {
+    return <PrintPaymentReceipt paymentId={params.get('paymentId')} />;
+  }
+  return <PrintReport reportType={params.get('reportType')} filters={JSON.parse(params.get('filters') || '{}')} />;
+}
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    {isPrintMode ? (
-      <PrintReport reportType={params.get('reportType')} filters={JSON.parse(params.get('filters') || '{}')} />
-    ) : (
-      <App />
-    )}
-  </React.StrictMode>
+  <React.StrictMode>{isPrintMode ? <PrintRoot /> : <App />}</React.StrictMode>
 );

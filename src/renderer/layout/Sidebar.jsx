@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Circle,
   ChevronRight,
@@ -9,6 +9,7 @@ import {
   Boxes,
   Users,
   Truck,
+  BookText,
   Receipt,
   Wallet,
   FileText,
@@ -29,6 +30,7 @@ const ICONS = {
   Boxes,
   Users,
   Truck,
+  BookText,
   Receipt,
   Wallet,
   FileText,
@@ -38,29 +40,14 @@ const ICONS = {
   Settings,
 };
 
-// Slightly lighter navy than the sidebar fill, used only for the one hairline
-// separating the nav list from the user/logout footer — not reused elsewhere,
-// so it isn't promoted into the shared theme.
+// Slightly lighter navy than the sidebar fill, used only for hairlines —
+// not reused elsewhere, so it isn't promoted into theme.
 const SIDEBAR_DIVIDER = '#2c4468';
 
-const EXPANDED_STORAGE_KEY = 'pos_sidebar_expanded_keys';
-
-function loadExpanded() {
-  try {
-    const raw = localStorage.getItem(EXPANDED_STORAGE_KEY);
-    return raw ? new Set(JSON.parse(raw)) : new Set();
-  } catch {
-    return new Set();
-  }
-}
-
-function saveExpanded(set) {
-  try {
-    localStorage.setItem(EXPANDED_STORAGE_KEY, JSON.stringify([...set]));
-  } catch {
-    // localStorage unavailable (e.g. private/blocked) — expansion just won't persist.
-  }
-}
+// Fixed, steady width — the sidebar no longer collapses to an icon rail and
+// expands on hover; it's always fully open. Kept as a named export so
+// AdminDashboard.jsx's content area can size its margin-left to match.
+export const SIDEBAR_WIDTH = '230px';
 
 function Icon({ name, size = 17 }) {
   const Cmp = ICONS[name] || Circle;
@@ -68,27 +55,26 @@ function Icon({ name, size = 17 }) {
 }
 
 export default function Sidebar({ activeRoute, onNavigate, shopName, user, onLogout }) {
-  const [expanded, setExpanded] = useState(loadExpanded);
+  // Which single parent group currently shows its children — purely a hover
+  // state (not persisted): hovering a group opens it, moving the mouse off
+  // that group's whole block (button + its open item list) closes it again.
+  // No click needed and no click involved.
+  const [expandedKey, setExpandedKey] = useState(null);
 
-  useEffect(() => {
-    saveExpanded(expanded);
-  }, [expanded]);
-
-  function toggleSection(key) {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  function openSection(key) {
+    setExpandedKey(key);
   }
 
-  // Customers, Suppliers and Users are hard-gated by role, not by the
+  function closeSection(key) {
+    setExpandedKey((current) => (current === key ? null : current));
+  }
+
+  // Customers, Suppliers, Users and Settings are hard-gated by role, not by the
   // flexible permission system — they must not render for a cashier even if
   // some permissionKey were granted. (Sidebar is currently only mounted for
   // admin anyway, but this keeps the component correct on its own if that
   // ever changes.)
-  const ADMIN_ONLY_SECTIONS = new Set(['customers', 'suppliers', 'users']);
+  const ADMIN_ONLY_SECTIONS = new Set(['customers', 'suppliers', 'ledgers', 'users', 'settings']);
   const visibleSections = navConfig.filter((section) => !ADMIN_ONLY_SECTIONS.has(section.key) || user.role === 'admin');
 
   return (
@@ -101,18 +87,23 @@ export default function Sidebar({ activeRoute, onNavigate, shopName, user, onLog
       <nav style={styles.nav}>
         {visibleSections.map((section) => {
           const hasChildren = !!section.children;
-          const isExpanded = expanded.has(section.key);
+          const isExpanded = expandedKey === section.key;
           const isDirectActive = !hasChildren && activeRoute === section.route;
           const isParentOfActive = hasChildren && section.children.some((c) => c.route === activeRoute);
 
           return (
-            <div key={section.key} style={styles.sectionBlock}>
+            <div
+              key={section.key}
+              style={styles.sectionBlock}
+              onMouseEnter={() => hasChildren && openSection(section.key)}
+              onMouseLeave={() => hasChildren && closeSection(section.key)}
+            >
               <button
                 style={{
                   ...styles.sectionButton,
                   ...(isDirectActive || isParentOfActive ? styles.sectionButtonActive : {}),
                 }}
-                onClick={() => (hasChildren ? toggleSection(section.key) : onNavigate(section.route))}
+                onClick={() => !hasChildren && onNavigate(section.route)}
                 onMouseEnter={(e) => {
                   if (!isDirectActive && !isParentOfActive) e.currentTarget.style.backgroundColor = theme.colors.sidebarBackgroundActive;
                 }}
@@ -174,18 +165,24 @@ export default function Sidebar({ activeRoute, onNavigate, shopName, user, onLog
 
 const styles = {
   container: {
-    width: '230px',
-    minWidth: '230px',
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: SIDEBAR_WIDTH,
     height: '100vh',
     backgroundColor: theme.colors.sidebarBackground,
     display: 'flex',
     flexDirection: 'column',
     fontFamily: theme.font.family,
+    // Below the app's modal overlays (zIndex: 100, e.g. Record Payment) —
+    // both are now `position: fixed`, so this keeps a modal reliably on top
+    // instead of relying on DOM paint order between two fixed elements.
+    zIndex: 40,
   },
-  brand: { padding: '20px 18px', borderBottom: `1px solid ${SIDEBAR_DIVIDER}` },
-  brandName: { color: theme.colors.textOnSidebarActive, fontSize: theme.font.sizeMd, fontWeight: theme.font.weightSemibold },
-  brandSub: { color: theme.colors.textOnSidebar, fontSize: theme.font.sizeXs, marginTop: '2px' },
-  nav: { padding: '10px', flex: 1, overflowY: 'auto', minHeight: 0 },
+  brand: { padding: '20px 18px', borderBottom: `1px solid ${SIDEBAR_DIVIDER}`, minHeight: '48px', boxSizing: 'border-box' },
+  brandName: { color: theme.colors.textOnSidebarActive, fontSize: theme.font.sizeMd, fontWeight: theme.font.weightSemibold, whiteSpace: 'nowrap' },
+  brandSub: { color: theme.colors.textOnSidebar, fontSize: theme.font.sizeXs, marginTop: '2px', whiteSpace: 'nowrap' },
+  nav: { padding: '10px', flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 },
   sectionBlock: { marginBottom: '2px' },
   sectionButton: {
     width: '100%',
@@ -201,11 +198,13 @@ const styles = {
     cursor: 'pointer',
     textAlign: 'left',
     transition: 'background-color 0.15s ease',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
   },
   sectionButtonActive: { backgroundColor: theme.colors.sidebarBackgroundActive, color: theme.colors.textOnSidebarActive },
   sectionIcon: { display: 'flex', width: '18px', justifyContent: 'center', flexShrink: 0 },
-  sectionLabel: { flex: 1 },
-  chevron: { display: 'inline-flex', transition: 'transform 0.15s ease' },
+  sectionLabel: { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' },
+  chevron: { display: 'inline-flex', transition: 'transform 0.15s ease', flexShrink: 0 },
   itemList: { display: 'flex', flexDirection: 'column', gap: '1px', paddingLeft: '34px', marginTop: '2px' },
   itemButton: {
     textAlign: 'left',
@@ -217,6 +216,7 @@ const styles = {
     fontSize: theme.font.sizeSm,
     cursor: 'pointer',
     transition: 'background-color 0.15s ease',
+    whiteSpace: 'nowrap',
   },
   itemButtonActive: { backgroundColor: theme.colors.sidebarBackgroundActive, color: theme.colors.textOnSidebarActive },
   footer: {

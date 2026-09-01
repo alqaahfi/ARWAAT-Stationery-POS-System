@@ -102,7 +102,7 @@ export default function CustomerList({ onNavigate }) {
             </thead>
             <tbody>
               {customers.map((c) => (
-                <Tr key={c.id} onClick={() => onNavigate('/customers/ledger-view', { id: c.id, name: c.name })}>
+                <Tr key={c.id} onClick={() => onNavigate('/ledgers/customers', { id: c.id, name: c.name })}>
                   <td style={tableStyles.td}>{c.name}</td>
                   <td style={{ ...tableStyles.td, textTransform: 'capitalize' }}>
                     <span style={c.customer_type === 'wholesale' ? styles.badgeWholesale : styles.badgeRetail}>

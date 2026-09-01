@@ -51,4 +51,14 @@ function getDb() {
   return db;
 }
 
-module.exports = { initDatabase, getDb, getDbPath };
+// Backup & Restore needs the file handle released before it can safely copy
+// over pos.db (SQLite's WAL files also need to be checkpointed/closed first,
+// which db.close() does).
+function closeDatabase() {
+  if (db) {
+    db.close();
+    db = null;
+  }
+}
+
+module.exports = { initDatabase, getDb, getDbPath, closeDatabase };

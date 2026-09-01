@@ -59,6 +59,12 @@ contextBridge.exposeInMainWorld('api', {
     bulkImport: (data) => ipcRenderer.invoke('products:bulk-import', data),
   },
 
+  stock: {
+    getAdjustmentReasons: () => ipcRenderer.invoke('stock:get-adjustment-reasons'),
+    adjust: (data) => ipcRenderer.invoke('stock:adjust', data),
+    getMovements: (data) => ipcRenderer.invoke('stock:get-movements', data),
+  },
+
   suppliers: {
     list: (data) => ipcRenderer.invoke('suppliers:list', data),
     getById: (data) => ipcRenderer.invoke('suppliers:get-by-id', data),
@@ -81,6 +87,16 @@ contextBridge.exposeInMainWorld('api', {
     setActive: (data) => ipcRenderer.invoke('customers:set-active', data),
     searchMinimal: (data) => ipcRenderer.invoke('customers:search-minimal', data),
     getLedger: (data) => ipcRenderer.invoke('customers:get-ledger', data),
+  },
+
+  ledgers: {
+    getOverview: () => ipcRenderer.invoke('ledgers:get-overview'),
+    getPaymentHistory: (data) => ipcRenderer.invoke('ledgers:get-payment-history', data),
+    getAdvances: () => ipcRenderer.invoke('ledgers:get-advances'),
+    getAgingReport: () => ipcRenderer.invoke('ledgers:get-aging-report'),
+    listAdjustments: () => ipcRenderer.invoke('ledgers:list-adjustments'),
+    createAdjustment: (data) => ipcRenderer.invoke('ledgers:create-adjustment', data),
+    getPaymentById: (data) => ipcRenderer.invoke('ledgers:get-payment-by-id', data),
   },
 
   customerCategories: {
@@ -110,9 +126,27 @@ contextBridge.exposeInMainWorld('api', {
   letterheads: {
     list: () => ipcRenderer.invoke('letterheads:list'),
     getById: (data) => ipcRenderer.invoke('letterheads:get-by-id', data),
-    pickImage: () => ipcRenderer.invoke('letterheads:pick-image'),
+    pickPdf: () => ipcRenderer.invoke('letterheads:pick-pdf'),
     create: (data) => ipcRenderer.invoke('letterheads:create', data),
     update: (data) => ipcRenderer.invoke('letterheads:update', data),
+    delete: (data) => ipcRenderer.invoke('letterheads:delete', data),
+  },
+
+  settings: {
+    getAll: () => ipcRenderer.invoke('settings:get-all'),
+    set: (data) => ipcRenderer.invoke('settings:set', data),
+    setMany: (data) => ipcRenderer.invoke('settings:set-many', data),
+  },
+
+  backup: {
+    export: () => ipcRenderer.invoke('backup:export'),
+    restore: () => ipcRenderer.invoke('backup:restore'),
+    relaunchApp: () => ipcRenderer.invoke('backup:relaunch-app'),
+  },
+
+  printers: {
+    listInstalled: () => ipcRenderer.invoke('printers:list-installed'),
+    testPrint: () => ipcRenderer.invoke('printers:test-print'),
   },
 
   sync: {
@@ -122,20 +156,36 @@ contextBridge.exposeInMainWorld('api', {
 
   expenseCategories: {
     list: () => ipcRenderer.invoke('expense-categories:list'),
+    create: (data) => ipcRenderer.invoke('expense-categories:create', data),
+    update: (data) => ipcRenderer.invoke('expense-categories:update', data),
+    delete: (data) => ipcRenderer.invoke('expense-categories:delete', data),
+  },
+
+  expenses: {
+    list: (data) => ipcRenderer.invoke('expenses:list', data),
+    getById: (data) => ipcRenderer.invoke('expenses:get-by-id', data),
+    create: (data) => ipcRenderer.invoke('expenses:create', data),
+    update: (data) => ipcRenderer.invoke('expenses:update', data),
+    delete: (data) => ipcRenderer.invoke('expenses:delete', data),
   },
 
   sales: {
     searchProducts: (data) => ipcRenderer.invoke('sales:search-products', data),
+    searchProductsGrouped: (data) => ipcRenderer.invoke('sales:search-products-grouped', data),
     getVariantByBarcode: (data) => ipcRenderer.invoke('sales:get-variant-by-barcode', data),
     getVariantForCart: (data) => ipcRenderer.invoke('sales:get-variant-for-cart', data),
     resolvePrice: (data) => ipcRenderer.invoke('sales:resolve-price', data),
     getNextInvoiceNo: () => ipcRenderer.invoke('sales:get-next-invoice-no'),
     getCashierDiscountCap: (data) => ipcRenderer.invoke('sales:get-cashier-discount-cap', data),
     create: (data) => ipcRenderer.invoke('sales:create', data),
+    getSaleDetail: (data) => ipcRenderer.invoke('sales:get-sale-detail', data),
+    getReceiptData: (data) => ipcRenderer.invoke('sales:get-receipt-data', data),
   },
 
   printing: {
     printSale: (data) => ipcRenderer.invoke('printing:print-sale', data),
+    captureReceiptImage: (rect) => ipcRenderer.invoke('printing:capture-receipt-image', rect),
+    printPaymentReceipt: (data) => ipcRenderer.invoke('printing:print-payment-receipt', data),
   },
 
   reports: {
@@ -149,5 +199,9 @@ contextBridge.exposeInMainWorld('api', {
     getReport: (data) => ipcRenderer.invoke('reports:get-report', data),
     exportCsv: (data) => ipcRenderer.invoke('reports:export-csv', data),
     exportPdf: (data) => ipcRenderer.invoke('reports:export-pdf', data),
+  },
+
+  global: {
+    search: (data) => ipcRenderer.invoke('global:search', data),
   },
 });

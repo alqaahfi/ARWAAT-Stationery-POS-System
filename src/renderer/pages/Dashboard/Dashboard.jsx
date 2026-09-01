@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import AdminDashboard from './AdminDashboard';
-import Sale from '../POS/Sale';
+import Sale, { isPosSaleInProgress } from '../POS/Sale';
 import RecordPayment from '../Payments/RecordPayment';
 import SalesReport from '../Reports/SalesReport';
 import theme from '../../config/theme';
@@ -23,6 +23,16 @@ export default function Dashboard({ shopName }) {
 
   const [activeTab, setActiveTab] = useState(tabs[0]?.key || null);
 
+  function switchTab(key) {
+    // Same leave-guard as AdminDashboard's router — switching away from
+    // Cashier Mode mid-sale would otherwise silently discard it.
+    if (activeTab === 'sale' && key !== 'sale' && isPosSaleInProgress()) {
+      const proceed = window.confirm("You have an unfinished sale — leave anyway? It'll be saved as a draft.");
+      if (!proceed) return;
+    }
+    setActiveTab(key);
+  }
+
   return (
     <div style={styles.container}>
       <div style={styles.header}>
@@ -39,7 +49,7 @@ export default function Dashboard({ shopName }) {
               <button
                 key={tab.key}
                 style={{ ...styles.tabButton, ...(activeTab === tab.key ? styles.tabButtonActive : {}) }}
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => switchTab(tab.key)}
               >
                 {tab.label}
               </button>

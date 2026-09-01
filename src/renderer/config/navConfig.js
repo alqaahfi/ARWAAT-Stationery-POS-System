@@ -1,7 +1,9 @@
 // src/renderer/config/navConfig.js
 //
-// Adds "Customer Ledger" and "Supplier Ledger" as direct nav items (picker-based
-// pages), alongside the existing row-click access from their respective lists.
+// Ledger access removed from Customers and Suppliers — now lives in its own
+// top-level "Ledgers" module. Cashier Mode has moved out of here too — it's
+// now the "POS" icon in the top utility bar (TopUtilityBar.jsx) instead of a
+// sidebar link, so there's no 'cashier-mode' entry below.
 
 const navConfig = [
   {
@@ -10,14 +12,6 @@ const navConfig = [
     icon: 'LayoutDashboard',
     route: '/dashboard',
     permissionKey: null,
-    children: null,
-  },
-  {
-    key: 'cashier-mode',
-    label: 'Cashier Mode',
-    icon: 'ShoppingCart',
-    route: '/pos',
-    permissionKey: 'make_sale',
     children: null,
   },
   {
@@ -54,7 +48,6 @@ const navConfig = [
     children: [
       { key: 'customers-all', label: 'All Customers', route: '/customers', permissionKey: null },
       { key: 'customers-new', label: 'Add Customer', route: '/customers/new', permissionKey: null },
-      { key: 'customers-ledger', label: 'Customer Ledger', route: '/customers/ledger', permissionKey: null },
       { key: 'customers-categories', label: 'Customer Categories (Net Rate)', route: '/customers/categories', permissionKey: null },
       { key: 'customers-percentage-rules', label: 'Percentage Pricing Rules', route: '/customers/percentage-rules', permissionKey: null },
     ],
@@ -68,7 +61,22 @@ const navConfig = [
     children: [
       { key: 'suppliers-all', label: 'All Suppliers', route: '/suppliers', permissionKey: null },
       { key: 'suppliers-new', label: 'Add Supplier', route: '/suppliers/new', permissionKey: null },
-      { key: 'suppliers-ledger', label: 'Supplier Ledger', route: '/suppliers/ledger', permissionKey: null },
+    ],
+  },
+  {
+    key: 'ledgers',
+    label: 'Ledgers',
+    icon: 'BookText',
+    route: null,
+    permissionKey: null,
+    children: [
+      { key: 'ledgers-overview', label: 'Overview', route: '/ledgers', permissionKey: null },
+      { key: 'ledgers-customers', label: 'Customer Ledger', route: '/ledgers/customers', permissionKey: null },
+      { key: 'ledgers-suppliers', label: 'Supplier Ledger', route: '/ledgers/suppliers', permissionKey: null },
+      { key: 'ledgers-payments', label: 'Payment History', route: '/ledgers/payments', permissionKey: null },
+      { key: 'ledgers-advances', label: 'Advances & Credits', route: '/ledgers/advances', permissionKey: null },
+      { key: 'ledgers-aging', label: 'Aging / Overdue', route: '/ledgers/aging', permissionKey: null },
+      { key: 'ledgers-adjustments', label: 'Manual Adjustments', route: '/ledgers/adjustments', permissionKey: null },
     ],
   },
   {
