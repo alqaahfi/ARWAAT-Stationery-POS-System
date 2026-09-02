@@ -36,6 +36,14 @@ function normalizeVariantsAndUnits(variants, units, standardStartingStock, stand
   return { variants: normalizedVariants, units: normalizedUnits };
 }
 
+// A blank/undefined tier price means "no override for this tier" — stored as
+// NULL so priceEngine falls back to Retail/Wholesale, not as 0.
+function netRateOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isNaN(n) ? null : n;
+}
+
 function isSkuTaken(db, sku, excludeId) {
   if (!sku) return false;
   const row = excludeId
@@ -227,8 +235,9 @@ function create(payload) {
 
     const insertUnit = db.prepare(
       `INSERT INTO product_units
-         (product_id, unit_name, conversion_factor, retail_price, wholesale_price, cost_price, is_default_sale_unit)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+         (product_id, unit_name, conversion_factor, retail_price, wholesale_price, cost_price, is_default_sale_unit,
+          net_rate_c1, net_rate_c2, net_rate_c3, net_rate_c4, net_rate_c5)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     for (const u of normalized.units) {
       insertUnit.run(
@@ -238,7 +247,12 @@ function create(payload) {
         Number(u.retailPrice) || 0,
         Number(u.wholesalePrice) || 0,
         Number(u.costPrice) || 0,
-        u.isDefaultSaleUnit ? 1 : 0
+        u.isDefaultSaleUnit ? 1 : 0,
+        netRateOrNull(u.netRateC1),
+        netRateOrNull(u.netRateC2),
+        netRateOrNull(u.netRateC3),
+        netRateOrNull(u.netRateC4),
+        netRateOrNull(u.netRateC5)
       );
     }
 
@@ -351,12 +365,14 @@ function update(payload) {
 
     const updateUnit = db.prepare(
       `UPDATE product_units SET unit_name = ?, conversion_factor = ?, retail_price = ?, wholesale_price = ?,
-         cost_price = ?, is_default_sale_unit = ? WHERE id = ?`
+         cost_price = ?, is_default_sale_unit = ?,
+         net_rate_c1 = ?, net_rate_c2 = ?, net_rate_c3 = ?, net_rate_c4 = ?, net_rate_c5 = ? WHERE id = ?`
     );
     const insertUnit = db.prepare(
       `INSERT INTO product_units
-         (product_id, unit_name, conversion_factor, retail_price, wholesale_price, cost_price, is_default_sale_unit)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+         (product_id, unit_name, conversion_factor, retail_price, wholesale_price, cost_price, is_default_sale_unit,
+          net_rate_c1, net_rate_c2, net_rate_c3, net_rate_c4, net_rate_c5)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const deactivateUnit = db.prepare('UPDATE product_units SET is_active = 0 WHERE id = ?');
 
@@ -368,6 +384,11 @@ function update(payload) {
         Number(u.wholesalePrice) || 0,
         Number(u.costPrice) || 0,
         u.isDefaultSaleUnit ? 1 : 0,
+        netRateOrNull(u.netRateC1),
+        netRateOrNull(u.netRateC2),
+        netRateOrNull(u.netRateC3),
+        netRateOrNull(u.netRateC4),
+        netRateOrNull(u.netRateC5),
       ];
       if (u.id) updateUnit.run(...args, u.id);
       else insertUnit.run(id, ...args);

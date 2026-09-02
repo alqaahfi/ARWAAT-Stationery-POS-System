@@ -263,15 +263,16 @@ function getStockReport(filters) {
 function getCustomerStatements(filters) {
   const db = getDb();
   let sql = `
-    SELECT c.id, c.name, c.customer_type, cc.name AS category_name, c.opening_balance
+    SELECT c.id, c.name, c.customer_type, c.tier, c.opening_balance
     FROM customers c
-    LEFT JOIN customer_categories cc ON cc.id = c.category_id
     WHERE c.is_active = 1
   `;
   const params = [];
-  if (filters?.categoryId) {
-    sql += ' AND c.category_id = ?';
-    params.push(filters.categoryId);
+  if (filters?.tier === 'NONE') {
+    sql += ' AND c.tier IS NULL';
+  } else if (filters?.tier) {
+    sql += ' AND c.tier = ?';
+    params.push(filters.tier);
   }
   sql += ' ORDER BY c.name';
 
@@ -297,7 +298,7 @@ function getCustomerStatements(filters) {
       { key: 'id', label: 'Customer ID', format: 'text' },
       { key: 'name', label: 'Customer Name', format: 'text' },
       { key: 'customer_type', label: 'Type', format: 'text' },
-      { key: 'category_name', label: 'Category', format: 'text' },
+      { key: 'tier', label: 'Tier', format: 'text' },
       { key: 'balance_owed', label: 'Balance Owed', format: 'currency' },
     ],
     rows,

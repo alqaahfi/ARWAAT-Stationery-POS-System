@@ -3,15 +3,16 @@ import { useAuth } from '../../context/AuthContext';
 import theme from '../../config/theme';
 import { Card, PageHeader, Label, TextInput, Select, Button, Banner, HelperText } from '../../components/ui';
 
+const TIERS = ['C1', 'C2', 'C3', 'C4', 'C5'];
+
 export default function CustomerForm({ customerId, onDone, onCancel }) {
   const { user } = useAuth();
   const isEdit = !!customerId;
 
-  const [categories, setCategories] = useState([]);
   const [letterheads, setLetterheads] = useState([]);
   const [name, setName] = useState('');
   const [customerType, setCustomerType] = useState('retail');
-  const [categoryId, setCategoryId] = useState('');
+  const [tier, setTier] = useState('');
   const [assignedLetterheadId, setAssignedLetterheadId] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
@@ -21,7 +22,6 @@ export default function CustomerForm({ customerId, onDone, onCancel }) {
   const [loaded, setLoaded] = useState(!isEdit);
 
   useEffect(() => {
-    window.api.customerCategories.list().then(setCategories);
     window.api.letterheads.list().then(setLetterheads);
   }, []);
 
@@ -31,7 +31,7 @@ export default function CustomerForm({ customerId, onDone, onCancel }) {
       if (!c) return;
       setName(c.name);
       setCustomerType(c.customer_type);
-      setCategoryId(c.category_id || '');
+      setTier(c.tier || '');
       setAssignedLetterheadId(c.assigned_letterhead_id || '');
       setPhone(c.phone || '');
       setAddress(c.address || '');
@@ -49,7 +49,7 @@ export default function CustomerForm({ customerId, onDone, onCancel }) {
     const payload = {
       name: name.trim(),
       customerType,
-      categoryId: categoryId ? Number(categoryId) : null,
+      tier: tier || null,
       assignedLetterheadId: assignedLetterheadId ? Number(assignedLetterheadId) : null,
       phone: phone.trim() || null,
       address: address.trim() || null,
@@ -98,12 +98,12 @@ export default function CustomerForm({ customerId, onDone, onCancel }) {
           </label>
         </div>
 
-        <Label>Category (optional)</Label>
-        <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-          <option value="">No category</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
+        <Label>Tier (optional)</Label>
+        <Select value={tier} onChange={(e) => setTier(e.target.value)}>
+          <option value="">None</option>
+          {TIERS.map((t) => (
+            <option key={t} value={t}>
+              {t}
             </option>
           ))}
         </Select>

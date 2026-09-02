@@ -4,25 +4,22 @@ import theme from '../../config/theme';
 import { Card, PageHeader, Button, TextInput, Select, tableStyles, Tr } from '../../components/ui';
 import { formatCurrency } from '../../utils/format';
 
+const TIERS = ['C1', 'C2', 'C3', 'C4', 'C5'];
+
 export default function CustomerList({ onNavigate }) {
   const { user } = useAuth();
 
   const [customers, setCustomers] = useState([]);
-  const [categories, setCategories] = useState([]);
+  const [tierFilter, setTierFilter] = useState('');
   const [search, setSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const debounceRef = useRef(null);
 
   useEffect(() => {
-    window.api.customerCategories.list().then(setCategories);
-  }, []);
-
-  useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoryFilter, typeFilter]);
+  }, [tierFilter, typeFilter]);
 
   function handleSearchChange(value) {
     setSearch(value);
@@ -34,7 +31,7 @@ export default function CustomerList({ onNavigate }) {
     setLoading(true);
     const rows = await window.api.customers.list({
       search,
-      categoryId: categoryFilter || null,
+      tier: tierFilter || null,
       customerType: typeFilter || null,
     });
     setCustomers(rows);
@@ -70,11 +67,12 @@ export default function CustomerList({ onNavigate }) {
             onChange={(e) => handleSearchChange(e.target.value)}
             style={{ flex: 1 }}
           />
-          <Select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={{ width: '220px' }}>
-            <option value="">All Categories</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
+          <Select value={tierFilter} onChange={(e) => setTierFilter(e.target.value)} style={{ width: '220px' }}>
+            <option value="">All Tiers</option>
+            <option value="NONE">None</option>
+            {TIERS.map((t) => (
+              <option key={t} value={t}>
+                {t}
               </option>
             ))}
           </Select>
@@ -93,7 +91,7 @@ export default function CustomerList({ onNavigate }) {
               <tr>
                 <th style={tableStyles.th}>Name</th>
                 <th style={tableStyles.th}>Type</th>
-                <th style={tableStyles.th}>Category</th>
+                <th style={tableStyles.th}>Tier</th>
                 <th style={tableStyles.th}>Phone</th>
                 <th style={{ ...tableStyles.th, textAlign: 'right' }}>Balance Owed</th>
                 <th style={tableStyles.th}>Active</th>
@@ -109,7 +107,7 @@ export default function CustomerList({ onNavigate }) {
                       {c.customer_type}
                     </span>
                   </td>
-                  <td style={tableStyles.td}>{c.category_name || '—'}</td>
+                  <td style={tableStyles.td}>{c.tier || '—'}</td>
                   <td style={tableStyles.td}>{c.phone || '—'}</td>
                   <td
                     style={{

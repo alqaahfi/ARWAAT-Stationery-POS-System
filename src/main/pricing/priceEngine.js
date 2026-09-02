@@ -24,20 +24,19 @@ function resolveUnitPrice({ db, productUnitId, customerId }) {
     if (rule) return round2(unit.cost_price * (1 + rule.percentage / 100));
   }
 
-  // 2. percentage rule for the customer's category
-  if (customer && customer.category_id) {
+  // 2. percentage rule for the customer's tier
+  if (customer && customer.tier) {
     const rule = db
-      .prepare('SELECT * FROM percentage_pricing_rules WHERE product_id = ? AND customer_category_id = ?')
-      .get(product.id, customer.category_id);
+      .prepare('SELECT * FROM percentage_pricing_rules WHERE product_id = ? AND customer_tier = ?')
+      .get(product.id, customer.tier);
     if (rule) return round2(unit.cost_price * (1 + rule.percentage / 100));
   }
 
-  // 3. explicit net-rate price for this unit + the customer's category
-  if (customer && customer.category_id) {
-    const explicit = db
-      .prepare('SELECT * FROM product_category_prices WHERE product_unit_id = ? AND customer_category_id = ?')
-      .get(unit.id, customer.category_id);
-    if (explicit) return round2(explicit.price);
+  // 3. this unit's hardcoded net rate for the customer's tier
+  if (customer && customer.tier) {
+    const rateColumn = `net_rate_${customer.tier.toLowerCase()}`; // e.g. net_rate_c1
+    const rate = unit[rateColumn];
+    if (rate !== null && rate !== undefined) return round2(rate);
   }
 
   // 4. product-level percentage-over-cost pricing (books / agency items)

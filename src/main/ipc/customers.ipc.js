@@ -2,15 +2,23 @@ const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
 const { getCustomerBalance, getBalancesForCustomers } = require('../ledger/balanceEngine');
 
+// Fixed 5-tier structure — not admin-configurable. Validated here rather than
+// with a DB-level CHECK, consistent with how SKU/username uniqueness is
+// checked elsewhere in this project.
+const TIERS = ['C1', 'C2', 'C3', 'C4', 'C5'];
+
+function isValidTier(tier) {
+  return tier === null || tier === undefined || TIERS.includes(tier);
+}
+
 // ---------------- Customers ----------------
 
-function list({ search, categoryId, customerType } = {}) {
+function list({ search, tier, customerType } = {}) {
   const db = getDb();
   let sql = `
-    SELECT c.id, c.name, c.customer_type, c.category_id, cc.name AS category_name,
+    SELECT c.id, c.name, c.customer_type, c.tier,
            c.assigned_letterhead_id, c.phone, c.address, c.opening_balance, c.is_active
     FROM customers c
-    LEFT JOIN customer_categories cc ON cc.id = c.category_id
     WHERE 1 = 1
   `;
   const params = [];
@@ -20,9 +28,11 @@ function list({ search, categoryId, customerType } = {}) {
     const like = `%${search.trim()}%`;
     params.push(like, like);
   }
-  if (categoryId) {
-    sql += ' AND c.category_id = ?';
-    params.push(categoryId);
+  if (tier === 'NONE') {
+    sql += ' AND c.tier IS NULL';
+  } else if (tier) {
+    sql += ' AND c.tier = ?';
+    params.push(tier);
   }
   if (customerType) {
     sql += ' AND c.customer_type = ?';
@@ -40,7 +50,7 @@ function getById(id) {
   const db = getDb();
   return db
     .prepare(
-      `SELECT id, name, customer_type, category_id, assigned_letterhead_id, phone, address, opening_balance, is_active
+      `SELECT id, name, customer_type, tier, assigned_letterhead_id, phone, address, opening_balance, is_active
        FROM customers WHERE id = ?`
     )
     .get(id);
@@ -48,20 +58,21 @@ function getById(id) {
 
 function create(payload) {
   const db = getDb();
-  const { name, customerType, categoryId, assignedLetterheadId, phone, address, openingBalance } = payload;
+  const { name, customerType, tier, assignedLetterheadId, phone, address, openingBalance } = payload;
 
   if (!name || !name.trim()) return { success: false, reason: 'Customer name is required.' };
   if (!['retail', 'wholesale'].includes(customerType)) return { success: false, reason: 'Customer type must be retail or wholesale.' };
+  if (!isValidTier(tier)) return { success: false, reason: 'Invalid tier.' };
 
   const result = db
     .prepare(
-      `INSERT INTO customers (name, customer_type, category_id, assigned_letterhead_id, phone, address, opening_balance)
+      `INSERT INTO customers (name, customer_type, tier, assigned_letterhead_id, phone, address, opening_balance)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       name.trim(),
       customerType,
-      categoryId || null,
+      tier || null,
       assignedLetterheadId || null,
       phone || null,
       address || null,
@@ -75,17 +86,18 @@ function create(payload) {
 // read-only and points the admin at Record Payment / the ledger instead.
 function update(payload) {
   const db = getDb();
-  const { id, name, customerType, categoryId, assignedLetterheadId, phone, address } = payload;
+  const { id, name, customerType, tier, assignedLetterheadId, phone, address } = payload;
 
   if (!id) return { success: false, reason: 'Missing customer id.' };
   if (!name || !name.trim()) return { success: false, reason: 'Customer name is required.' };
   if (!['retail', 'wholesale'].includes(customerType)) return { success: false, reason: 'Customer type must be retail or wholesale.' };
+  if (!isValidTier(tier)) return { success: false, reason: 'Invalid tier.' };
 
   db.prepare(
     `UPDATE customers
-     SET name = ?, customer_type = ?, category_id = ?, assigned_letterhead_id = ?, phone = ?, address = ?
+     SET name = ?, customer_type = ?, tier = ?, assigned_letterhead_id = ?, phone = ?, address = ?
      WHERE id = ?`
-  ).run(name.trim(), customerType, categoryId || null, assignedLetterheadId || null, phone || null, address || null, id);
+  ).run(name.trim(), customerType, tier || null, assignedLetterheadId || null, phone || null, address || null, id);
 
   return { success: true };
 }
@@ -117,13 +129,7 @@ function searchMinimal({ search }) {
 
 function getLedger(customerId) {
   const db = getDb();
-  const customer = db
-    .prepare(
-      `SELECT c.*, cc.name AS category_name FROM customers c
-       LEFT JOIN customer_categories cc ON cc.id = c.category_id
-       WHERE c.id = ?`
-    )
-    .get(customerId);
+  const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId);
   if (!customer) return { success: false, reason: 'Customer not found.' };
 
   const sales = db
@@ -171,7 +177,7 @@ function getLedger(customerId) {
       id: customer.id,
       name: customer.name,
       customer_type: customer.customer_type,
-      category_name: customer.category_name,
+      tier: customer.tier,
       phone: customer.phone,
       address: customer.address,
       opening_balance: customer.opening_balance,
@@ -182,121 +188,17 @@ function getLedger(customerId) {
   };
 }
 
-// ---------------- Customer Categories (Net Rate) ----------------
-
-function listCategories() {
-  const db = getDb();
-  return db
-    .prepare(
-      `SELECT cc.id, cc.name, cc.description,
-              (SELECT COUNT(*) FROM customers WHERE category_id = cc.id) AS customer_count
-       FROM customer_categories cc
-       ORDER BY cc.name`
-    )
-    .all();
-}
-
-function createCategory({ name, description }) {
-  const db = getDb();
-  if (!name || !name.trim()) return { success: false, reason: 'Category name is required.' };
-
-  try {
-    const result = db
-      .prepare('INSERT INTO customer_categories (name, description) VALUES (?, ?)')
-      .run(name.trim(), description || null);
-    return { success: true, id: result.lastInsertRowid };
-  } catch (err) {
-    if (/UNIQUE/.test(err.message)) return { success: false, reason: 'A category with that name already exists.' };
-    return { success: false, reason: 'Could not create category.' };
-  }
-}
-
-function updateCategory({ id, name, description }) {
-  const db = getDb();
-  if (!name || !name.trim()) return { success: false, reason: 'Category name is required.' };
-
-  try {
-    db.prepare('UPDATE customer_categories SET name = ?, description = ? WHERE id = ?').run(name.trim(), description || null, id);
-    return { success: true };
-  } catch (err) {
-    if (/UNIQUE/.test(err.message)) return { success: false, reason: 'A category with that name already exists.' };
-    return { success: false, reason: 'Could not update category.' };
-  }
-}
-
-function deleteCategory({ id }) {
-  const db = getDb();
-  const { count } = db.prepare('SELECT COUNT(*) AS count FROM customers WHERE category_id = ?').get(id);
-  if (count > 0) {
-    return { success: false, reason: `Reassign ${count} customer${count === 1 ? '' : 's'} before deleting this category.` };
-  }
-  db.prepare('DELETE FROM customer_categories WHERE id = ?').run(id);
-  return { success: true };
-}
-
-// ---------------- Net-rate price matrix ----------------
-
-function getCategoryPrices({ categoryId }) {
-  const db = getDb();
-
-  const units = db
-    .prepare(
-      `SELECT pu.id, pu.product_id, p.name AS product_name, pu.unit_name,
-              pu.retail_price, pu.wholesale_price, pcp.price AS override_price
-       FROM product_units pu
-       JOIN products p ON p.id = pu.product_id AND p.is_active = 1
-       LEFT JOIN product_category_prices pcp ON pcp.product_unit_id = pu.id AND pcp.customer_category_id = ?
-       ORDER BY p.name, pu.unit_name`
-    )
-    .all(categoryId);
-
-  const byProduct = new Map();
-  for (const u of units) {
-    if (!byProduct.has(u.product_id)) byProduct.set(u.product_id, { productId: u.product_id, productName: u.product_name, units: [] });
-    byProduct.get(u.product_id).units.push({
-      id: u.id,
-      unitName: u.unit_name,
-      retailPrice: u.retail_price,
-      wholesalePrice: u.wholesale_price,
-      overridePrice: u.override_price,
-    });
-  }
-
-  return [...byProduct.values()];
-}
-
-function upsertCategoryPrice({ productUnitId, customerCategoryId, price }) {
-  const db = getDb();
-
-  if (price === null || price === '' || price === undefined) {
-    db.prepare('DELETE FROM product_category_prices WHERE product_unit_id = ? AND customer_category_id = ?').run(
-      productUnitId,
-      customerCategoryId
-    );
-    return { success: true, cleared: true };
-  }
-
-  db.prepare(
-    `INSERT INTO product_category_prices (product_unit_id, customer_category_id, price)
-     VALUES (?, ?, ?)
-     ON CONFLICT(product_unit_id, customer_category_id) DO UPDATE SET price = excluded.price`
-  ).run(productUnitId, customerCategoryId, Number(price));
-
-  return { success: true };
-}
-
 // ---------------- Percentage Pricing Rules ----------------
 
 function listPercentageRules() {
   const db = getDb();
   return db
     .prepare(
-      `SELECT ppr.id, ppr.percentage, p.name AS product_name,
-              c.name AS customer_name, cc.name AS category_name
+      `SELECT ppr.id, ppr.percentage, ppr.customer_tier, p.name AS product_name,
+              c.name AS customer_name
        FROM percentage_pricing_rules ppr
        JOIN products p ON p.id = ppr.product_id
        LEFT JOIN customers c ON c.id = ppr.customer_id
-       LEFT JOIN customer_categories cc ON cc.id = ppr.customer_category_id
        ORDER BY p.name`
     )
     .all();
@@ -315,7 +217,7 @@ function listEligibleProducts() {
     .all();
 }
 
-function createPercentageRule({ productId, targetType, customerId, customerCategoryId, percentage }) {
+function createPercentageRule({ productId, targetType, customerId, customerTier, percentage }) {
   const db = getDb();
 
   if (!productId) return { success: false, reason: 'Select a product.' };
@@ -326,15 +228,15 @@ function createPercentageRule({ productId, targetType, customerId, customerCateg
   if (targetType === 'customer') {
     if (!customerId) return { success: false, reason: 'Select a customer.' };
     db.prepare(
-      'INSERT INTO percentage_pricing_rules (product_id, customer_id, customer_category_id, percentage) VALUES (?, ?, NULL, ?)'
+      'INSERT INTO percentage_pricing_rules (product_id, customer_id, customer_tier, percentage) VALUES (?, ?, NULL, ?)'
     ).run(productId, customerId, Number(percentage));
-  } else if (targetType === 'category') {
-    if (!customerCategoryId) return { success: false, reason: 'Select a customer category.' };
+  } else if (targetType === 'tier') {
+    if (!isValidTier(customerTier) || !customerTier) return { success: false, reason: 'Select a tier.' };
     db.prepare(
-      'INSERT INTO percentage_pricing_rules (product_id, customer_id, customer_category_id, percentage) VALUES (?, NULL, ?, ?)'
-    ).run(productId, customerCategoryId, Number(percentage));
+      'INSERT INTO percentage_pricing_rules (product_id, customer_id, customer_tier, percentage) VALUES (?, NULL, ?, ?)'
+    ).run(productId, customerTier, Number(percentage));
   } else {
-    return { success: false, reason: 'Choose a target: specific customer or whole category.' };
+    return { success: false, reason: 'Choose a target: specific customer or whole tier.' };
   }
 
   return { success: true };
@@ -354,14 +256,6 @@ function registerCustomersIpc() {
   ipcMain.handle('customers:set-active', (event, payload) => setActive(payload || {}));
   ipcMain.handle('customers:search-minimal', (event, payload) => searchMinimal(payload || {}));
   ipcMain.handle('customers:get-ledger', (event, { id } = {}) => getLedger(id));
-
-  ipcMain.handle('customer-categories:list', () => listCategories());
-  ipcMain.handle('customer-categories:create', (event, payload) => createCategory(payload || {}));
-  ipcMain.handle('customer-categories:update', (event, payload) => updateCategory(payload || {}));
-  ipcMain.handle('customer-categories:delete', (event, payload) => deleteCategory(payload || {}));
-
-  ipcMain.handle('category-prices:get-for-category', (event, payload) => getCategoryPrices(payload || {}));
-  ipcMain.handle('category-prices:upsert', (event, payload) => upsertCategoryPrice(payload || {}));
 
   ipcMain.handle('percentage-rules:list', () => listPercentageRules());
   ipcMain.handle('percentage-rules:list-eligible-products', () => listEligibleProducts());

@@ -17,7 +17,6 @@ import MovementHistory from '../Products/MovementHistory';
 import Sale, { isPosSaleInProgress } from '../POS/Sale';
 import CustomerList from '../Customers/CustomerList';
 import CustomerForm from '../Customers/CustomerForm';
-import CategoryManager from '../Customers/CategoryManager';
 import PercentageRules from '../Customers/PercentageRules';
 import SupplierList from '../Suppliers/SupplierList';
 import SupplierForm from '../Suppliers/SupplierForm';
@@ -32,9 +31,10 @@ import RecordPayment from '../Payments/RecordPayment';
 import ExpenseList from '../Expenses/ExpenseList';
 import ExpenseForm from '../Expenses/ExpenseForm';
 import ExpenseCategories from '../Expenses/ExpenseCategories';
-import UserList from '../Users/UserList';
-import UserForm from '../Users/UserForm';
-import PermissionsManager from '../Users/PermissionsManager';
+import CashierList from '../Users/CashierList';
+import CashierForm from '../Users/CashierForm';
+import CashierSessions from '../Users/CashierSessions';
+import SessionDetail from '../Users/SessionDetail';
 import SalesReport from '../Reports/SalesReport';
 import ProfitLoss from '../Reports/ProfitLoss';
 import StockReport from '../Reports/StockReport';
@@ -80,7 +80,8 @@ export default function AdminDashboard({ shopName }) {
     if (nav.route === '/ledgers/customers') return nav.params.name ? `Ledger — ${nav.params.name}` : 'Customer Ledger';
     if (nav.route === '/ledgers/suppliers') return nav.params.name ? `Ledger — ${nav.params.name}` : 'Supplier Ledger';
     if (nav.route === '/expenses/edit') return 'Edit Expense';
-    if (nav.route === '/users/edit') return 'Edit Cashier';
+    if (nav.route === '/cashiers/edit') return 'Edit Cashier';
+    if (nav.route === '/cashiers/sessions/detail') return 'Session Detail';
     return ROUTE_TITLES[nav.route] || nav.route;
   }
 
@@ -131,8 +132,6 @@ export default function AdminDashboard({ shopName }) {
             onCancel={() => navigate('/customers')}
           />
         );
-      case '/customers/categories':
-        return <CategoryManager />;
       case '/customers/percentage-rules':
         return <PercentageRules />;
 
@@ -177,14 +176,16 @@ export default function AdminDashboard({ shopName }) {
       case '/expenses/categories':
         return <ExpenseCategories onNavigate={navigate} />;
 
-      case '/users':
-        return <UserList onNavigate={navigate} />;
-      case '/users/new':
-        return <UserForm onNavigate={navigate} onDone={() => navigate('/users')} />;
-      case '/users/edit':
-        return <UserForm userId={nav.params.id} onNavigate={navigate} onDone={() => navigate('/users')} />;
-      case '/users/permissions':
-        return <PermissionsManager initialUserId={nav.params.userId} />;
+      case '/cashiers':
+        return <CashierList onNavigate={navigate} />;
+      case '/cashiers/new':
+        return <CashierForm onDone={() => navigate('/cashiers')} onCancel={() => navigate('/cashiers')} />;
+      case '/cashiers/edit':
+        return <CashierForm cashierId={nav.params.id} onDone={() => navigate('/cashiers')} onCancel={() => navigate('/cashiers')} />;
+      case '/cashiers/sessions':
+        return <CashierSessions onNavigate={navigate} />;
+      case '/cashiers/sessions/detail':
+        return <SessionDetail sessionId={nav.params.id} onNavigate={navigate} />;
 
       case '/reports/sales':
         return <SalesReport initialDate={nav.params.date} />;

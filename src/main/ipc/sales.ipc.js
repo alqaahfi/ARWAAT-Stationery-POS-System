@@ -2,6 +2,7 @@ const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
 const { resolveUnitPrice } = require('../pricing/priceEngine');
 const { getSaleDetail, buildReceiptData } = require('../printing/receiptData');
+const { logActivity } = require('../activity/activityLog');
 
 // ---------- product search / barcode (feed the cart) ----------
 
@@ -308,6 +309,18 @@ function create(payload) {
 
   try {
     const result = run();
+
+    const currencyRow = db.prepare("SELECT value FROM settings WHERE key = 'currency_symbol'").get();
+    const currency = currencyRow?.value || 'Rs.';
+    const itemCount = items.length;
+    logActivity(db, {
+      userId: cashierId,
+      action: 'sale_created',
+      description: `Sale ${result.invoiceNo} created — ${saleType} — ${currency}${totalAmount.toFixed(2)} (${itemCount} item${itemCount === 1 ? '' : 's'})`,
+      referenceType: 'sale',
+      referenceId: result.saleId,
+    });
+
     return { success: true, ...result };
   } catch (err) {
     return { success: false, reason: `Could not complete sale: ${err.message}` };

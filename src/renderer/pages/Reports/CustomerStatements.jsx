@@ -5,22 +5,19 @@ import ReportSummaryCards from './components/ReportSummaryCards';
 import ReportTable from './components/ReportTable';
 import ExportButtons from './components/ExportButtons';
 
+const TIERS = ['C1', 'C2', 'C3', 'C4', 'C5'];
+
 export default function CustomerStatements({ onNavigate }) {
-  const [categories, setCategories] = useState([]);
-  const [categoryId, setCategoryId] = useState('');
+  const [tier, setTier] = useState('');
   const [onlyWithBalance, setOnlyWithBalance] = useState(false);
   const [data, setData] = useState(null);
 
-  useEffect(() => {
-    window.api.customerCategories.list().then(setCategories);
-  }, []);
-
-  const filters = { categoryId: categoryId ? Number(categoryId) : null, onlyWithBalance };
+  const filters = { tier: tier || null, onlyWithBalance };
 
   useEffect(() => {
     window.api.reports.getCustomerStatements({ filters }).then(setData);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoryId, onlyWithBalance]);
+  }, [tier, onlyWithBalance]);
 
   if (!data) return <Card>Loading…</Card>;
 
@@ -36,12 +33,13 @@ export default function CustomerStatements({ onNavigate }) {
       <Card style={{ marginBottom: theme.spacing.md }}>
         <div style={styles.filterRow}>
           <div>
-            <Label>Category</Label>
-            <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} style={{ width: '220px' }}>
-              <option value="">All Categories</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
+            <Label>Tier</Label>
+            <Select value={tier} onChange={(e) => setTier(e.target.value)} style={{ width: '220px' }}>
+              <option value="">All Tiers</option>
+              <option value="NONE">None</option>
+              {TIERS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
                 </option>
               ))}
             </Select>

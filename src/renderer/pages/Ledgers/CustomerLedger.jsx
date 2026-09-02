@@ -125,7 +125,7 @@ export default function CustomerLedger({ customerId, onNavigate }) {
                 <div style={styles.name}>{data.customer.name}</div>
                 <div style={styles.meta}>
                   <span style={{ textTransform: 'capitalize' }}>{data.customer.customer_type}</span>
-                  {data.customer.category_name ? ` · ${data.customer.category_name}` : ''}
+                  {data.customer.tier ? ` · ${data.customer.tier}` : ''}
                   {data.customer.phone ? ` · ${data.customer.phone}` : ''}
                 </div>
               </div>

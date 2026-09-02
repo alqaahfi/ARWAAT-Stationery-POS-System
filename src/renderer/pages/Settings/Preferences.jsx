@@ -65,7 +65,7 @@ export default function Preferences() {
 
         <Label>Default Cashier Discount Cap (%)</Label>
         <TextInput type="number" value={defaultCashierDiscountCap} onChange={(e) => setDefaultCashierDiscountCap(e.target.value)} placeholder="0" />
-        <HelperText>Used at checkout for any cashier who doesn't have an individual discount cap set under Users &amp; Permissions.</HelperText>
+        <HelperText>Used at checkout for any cashier who doesn't have an individual discount cap set on their own Cashiers &gt; Edit Cashier page.</HelperText>
 
         <Banner>{error}</Banner>
         {saved && !error && <div style={{ color: theme.colors.success, fontSize: theme.font.sizeSm, marginTop: theme.spacing.sm }}>Saved.</div>}

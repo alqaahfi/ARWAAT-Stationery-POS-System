@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
 const { PERMISSION_DEFINITIONS } = require('../../shared/permissionDefinitions');
+const { logActivity } = require('../activity/activityLog');
 
 const SALT_ROUNDS = 12;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -72,9 +73,16 @@ function login(username, password) {
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
 
-  db.prepare(
-    `INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)`
-  ).run(user.id, token, expiresAt);
+  const sessionResult = db
+    .prepare(`INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)`)
+    .run(user.id, token, expiresAt);
+
+  logActivity(db, {
+    userId: user.id,
+    sessionId: sessionResult.lastInsertRowid,
+    action: 'login',
+    description: 'Logged in',
+  });
 
   return { success: true, token, user: toPublicUser(user) };
 }
@@ -99,7 +107,11 @@ function validateSession(token) {
 function logout(token) {
   const db = getDb();
   if (token) {
-    db.prepare('UPDATE sessions SET is_revoked = 1 WHERE token = ?').run(token);
+    const session = db.prepare('SELECT * FROM sessions WHERE token = ?').get(token);
+    db.prepare("UPDATE sessions SET is_revoked = 1, ended_at = datetime('now') WHERE token = ?").run(token);
+    if (session) {
+      logActivity(db, { userId: session.user_id, sessionId: session.id, action: 'logout', description: 'Logged out' });
+    }
   }
   return { success: true };
 }
@@ -142,8 +154,8 @@ function seedDummyCashier() {
   }
 
   // record_payment ships granted-by-default for cashiers (revocable later from
-  // Users & Permissions) — backfilled here too, so a cashier account created
-  // before this permission existed still ends up with it.
+  // the Cashiers module's Edit Cashier page) — backfilled here too, so a
+  // cashier account created before this permission existed still ends up with it.
   const hasRecordPayment = db
     .prepare('SELECT 1 FROM user_permissions WHERE user_id = ? AND permission_key = ?')
     .get(cashier.id, 'record_payment');
@@ -152,7 +164,7 @@ function seedDummyCashier() {
   }
 }
 
-// ---------------- Users & Permissions module (admin-only) ----------------
+// ---------------- Cashiers module (admin-only) ----------------
 // Every write below also enqueues a sync_queue entry — admin-outbound master
 // data (the opposite direction of the POS module's cashier-outbound sales
 // queuing) so a future Sync engine can pull it down to Cashier PCs, letting
@@ -179,16 +191,39 @@ function queuePermissionSync(db, recordId, operation, payload) {
   );
 }
 
-function list() {
+const USER_SORT_COLUMNS = {
+  full_name: 'full_name',
+  username: 'username',
+  status: 'is_active',
+  created_at: 'created_at',
+};
+
+// cashiersOnly + search/sort power the Cashiers > All Cashiers page; called
+// with no args (the original shape) it's unchanged — every existing caller
+// (edit-mode lookup, the Sales Report cashier filter, ...) still gets every
+// user, admin first, then cashiers by name.
+function list({ search, sortBy, sortDirection, cashiersOnly } = {}) {
   const db = getDb();
-  // Admin row first (there's only ever one), then cashiers by name.
-  return db
-    .prepare(
-      `SELECT id, full_name, username, role, is_active, created_at
-       FROM users
-       ORDER BY (role != 'admin'), full_name`
-    )
-    .all();
+  let sql = `SELECT id, full_name, username, role, is_active, created_at FROM users WHERE 1 = 1`;
+  const params = [];
+
+  if (cashiersOnly) {
+    sql += " AND role = 'cashier'";
+  }
+  if (search && search.trim()) {
+    sql += ' AND (full_name LIKE ? OR username LIKE ?)';
+    const like = `%${search.trim()}%`;
+    params.push(like, like);
+  }
+
+  const sortColumn = USER_SORT_COLUMNS[sortBy];
+  if (sortColumn) {
+    sql += ` ORDER BY ${sortColumn} ${sortDirection === 'desc' ? 'DESC' : 'ASC'}`;
+  } else {
+    sql += " ORDER BY (role != 'admin'), full_name";
+  }
+
+  return db.prepare(sql).all(...params);
 }
 
 function checkUsernameUnique({ username, excludeUserId }) {
@@ -247,7 +282,7 @@ function setActive({ id, isActive }) {
 
   db.prepare(`UPDATE users SET is_active = ?, updated_at = datetime('now') WHERE id = ?`).run(isActive ? 1 : 0, id);
   if (!isActive) {
-    db.prepare('UPDATE sessions SET is_revoked = 1 WHERE user_id = ?').run(id);
+    db.prepare("UPDATE sessions SET is_revoked = 1, ended_at = COALESCE(ended_at, datetime('now')) WHERE user_id = ?").run(id);
   }
   queueUserSync(db, id, 'update');
   return { success: true };
@@ -262,7 +297,7 @@ function resetPassword({ id, newPassword }) {
 
   const passwordHash = bcrypt.hashSync(newPassword, SALT_ROUNDS);
   db.prepare(`UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?`).run(passwordHash, id);
-  db.prepare('UPDATE sessions SET is_revoked = 1 WHERE user_id = ?').run(id);
+  db.prepare("UPDATE sessions SET is_revoked = 1, ended_at = COALESCE(ended_at, datetime('now')) WHERE user_id = ?").run(id);
   queueUserSync(db, id, 'update');
   return { success: true };
 }
@@ -330,6 +365,74 @@ function savePermissionsForUser({ userId, values }) {
   return { success: true };
 }
 
+// ---------------- Session Activity (Cashiers module) ----------------
+// Every login is a "session" row; every notable thing a cashier does during
+// it (recorded via activity_log — see src/main/activity/activityLog.js) is
+// what the click-through detail view shows. Admin's own sessions aren't
+// cashier activity, so they're excluded from both queries below.
+
+const SESSION_SORT_COLUMNS = {
+  cashier: 'u.full_name',
+  login_at: 's.created_at',
+  activity_count: 'activity_count',
+};
+
+function resolveSessionIsActive(row) {
+  return !row.is_revoked && !row.ended_at && new Date(row.expires_at) > new Date();
+}
+
+function listSessions({ search, cashierId, sortBy, sortDirection } = {}) {
+  const db = getDb();
+  let sql = `
+    SELECT s.id, s.user_id, u.full_name AS cashier_name, u.username, s.created_at AS login_at,
+           s.expires_at, s.ended_at, s.is_revoked,
+           (SELECT COUNT(*) FROM activity_log a WHERE a.session_id = s.id) AS activity_count
+    FROM sessions s
+    JOIN users u ON u.id = s.user_id
+    WHERE u.role = 'cashier'
+  `;
+  const params = [];
+
+  if (cashierId) {
+    sql += ' AND s.user_id = ?';
+    params.push(cashierId);
+  }
+  if (search && search.trim()) {
+    sql += ' AND (u.full_name LIKE ? OR u.username LIKE ?)';
+    const like = `%${search.trim()}%`;
+    params.push(like, like);
+  }
+
+  const sortColumn = SESSION_SORT_COLUMNS[sortBy] || 's.created_at';
+  sql += ` ORDER BY ${sortColumn} ${sortDirection === 'asc' ? 'ASC' : 'DESC'}`;
+
+  const rows = db.prepare(sql).all(...params);
+  return rows.map((row) => ({ ...row, is_active: resolveSessionIsActive(row) }));
+}
+
+function getSessionDetail(sessionId) {
+  const db = getDb();
+  const session = db
+    .prepare(
+      `SELECT s.id, s.user_id, u.full_name AS cashier_name, u.username, s.created_at AS login_at,
+              s.expires_at, s.ended_at, s.is_revoked
+       FROM sessions s
+       JOIN users u ON u.id = s.user_id
+       WHERE s.id = ?`
+    )
+    .get(sessionId);
+  if (!session) return { success: false, reason: 'Session not found.' };
+
+  const activities = db
+    .prepare(
+      `SELECT id, action, description, reference_type, reference_id, created_at
+       FROM activity_log WHERE session_id = ? ORDER BY created_at`
+    )
+    .all(sessionId);
+
+  return { success: true, session: { ...session, is_active: resolveSessionIsActive(session) }, activities };
+}
+
 function registerUsersIpc() {
   ipcMain.handle('users:has-any-user', () => hasAnyUser());
 
@@ -345,7 +448,7 @@ function registerUsersIpc() {
 
   ipcMain.handle('users:get-permissions', (event, { userId } = {}) => getPermissions(userId));
 
-  ipcMain.handle('users:list', () => list());
+  ipcMain.handle('users:list', (event, payload) => list(payload || {}));
   ipcMain.handle('users:create-cashier', (event, payload) => createCashier(payload || {}));
   ipcMain.handle('users:update', (event, payload) => updateUser(payload || {}));
   ipcMain.handle('users:check-username-unique', (event, payload) => checkUsernameUnique(payload || {}));
@@ -355,6 +458,9 @@ function registerUsersIpc() {
   ipcMain.handle('permissions:get-definitions', () => PERMISSION_DEFINITIONS);
   ipcMain.handle('permissions:get-for-user', (event, { userId } = {}) => getPermissionsForUser(userId));
   ipcMain.handle('permissions:save-for-user', (event, payload) => savePermissionsForUser(payload || {}));
+
+  ipcMain.handle('sessions:list', (event, payload) => listSessions(payload || {}));
+  ipcMain.handle('sessions:get-detail', (event, { id } = {}) => getSessionDetail(id));
 }
 
 module.exports = { registerUsersIpc, seedDummyCashier };

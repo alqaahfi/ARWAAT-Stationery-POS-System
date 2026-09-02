@@ -3,18 +3,19 @@ import { useAuth } from '../../context/AuthContext';
 import theme from '../../config/theme';
 import { Card, PageHeader, Label, Select, TextInput, Button, Banner, tableStyles, Tr } from '../../components/ui';
 
+const TIERS = ['C1', 'C2', 'C3', 'C4', 'C5'];
+
 export default function PercentageRules() {
   const { user } = useAuth();
 
   const [rules, setRules] = useState([]);
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
-  const [categories, setCategories] = useState([]);
 
   const [productId, setProductId] = useState('');
   const [targetType, setTargetType] = useState('customer');
   const [customerId, setCustomerId] = useState('');
-  const [customerCategoryId, setCustomerCategoryId] = useState('');
+  const [customerTier, setCustomerTier] = useState('');
   const [percentage, setPercentage] = useState('');
   const [error, setError] = useState('');
 
@@ -22,7 +23,6 @@ export default function PercentageRules() {
     loadRules();
     window.api.percentageRules.listEligibleProducts().then(setProducts);
     window.api.customers.list().then(setCustomers);
-    window.api.customerCategories.list().then(setCategories);
   }, []);
 
   async function loadRules() {
@@ -36,7 +36,7 @@ export default function PercentageRules() {
       productId: productId ? Number(productId) : null,
       targetType,
       customerId: targetType === 'customer' && customerId ? Number(customerId) : null,
-      customerCategoryId: targetType === 'category' && customerCategoryId ? Number(customerCategoryId) : null,
+      customerTier: targetType === 'tier' && customerTier ? customerTier : null,
       percentage: percentage === '' ? null : Number(percentage),
     });
     if (!res.success) {
@@ -45,7 +45,7 @@ export default function PercentageRules() {
     }
     setProductId('');
     setCustomerId('');
-    setCustomerCategoryId('');
+    setCustomerTier('');
     setPercentage('');
     loadRules();
   }
@@ -87,8 +87,8 @@ export default function PercentageRules() {
             Specific Customer
           </label>
           <label style={styles.radioLabel}>
-            <input type="radio" checked={targetType === 'category'} onChange={() => setTargetType('category')} />
-            Whole Category
+            <input type="radio" checked={targetType === 'tier'} onChange={() => setTargetType('tier')} />
+            Whole Tier
           </label>
         </div>
 
@@ -106,12 +106,12 @@ export default function PercentageRules() {
           </>
         ) : (
           <>
-            <Label>Customer Category</Label>
-            <Select value={customerCategoryId} onChange={(e) => setCustomerCategoryId(e.target.value)}>
-              <option value="">Select a category…</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
+            <Label>Tier</Label>
+            <Select value={customerTier} onChange={(e) => setCustomerTier(e.target.value)}>
+              <option value="">Select a tier…</option>
+              {TIERS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
                 </option>
               ))}
             </Select>
@@ -143,7 +143,7 @@ export default function PercentageRules() {
               {rules.map((r) => (
                 <Tr key={r.id}>
                   <td style={tableStyles.td}>{r.product_name}</td>
-                  <td style={tableStyles.td}>{r.customer_name || r.category_name || '—'}</td>
+                  <td style={tableStyles.td}>{r.customer_name || r.customer_tier || '—'}</td>
                   <td style={{ ...tableStyles.td, textAlign: 'right' }}>{r.percentage}%</td>
                   <td style={tableStyles.td}>
                     <Button variant="danger" style={{ padding: '5px 10px', fontSize: theme.font.sizeXs }} onClick={() => handleDelete(r.id)}>

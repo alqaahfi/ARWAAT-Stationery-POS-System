@@ -48,7 +48,6 @@ const navConfig = [
     children: [
       { key: 'customers-all', label: 'All Customers', route: '/customers', permissionKey: null },
       { key: 'customers-new', label: 'Add Customer', route: '/customers/new', permissionKey: null },
-      { key: 'customers-categories', label: 'Customer Categories (Net Rate)', route: '/customers/categories', permissionKey: null },
       { key: 'customers-percentage-rules', label: 'Percentage Pricing Rules', route: '/customers/percentage-rules', permissionKey: null },
     ],
   },
@@ -119,15 +118,15 @@ const navConfig = [
     ],
   },
   {
-    key: 'users',
-    label: 'Users',
+    key: 'cashiers',
+    label: 'Cashiers',
     icon: 'ShieldCheck',
     route: null,
     permissionKey: null,
     children: [
-      { key: 'users-all', label: 'All Users', route: '/users', permissionKey: null },
-      { key: 'users-new', label: 'Add Cashier', route: '/users/new', permissionKey: null },
-      { key: 'users-permissions', label: 'Roles & Permissions', route: '/users/permissions', permissionKey: null },
+      { key: 'cashiers-all', label: 'All Cashiers', route: '/cashiers', permissionKey: null },
+      { key: 'cashiers-new', label: 'Add Cashier', route: '/cashiers/new', permissionKey: null },
+      { key: 'cashiers-sessions', label: 'Session Activity', route: '/cashiers/sessions', permissionKey: null },
     ],
   },
   {

@@ -17,7 +17,7 @@ contextBridge.exposeInMainWorld('api', {
     validateSession: (data) => ipcRenderer.invoke('users:validate-session', data),
     logout: (data) => ipcRenderer.invoke('users:logout', data),
     getPermissions: (data) => ipcRenderer.invoke('users:get-permissions', data),
-    list: () => ipcRenderer.invoke('users:list'),
+    list: (data) => ipcRenderer.invoke('users:list', data),
     createCashier: (data) => ipcRenderer.invoke('users:create-cashier', data),
     update: (data) => ipcRenderer.invoke('users:update', data),
     checkUsernameUnique: (data) => ipcRenderer.invoke('users:check-username-unique', data),
@@ -29,6 +29,11 @@ contextBridge.exposeInMainWorld('api', {
     getDefinitions: () => ipcRenderer.invoke('permissions:get-definitions'),
     getForUser: (data) => ipcRenderer.invoke('permissions:get-for-user', data),
     saveForUser: (data) => ipcRenderer.invoke('permissions:save-for-user', data),
+  },
+
+  sessions: {
+    list: (data) => ipcRenderer.invoke('sessions:list', data),
+    getDetail: (data) => ipcRenderer.invoke('sessions:get-detail', data),
   },
 
   dashboard: {
@@ -97,18 +102,6 @@ contextBridge.exposeInMainWorld('api', {
     listAdjustments: () => ipcRenderer.invoke('ledgers:list-adjustments'),
     createAdjustment: (data) => ipcRenderer.invoke('ledgers:create-adjustment', data),
     getPaymentById: (data) => ipcRenderer.invoke('ledgers:get-payment-by-id', data),
-  },
-
-  customerCategories: {
-    list: () => ipcRenderer.invoke('customer-categories:list'),
-    create: (data) => ipcRenderer.invoke('customer-categories:create', data),
-    update: (data) => ipcRenderer.invoke('customer-categories:update', data),
-    delete: (data) => ipcRenderer.invoke('customer-categories:delete', data),
-  },
-
-  categoryPrices: {
-    getForCategory: (data) => ipcRenderer.invoke('category-prices:get-for-category', data),
-    upsert: (data) => ipcRenderer.invoke('category-prices:upsert', data),
   },
 
   percentageRules: {
