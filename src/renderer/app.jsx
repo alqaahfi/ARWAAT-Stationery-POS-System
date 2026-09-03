@@ -6,6 +6,7 @@ import SetupAdmin from './pages/Setup/SetupAdmin';
 import SetupCashier from './pages/Setup/SetupCashier';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard/Dashboard';
+import DevPanelTrigger from './components/DevPanelTrigger';
 
 function AppRouter() {
   const { user, loading } = useAuth();
@@ -64,6 +65,9 @@ export default function App() {
   return (
     <AuthProvider>
       <AppRouter />
+      {/* True root, outside the router: renders on Setup and Login too, not
+          just inside the authenticated Sidebar layout. */}
+      <DevPanelTrigger />
     </AuthProvider>
   );
 }

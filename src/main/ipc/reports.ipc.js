@@ -4,6 +4,8 @@ const { getDb } = require('../db/connection');
 const ProductModel = require('../db/models/Product');
 const { getBalancesForCustomers, getBalancesForSuppliers } = require('../ledger/balanceEngine');
 const { exportReportToPdf } = require('../printing/exportReportPdf');
+const { generateDueRecurringExpenses } = require('../expenses/recurringExpenses');
+const { RECURRENCE_LABELS } = require('../../shared/expenseRecurrence');
 
 // Every handler returns the same envelope so the renderer's shared
 // ReportSummaryCards / table / ExportButtons / PrintReport components can all
@@ -108,6 +110,7 @@ function pickBucket(from, to) {
 }
 
 function getProfitLoss(filters) {
+  generateDueRecurringExpenses();
   const db = getDb();
   const { from, to } = dateRangeParams(filters);
   const bucket = pickBucket(from, to);
@@ -384,21 +387,25 @@ function getCashierPerformance(filters) {
 // ---------------- 7. Expense Report ----------------
 
 function getExpenseReport(filters) {
+  generateDueRecurringExpenses();
   const db = getDb();
   const { from, to } = dateRangeParams(filters);
 
   let sql = `
-    SELECT e.id, e.expense_date, e.description, e.amount,
-           ec.name AS category_name, u.full_name AS paid_by_name
+    SELECT e.id, e.expense_date, e.description, e.amount, e.payee, e.recurrence,
+           u.full_name AS paid_by_name
     FROM expenses e
-    LEFT JOIN expense_categories ec ON ec.id = e.category_id
     LEFT JOIN users u ON u.id = e.paid_by
     WHERE date(e.expense_date) BETWEEN date(?) AND date(?)
   `;
   const params = [from, to];
-  if (filters?.categoryId) {
-    sql += ' AND e.category_id = ?';
-    params.push(filters.categoryId);
+  if (filters?.recurrence) {
+    sql += ' AND e.recurrence = ?';
+    params.push(filters.recurrence);
+  }
+  if (filters?.search && filters.search.trim()) {
+    sql += ' AND (e.description LIKE ? OR e.payee LIKE ?)';
+    params.push(`%${filters.search.trim()}%`, `%${filters.search.trim()}%`);
   }
   sql += ' ORDER BY e.expense_date DESC';
 
@@ -406,10 +413,10 @@ function getExpenseReport(filters) {
   const totalExpenses = rows.reduce((s, r) => s + r.amount, 0);
   const largest = rows.reduce((m, r) => Math.max(m, r.amount), 0);
 
-  const byCategory = {};
+  const byRecurrence = {};
   for (const r of rows) {
-    const key = r.category_name || 'Uncategorized';
-    byCategory[key] = (byCategory[key] || 0) + r.amount;
+    const key = RECURRENCE_LABELS[r.recurrence] || r.recurrence;
+    byRecurrence[key] = (byRecurrence[key] || 0) + r.amount;
   }
 
   return {
@@ -419,15 +426,21 @@ function getExpenseReport(filters) {
       { label: 'Number of Entries', value: rows.length, accentKey: 'green', format: 'number' },
       { label: 'Largest Single Expense', value: largest, accentKey: 'amber', format: 'currency' },
     ],
-    chartData: Object.keys(byCategory).map((name) => ({ name, value: byCategory[name] })),
+    chartData: Object.keys(byRecurrence).map((name) => ({ name, value: byRecurrence[name] })),
     columns: [
       { key: 'expense_date', label: 'Date', format: 'date' },
-      { key: 'category_name', label: 'Category', format: 'text' },
+      { key: 'payee', label: 'Payee', format: 'text' },
       { key: 'description', label: 'Description', format: 'text' },
+      { key: 'recurrence', label: 'Recurrence', format: 'text' },
       { key: 'amount', label: 'Amount', format: 'currency' },
       { key: 'paid_by_name', label: 'Paid By', format: 'text' },
     ],
-    rows: rows.map((r) => ({ ...r, category_name: r.category_name || 'Uncategorized', paid_by_name: r.paid_by_name || '—' })),
+    rows: rows.map((r) => ({
+      ...r,
+      payee: r.payee || '—',
+      recurrence: RECURRENCE_LABELS[r.recurrence] || r.recurrence,
+      paid_by_name: r.paid_by_name || '—',
+    })),
   };
 }
 

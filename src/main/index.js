@@ -15,13 +15,15 @@ const { registerSalesIpc } = require('./ipc/sales.ipc');
 const { registerPrintingIpc } = require('./ipc/printing.ipc');
 const { registerPaymentsIpc } = require('./ipc/payments.ipc');
 const { registerReportsIpc } = require('./ipc/reports.ipc');
-const { registerExpenseCategoriesIpc } = require('./ipc/expenseCategories.ipc');
 const { registerExpensesIpc } = require('./ipc/expenses.ipc');
+const { generateDueRecurringExpenses } = require('./expenses/recurringExpenses');
 const { registerSyncIpc } = require('./ipc/sync.ipc');
 const { registerPurchasesIpc } = require('./ipc/purchases.ipc');
 const { registerSettingsIpc } = require('./ipc/settings.ipc');
 const { registerBackupIpc } = require('./ipc/backup.ipc');
 const { registerGlobalIpc } = require('./ipc/global.ipc');
+const { registerDevPanelIpc } = require('./ipc/devpanel.ipc');
+const { installAuditMiddleware, pruneAuditLog } = require('./devpanel/auditMiddleware');
 
 const isDev = process.env.NODE_ENV === 'development';
 let mainWindow = null;
@@ -52,6 +54,11 @@ function createWindow() {
 app.whenReady().then(() => {
   try {
     initDatabase();
+      // Must run before any register*Ipc() call below — it patches
+      // ipcMain.handle in place so every channel every module registers
+      // (including the ones below) gets audited with no per-module changes.
+      installAuditMiddleware(ipcMain);
+      pruneAuditLog();
       registerAuthIpc();
       registerUsersIpc();
       registerDashboardIpc();
@@ -66,14 +73,18 @@ app.whenReady().then(() => {
       registerPrintingIpc();
       registerPaymentsIpc();
       registerReportsIpc();
-      registerExpenseCategoriesIpc();
       registerExpensesIpc();
       registerSyncIpc();
       registerPurchasesIpc();
       registerSettingsIpc();
       registerBackupIpc();
       registerGlobalIpc();
+      registerDevPanelIpc();
       seedDummyCashier();
+      // Catches up any recurring expenses (daily/weekly/monthly/annually)
+      // due since the app was last opened, so All Expenses and the reports
+      // that read `expenses` are current from the first render.
+      generateDueRecurringExpenses();
     console.log('Database initialized successfully at startup.');
   } catch (err) {
     console.error('Failed to initialize database:', err);

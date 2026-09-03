@@ -30,7 +30,6 @@ import LedgerAdjustments from '../Ledgers/Adjustments';
 import RecordPayment from '../Payments/RecordPayment';
 import ExpenseList from '../Expenses/ExpenseList';
 import ExpenseForm from '../Expenses/ExpenseForm';
-import ExpenseCategories from '../Expenses/ExpenseCategories';
 import CashierList from '../Users/CashierList';
 import CashierForm from '../Users/CashierForm';
 import CashierSessions from '../Users/CashierSessions';
@@ -173,8 +172,6 @@ export default function AdminDashboard({ shopName }) {
         return (
           <ExpenseForm expenseId={nav.params.id} onDone={() => navigate('/expenses')} onCancel={() => navigate('/expenses')} />
         );
-      case '/expenses/categories':
-        return <ExpenseCategories onNavigate={navigate} />;
 
       case '/cashiers':
         return <CashierList onNavigate={navigate} />;

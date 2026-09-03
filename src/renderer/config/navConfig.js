@@ -98,7 +98,6 @@ const navConfig = [
     children: [
       { key: 'expenses-all', label: 'All Expenses', route: '/expenses', permissionKey: 'manage_expenses' },
       { key: 'expenses-new', label: 'Add Expense', route: '/expenses/new', permissionKey: 'manage_expenses' },
-      { key: 'expenses-categories', label: 'Expense Categories', route: '/expenses/categories', permissionKey: null },
     ],
   },
   {

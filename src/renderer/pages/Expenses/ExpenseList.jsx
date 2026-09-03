@@ -3,39 +3,37 @@ import { useAuth } from '../../context/AuthContext';
 import theme from '../../config/theme';
 import { Card, PageHeader, Button, TextInput, Select, tableStyles, Tr } from '../../components/ui';
 import { formatCurrencyExact, formatDateOnly } from '../../utils/format';
+import { RECURRENCE_OPTIONS, RECURRENCE_LABELS } from '../../utils/expenseRecurrence';
 
-// Route: /expenses. The operational, day-to-day expense log — add/edit/
-// delete individual entries here. Reports > Expense Report stays the
-// analytical view (date-range chart + CSV export) over the same data.
+// Route: /expenses. The operational, day-to-day expense log — every expense
+// lands here, whether entered as one-time or generated automatically from a
+// recurring series (see ExpenseForm). Reports > Expense Report stays the
+// analytical view (date-range chart + CSV/PDF export) over the same data.
 export default function ExpenseList({ onNavigate }) {
   const { hasPermission } = useAuth();
 
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [categories, setCategories] = useState([]);
   const [search, setSearch] = useState('');
-  const [categoryId, setCategoryId] = useState('');
+  const [recurrence, setRecurrence] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [message, setMessage] = useState('');
   const debounceRef = useRef(null);
-
-  useEffect(() => {
-    if (!hasPermission('manage_expenses')) return;
-    window.api.expenseCategories.list().then(setCategories);
-  }, [hasPermission]);
 
   useEffect(() => {
     if (!hasPermission('manage_expenses')) return;
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoryId, dateFrom, dateTo]);
+  }, [recurrence, dateFrom, dateTo]);
 
   async function load(searchOverride) {
     setLoading(true);
     const res = await window.api.expenses.list({
       search: (searchOverride !== undefined ? searchOverride : search) || null,
-      categoryId: categoryId || null,
+      recurrence: recurrence || null,
       dateFrom: dateFrom || null,
       dateTo: dateTo || null,
     });
@@ -56,6 +54,29 @@ export default function ExpenseList({ onNavigate }) {
     load();
   }
 
+  async function handleStopRecurrence(row) {
+    if (!window.confirm(`Stop the recurring "${row.description}" expense? Past occurrences are kept; no new ones will be added.`))
+      return;
+    const res = await window.api.expenses.stopRecurrence({ id: row.id });
+    if (!res.success) {
+      window.alert(res.reason || 'Could not stop recurrence.');
+      return;
+    }
+    load();
+  }
+
+  async function handleExportPdf() {
+    setPdfBusy(true);
+    setMessage('');
+    const res = await window.api.reports.exportPdf({
+      reportType: 'expenses',
+      filters: { search: search || null, recurrence: recurrence || null, dateFrom: dateFrom || null, dateTo: dateTo || null },
+    });
+    setPdfBusy(false);
+    if (res.canceled) return;
+    setMessage(res.success ? 'PDF exported.' : res.reason || 'Could not export PDF.');
+  }
+
   if (!hasPermission('manage_expenses')) {
     return (
       <Card style={{ padding: '48px', textAlign: 'center' }}>
@@ -70,8 +91,8 @@ export default function ExpenseList({ onNavigate }) {
         title="Expenses"
         actions={
           <>
-            <Button variant="secondary" onClick={() => onNavigate('/expenses/categories')}>
-              Categories
+            <Button variant="secondary" onClick={handleExportPdf} disabled={pdfBusy}>
+              {pdfBusy ? 'Exporting…' : 'Export PDF'}
             </Button>
             <Button onClick={() => onNavigate('/expenses/new')}>+ Add Expense</Button>
           </>
@@ -81,22 +102,23 @@ export default function ExpenseList({ onNavigate }) {
       <Card style={{ marginBottom: theme.spacing.md }}>
         <div style={styles.filterRow}>
           <TextInput
-            placeholder="Search description…"
+            placeholder="Search description or payee…"
             value={search}
             onChange={(e) => handleSearchChange(e.target.value)}
             style={{ flex: 1, minWidth: '200px' }}
           />
-          <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} style={{ width: '200px' }}>
-            <option value="">All Categories</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
+          <Select value={recurrence} onChange={(e) => setRecurrence(e.target.value)} style={{ width: '200px' }}>
+            <option value="">All Recurrence Types</option>
+            {RECURRENCE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
               </option>
             ))}
           </Select>
           <TextInput type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={{ width: '160px' }} />
           <TextInput type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ width: '160px' }} />
         </div>
+        {message && <div style={styles.message}>{message}</div>}
       </Card>
 
       <Card style={{ marginBottom: theme.spacing.md, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -115,7 +137,8 @@ export default function ExpenseList({ onNavigate }) {
               <tr>
                 <th style={tableStyles.th}>Date</th>
                 <th style={tableStyles.th}>Description</th>
-                <th style={tableStyles.th}>Category</th>
+                <th style={tableStyles.th}>Payee</th>
+                <th style={tableStyles.th}>Recurrence</th>
                 <th style={{ ...tableStyles.th, textAlign: 'right' }}>Amount</th>
                 <th style={tableStyles.th}>Paid By</th>
                 <th style={tableStyles.th}></th>
@@ -126,7 +149,12 @@ export default function ExpenseList({ onNavigate }) {
                 <Tr key={r.id}>
                   <td style={tableStyles.td}>{formatDateOnly(r.expense_date)}</td>
                   <td style={tableStyles.td}>{r.description}</td>
-                  <td style={{ ...tableStyles.td, color: theme.colors.textSecondary }}>{r.category_name || '—'}</td>
+                  <td style={{ ...tableStyles.td, color: theme.colors.textSecondary }}>{r.payee || '—'}</td>
+                  <td style={tableStyles.td}>
+                    <span style={r.recurrence !== 'one_time' ? styles.recurringBadge : undefined}>
+                      {RECURRENCE_LABELS[r.recurrence] || r.recurrence}
+                    </span>
+                  </td>
                   <td style={{ ...tableStyles.td, textAlign: 'right', fontWeight: theme.font.weightMedium }}>
                     {formatCurrencyExact(r.amount)}
                   </td>
@@ -135,6 +163,13 @@ export default function ExpenseList({ onNavigate }) {
                     <Button variant="ghost" style={styles.actionBtn} onClick={() => onNavigate('/expenses/edit', { id: r.id })}>
                       Edit
                     </Button>{' '}
+                    {r.recurring_expense_id && (
+                      <>
+                        <Button variant="ghost" style={styles.actionBtn} onClick={() => handleStopRecurrence(r)}>
+                          Stop Recurrence
+                        </Button>{' '}
+                      </>
+                    )}
                     <Button variant="ghost" style={{ ...styles.actionBtn, color: theme.colors.danger }} onClick={() => handleDelete(r)}>
                       Delete
                     </Button>
@@ -143,7 +178,7 @@ export default function ExpenseList({ onNavigate }) {
               ))}
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={tableStyles.emptyState}>
+                  <td colSpan={7} style={tableStyles.emptyState}>
                     No expenses found.
                   </td>
                 </tr>
@@ -159,4 +194,14 @@ export default function ExpenseList({ onNavigate }) {
 const styles = {
   filterRow: { display: 'flex', gap: theme.spacing.sm, flexWrap: 'wrap' },
   actionBtn: { padding: '6px 12px', fontSize: theme.font.sizeXs },
+  message: { marginTop: theme.spacing.sm, color: theme.colors.textSecondary, fontSize: theme.font.sizeSm },
+  recurringBadge: {
+    display: 'inline-block',
+    padding: '2px 8px',
+    borderRadius: theme.radius.sm,
+    fontSize: theme.font.sizeXs,
+    fontWeight: theme.font.weightMedium,
+    backgroundColor: theme.colors.accentBlue + '22',
+    color: theme.colors.accentBlue,
+  },
 };

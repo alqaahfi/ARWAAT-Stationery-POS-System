@@ -147,19 +147,13 @@ contextBridge.exposeInMainWorld('api', {
     getLog: () => ipcRenderer.invoke('sync:get-log'),
   },
 
-  expenseCategories: {
-    list: () => ipcRenderer.invoke('expense-categories:list'),
-    create: (data) => ipcRenderer.invoke('expense-categories:create', data),
-    update: (data) => ipcRenderer.invoke('expense-categories:update', data),
-    delete: (data) => ipcRenderer.invoke('expense-categories:delete', data),
-  },
-
   expenses: {
     list: (data) => ipcRenderer.invoke('expenses:list', data),
     getById: (data) => ipcRenderer.invoke('expenses:get-by-id', data),
     create: (data) => ipcRenderer.invoke('expenses:create', data),
     update: (data) => ipcRenderer.invoke('expenses:update', data),
     delete: (data) => ipcRenderer.invoke('expenses:delete', data),
+    stopRecurrence: (data) => ipcRenderer.invoke('expenses:stop-recurrence', data),
   },
 
   sales: {
@@ -196,5 +190,16 @@ contextBridge.exposeInMainWorld('api', {
 
   global: {
     search: (data) => ipcRenderer.invoke('global:search', data),
+  },
+
+  devpanel: {
+    verifyPassword: (data) => ipcRenderer.invoke('devpanel:verify-password', data),
+    getAuditLog: (data) => ipcRenderer.invoke('devpanel:get-audit-log', data),
+    listTables: () => ipcRenderer.invoke('devpanel:list-tables'),
+    getTableRows: (data) => ipcRenderer.invoke('devpanel:get-table-rows', data),
+    runSelectQuery: (data) => ipcRenderer.invoke('devpanel:run-select-query', data),
+    getUsersSessions: () => ipcRenderer.invoke('devpanel:get-users-sessions'),
+    getSystemInfo: () => ipcRenderer.invoke('devpanel:get-system-info'),
+    getAccessLog: (data) => ipcRenderer.invoke('devpanel:get-access-log', data),
   },
 });
