@@ -145,6 +145,10 @@ contextBridge.exposeInMainWorld('api', {
   sync: {
     getStatus: () => ipcRenderer.invoke('sync:get-status'),
     getLog: () => ipcRenderer.invoke('sync:get-log'),
+    getPeers: () => ipcRenderer.invoke('sync:get-peers'),
+    triggerNow: (data) => ipcRenderer.invoke('sync:trigger-now', data),
+    getReconciliationWarnings: () => ipcRenderer.invoke('sync:get-reconciliation-warnings'),
+    getSecret: () => ipcRenderer.invoke('sync:get-secret'),
   },
 
   expenses: {

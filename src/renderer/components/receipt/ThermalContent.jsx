@@ -14,12 +14,17 @@ export default function ThermalContent({ data, settings }) {
   const currency = settings.currency_symbol || 'Rs.';
   const money = (n) => `${currency}${Number(n || 0).toFixed(2)}`;
 
+  const headerLines = (settings.receipt_header_text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  const footerLines = (settings.receipt_footer_text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+
   return (
     <>
       <div style={styles.center}>
-        <div style={{ fontWeight: 700 }}>{settings.shop_name || 'Stationery POS'}</div>
-        {settings.shop_address && <div>{settings.shop_address}</div>}
-        {settings.shop_phone && <div>{settings.shop_phone}</div>}
+        {headerLines.map((line, i) => (
+          <div key={i} style={i === 0 ? { fontWeight: 700 } : undefined}>
+            {line}
+          </div>
+        ))}
       </div>
       <div style={styles.hr} />
 
@@ -77,10 +82,14 @@ export default function ThermalContent({ data, settings }) {
         </div>
       )}
 
-      {settings.receipt_footer_text && (
+      {footerLines.length > 0 && (
         <>
           <div style={styles.hr} />
-          <div style={styles.center}>{settings.receipt_footer_text}</div>
+          <div style={styles.center}>
+            {footerLines.map((line, i) => (
+              <div key={i}>{line}</div>
+            ))}
+          </div>
         </>
       )}
     </>

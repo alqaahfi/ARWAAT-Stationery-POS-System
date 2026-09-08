@@ -165,31 +165,16 @@ function seedDummyCashier() {
 }
 
 // ---------------- Cashiers module (admin-only) ----------------
-// Every write below also enqueues a sync_queue entry — admin-outbound master
-// data (the opposite direction of the POS module's cashier-outbound sales
-// queuing) so a future Sync engine can pull it down to Cashier PCs, letting
-// them authenticate a cashier locally even while offline.
+// Every write below used to enqueue a sync_queue entry by hand (admin-outbound
+// master data, the opposite direction of the POS module's cashier-outbound
+// sales queuing). That table and the manual queuing are gone now — the
+// sync_outbox triggers on `users`/`user_permissions` (022_sync_foundation.sql)
+// populate the outbox automatically on every INSERT/UPDATE/DELETE, so these
+// are no-ops kept only so the call sites below don't need to change.
 
-function snapshotUser(db, userId) {
-  return db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
-}
+function queueUserSync() {}
 
-function queueUserSync(db, userId, operation) {
-  const row = snapshotUser(db, userId);
-  db.prepare(`INSERT INTO sync_queue (table_name, record_id, operation, payload) VALUES ('users', ?, ?, ?)`).run(
-    userId,
-    operation,
-    JSON.stringify(row)
-  );
-}
-
-function queuePermissionSync(db, recordId, operation, payload) {
-  db.prepare(`INSERT INTO sync_queue (table_name, record_id, operation, payload) VALUES ('user_permissions', ?, ?, ?)`).run(
-    recordId,
-    operation,
-    JSON.stringify(payload)
-  );
-}
+function queuePermissionSync() {}
 
 const USER_SORT_COLUMNS = {
   full_name: 'full_name',

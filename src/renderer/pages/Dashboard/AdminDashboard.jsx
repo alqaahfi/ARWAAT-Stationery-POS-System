@@ -43,7 +43,7 @@ import CashierPerformance from '../Reports/CashierPerformance';
 import ExpenseReport from '../Reports/ExpenseReport';
 import Letterheads from '../Settings/Letterheads';
 import SyncAndPcs from '../Settings/SyncAndPcs';
-import ShopInfo from '../Settings/ShopInfo';
+import ReceiptContent from '../Settings/ReceiptContent';
 import PrinterSettings from '../Settings/PrinterSettings';
 import BackupRestore from '../Settings/BackupRestore';
 import LicenseInfo from '../Settings/LicenseInfo';
@@ -53,7 +53,7 @@ import theme from '../../config/theme';
 // Simple state-based router (no react-router in this project): `nav.route`
 // matches a navConfig route string, `nav.params` carries anything a fixed
 // sidebar link can't (e.g. which product id to edit).
-export default function AdminDashboard({ shopName }) {
+export default function AdminDashboard() {
   const { user, logout } = useAuth();
   const [nav, setNav] = useState({ route: '/dashboard', params: {} });
 
@@ -199,14 +199,14 @@ export default function AdminDashboard({ shopName }) {
       case '/reports/expenses':
         return <ExpenseReport />;
 
-      case '/settings/shop':
-        return <ShopInfo />;
+      case '/settings/receipt-content':
+        return <ReceiptContent />;
       case '/settings/letterheads':
         return <Letterheads />;
       case '/settings/printers':
         return <PrinterSettings />;
       case '/settings/sync':
-        return <SyncAndPcs />;
+        return <SyncAndPcs onNavigate={navigate} />;
       case '/settings/backup':
         return <BackupRestore />;
       case '/settings/license':
@@ -224,7 +224,6 @@ export default function AdminDashboard({ shopName }) {
       <Sidebar
         activeRoute={nav.route}
         onNavigate={navigate}
-        shopName={shopName}
         user={user}
         onLogout={logout}
       />

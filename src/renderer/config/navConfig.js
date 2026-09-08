@@ -135,7 +135,7 @@ const navConfig = [
     route: null,
     permissionKey: null,
     children: [
-      { key: 'settings-shop', label: 'Shop Info', route: '/settings/shop', permissionKey: null },
+      { key: 'settings-receipt-content', label: 'Receipt Header & Footer', route: '/settings/receipt-content', permissionKey: null },
       { key: 'settings-letterheads', label: 'Letterheads', route: '/settings/letterheads', permissionKey: null },
       { key: 'settings-printers', label: 'Printer Settings', route: '/settings/printers', permissionKey: null },
       { key: 'settings-sync', label: 'Sync & PCs', route: '/settings/sync', permissionKey: null },

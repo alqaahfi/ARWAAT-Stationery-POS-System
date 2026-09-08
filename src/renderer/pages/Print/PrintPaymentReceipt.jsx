@@ -22,12 +22,17 @@ export default function PrintPaymentReceipt({ paymentId }) {
   if (notFound) return <div style={styles.page}>Payment not found.</div>;
   if (!payment || !settings) return <div style={styles.page}>Loading…</div>;
 
+  const headerLines = (settings.receipt_header_text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  const footerLines = (settings.receipt_footer_text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+
   return (
     <div style={styles.page}>
       <div style={styles.header}>
-        <div style={styles.shopName}>{settings.shop_name || 'Stationery POS'}</div>
-        {settings.shop_address && <div style={styles.shopMeta}>{settings.shop_address}</div>}
-        {settings.shop_phone && <div style={styles.shopMeta}>{settings.shop_phone}</div>}
+        {headerLines.map((line, i) => (
+          <div key={i} style={i === 0 ? styles.shopName : styles.shopMeta}>
+            {line}
+          </div>
+        ))}
       </div>
 
       <div style={styles.title}>Payment Receipt</div>
@@ -55,7 +60,9 @@ export default function PrintPaymentReceipt({ paymentId }) {
         <DetailRow label="Recorded By" value={payment.recorded_by_name || '—'} />
       </div>
 
-      <div style={styles.footer}>Thank you.</div>
+      <div style={styles.footer}>
+        {footerLines.length > 0 ? footerLines.map((line, i) => <div key={i}>{line}</div>) : 'Thank you.'}
+      </div>
     </div>
   );
 }

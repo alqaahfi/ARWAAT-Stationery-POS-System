@@ -17,6 +17,29 @@ function money(symbol, n) {
   return `${symbol}${Number(n || 0).toFixed(2)}`;
 }
 
+// Free-text, admin-authored header/footer (Settings > Receipt Header &
+// Footer) — printed exactly as typed, one settings line per receipt line.
+// The first header line prints bold (a nod to "shop name usually goes
+// first"), everything else plain; nothing is assumed about what any line
+// actually contains, unlike the old fixed shop_name/address/phone fields.
+function printHeaderLines(printerDevice, settings) {
+  const lines = (settings.receipt_header_text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  printerDevice.alignCenter();
+  lines.forEach((line, i) => {
+    printerDevice.bold(i === 0);
+    printerDevice.println(line);
+  });
+  printerDevice.bold(false);
+}
+
+function printFooterLines(printerDevice, settings) {
+  const lines = (settings.receipt_footer_text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return;
+  printerDevice.drawLine();
+  printerDevice.alignCenter();
+  lines.forEach((line) => printerDevice.println(line));
+}
+
 // Silent, no dialog, no preview — the whole point of a receipt printer in an
 // active checkout flow. The sale is already committed to the database by the
 // time this runs, so a print failure here is reported back but never rolls
@@ -55,12 +78,7 @@ async function print(saleId, { showDues } = {}) {
       removeSpecialCharacters: false,
     });
 
-    printerDevice.alignCenter();
-    printerDevice.bold(true);
-    printerDevice.println(settings.shop_name || 'Stationery POS');
-    printerDevice.bold(false);
-    if (settings.shop_address) printerDevice.println(settings.shop_address);
-    if (settings.shop_phone) printerDevice.println(settings.shop_phone);
+    printHeaderLines(printerDevice, settings);
     printerDevice.drawLine();
 
     printerDevice.alignLeft();
@@ -91,11 +109,7 @@ async function print(saleId, { showDues } = {}) {
       printerDevice.bold(false);
     }
 
-    if (settings.receipt_footer_text) {
-      printerDevice.drawLine();
-      printerDevice.alignCenter();
-      printerDevice.println(settings.receipt_footer_text);
-    }
+    printFooterLines(printerDevice, settings);
 
     printerDevice.cut();
 
@@ -136,7 +150,7 @@ async function testPrint() {
 
     printerDevice.alignCenter();
     printerDevice.println('Test print successful');
-    printerDevice.println(settings.shop_name || 'Stationery POS');
+    printHeaderLines(printerDevice, settings);
     printerDevice.println(new Date().toLocaleString());
     printerDevice.cut();
 
@@ -191,12 +205,7 @@ async function printPaymentReceipt(paymentId) {
       removeSpecialCharacters: false,
     });
 
-    printerDevice.alignCenter();
-    printerDevice.bold(true);
-    printerDevice.println(settings.shop_name || 'Stationery POS');
-    printerDevice.bold(false);
-    if (settings.shop_address) printerDevice.println(settings.shop_address);
-    if (settings.shop_phone) printerDevice.println(settings.shop_phone);
+    printHeaderLines(printerDevice, settings);
     printerDevice.drawLine();
 
     printerDevice.alignLeft();
@@ -212,11 +221,7 @@ async function printPaymentReceipt(paymentId) {
     printerDevice.bold(false);
     printerDevice.leftRight('Method', payment.payment_method);
 
-    if (settings.receipt_footer_text) {
-      printerDevice.drawLine();
-      printerDevice.alignCenter();
-      printerDevice.println(settings.receipt_footer_text);
-    }
+    printFooterLines(printerDevice, settings);
 
     printerDevice.cut();
 

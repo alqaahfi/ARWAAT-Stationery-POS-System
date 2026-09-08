@@ -12,6 +12,8 @@ export default function SetupAdmin({ onActivated, onBack }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [step, setStep] = useState(1);
+  const [syncSecret, setSyncSecret] = useState('');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     window.api.license.getMachineId().then(setMachineId);
@@ -32,7 +34,18 @@ export default function SetupAdmin({ onActivated, onBack }) {
       setError(res.reason || 'Activation failed.');
       return;
     }
-    setStep(2);
+    setSyncSecret(res.syncSecret || '');
+    setStep('secret');
+  }
+
+  async function handleCopySecret() {
+    try {
+      await navigator.clipboard.writeText(syncSecret);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access blocked — the code is still shown on screen to copy by hand.
+    }
   }
 
   async function handleCreateAdmin() {
@@ -81,6 +94,25 @@ export default function SetupAdmin({ onActivated, onBack }) {
 
             <Button onClick={handleActivate} style={{ width: '100%', marginTop: '20px', padding: '12px' }}>
               Activate
+            </Button>
+          </>
+        )}
+
+        {step === 'secret' && (
+          <>
+            <p style={styles.subtitle}>
+              License activated. This is your shop's Sync Secret — you'll need to enter this exact code when setting up
+              each Cashier PC, so every PC can talk to each other securely. Write it down or copy it now.
+            </p>
+
+            <Label>Sync Secret</Label>
+            <div style={styles.machineIdBox}>{syncSecret}</div>
+            <Button variant="secondary" onClick={handleCopySecret} style={{ marginTop: '10px' }}>
+              {copied ? 'Copied' : 'Copy'}
+            </Button>
+
+            <Button onClick={() => setStep(2)} style={{ width: '100%', marginTop: '20px', padding: '12px' }}>
+              Continue
             </Button>
           </>
         )}

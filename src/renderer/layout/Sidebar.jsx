@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import theme from '../config/theme';
 import navConfig from '../config/navConfig';
+import { APP_NAME } from '../config/appInfo';
 
 // Explicit map (rather than `import * as` on lucide-react) so the bundle only
 // pulls in the handful of icons navConfig actually references.
@@ -54,7 +55,7 @@ function Icon({ name, size = 17 }) {
   return <Cmp size={size} strokeWidth={1.75} />;
 }
 
-export default function Sidebar({ activeRoute, onNavigate, shopName, user, onLogout }) {
+export default function Sidebar({ activeRoute, onNavigate, user, onLogout }) {
   // Which single parent group currently shows its children — purely a hover
   // state (not persisted): hovering a group opens it, moving the mouse off
   // that group's whole block (button + its open item list) closes it again.
@@ -80,7 +81,7 @@ export default function Sidebar({ activeRoute, onNavigate, shopName, user, onLog
   return (
     <div style={styles.container}>
       <div style={styles.brand}>
-        <div style={styles.brandName}>{shopName || 'Stationery POS'}</div>
+        <div style={styles.brandName}>{APP_NAME}</div>
         <div style={styles.brandSub}>Admin Panel</div>
       </div>
 

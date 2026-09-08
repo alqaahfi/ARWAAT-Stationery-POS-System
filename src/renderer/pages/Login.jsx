@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import theme from '../config/theme';
 import { Label, TextInput, Banner, Button } from '../components/ui';
+import { APP_NAME } from '../config/appInfo';
 
 export default function Login() {
   const { login } = useAuth();
@@ -22,7 +23,7 @@ export default function Login() {
   return (
     <div style={styles.container}>
       <form style={styles.card} onSubmit={handleSubmit}>
-        <h2 style={styles.title}>Stationery POS Login</h2>
+        <h2 style={styles.title}>{APP_NAME}</h2>
 
         <Label>Username</Label>
         <TextInput value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />

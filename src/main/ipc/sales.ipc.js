@@ -193,7 +193,6 @@ function create(payload) {
 
   const activation = db.prepare('SELECT * FROM license_activation WHERE id = 1').get();
   const stationCode = (activation && activation.station_code) || 'MAIN';
-  const pcRole = activation ? activation.role : 'admin';
 
   // Subtotal is recomputed from the lines server-side rather than trusted from
   // the client, so a stale/tampered total can't slip through.
@@ -294,15 +293,9 @@ function create(payload) {
       ).run(customerId, saleId, paid, paymentMethod || 'cash', cashierId);
     }
 
-    // Admin PC is the sync target already — only a Cashier PC queues its own sales.
-    if (pcRole === 'cashier') {
-      const fullSale = db.prepare('SELECT * FROM sales WHERE id = ?').get(saleId);
-      const fullItems = db.prepare('SELECT * FROM sale_items WHERE sale_id = ?').all(saleId);
-      db.prepare(`INSERT INTO sync_queue (table_name, record_id, operation, payload) VALUES ('sales', ?, 'insert', ?)`).run(
-        saleId,
-        JSON.stringify({ sale: fullSale, items: fullItems })
-      );
-    }
+    // sync_outbox rows for this sale and its items are populated automatically
+    // by trg_sales_ai / trg_sale_items_ai (022_sync_foundation.sql) regardless
+    // of which PC created them — no manual queuing needed here any more.
 
     return { saleId, invoiceNo };
   });

@@ -31,11 +31,11 @@ async function printInvoice({ saleId, showDues }) {
   if (!data) return { success: false, reason: 'Sale not found.' };
 
   const { sale } = data;
+  // No letterhead assigned to the customer AND no default letterhead exists
+  // — fall back to a plain-text A4 invoice instead of failing outright, using
+  // receipt_header_text as the header (see ReceiptContent.jsx / Step 3).
   if (!sale.letterhead_pdf_path) {
-    return {
-      success: false,
-      reason: 'No PDF letterhead is set for this sale — set one as default (or assign it to the customer) in Settings > Letterheads.',
-    };
+    return printInvoiceFallback({ saleId, showDues });
   }
   if (!fs.existsSync(sale.letterhead_pdf_path)) {
     return { success: false, reason: 'The letterhead PDF file is missing — re-upload it in Settings > Letterheads.' };
@@ -82,6 +82,46 @@ async function printInvoice({ saleId, showDues }) {
   } catch (err) {
     if (!win.isDestroyed()) win.destroy();
     return { success: false, reason: err.message || 'Could not open invoice for printing.', pdfPath };
+  }
+}
+
+// The no-letterhead fallback — same hidden-window HTML-print pattern as
+// printPaymentReceipt() below, just pointed at PrintInvoice.jsx instead.
+async function printInvoiceFallback({ saleId, showDues }) {
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  const search = `?print=1&printMode=invoice-fallback&saleId=${encodeURIComponent(saleId)}&showDues=${showDues ? '1' : '0'}`;
+
+  try {
+    await new Promise((resolve, reject) => {
+      win.webContents.once('did-finish-load', () => setTimeout(resolve, 700));
+      win.webContents.once('did-fail-load', (event, errorCode, errorDescription) => {
+        reject(new Error(errorDescription || `Failed to load invoice fallback view (${errorCode})`));
+      });
+
+      if (isDev) {
+        win.loadURL(`http://localhost:5173/${search}`);
+      } else {
+        win.loadFile(path.join(__dirname, '../../renderer/dist/index.html'), { search });
+      }
+    });
+
+    return await new Promise((resolve) => {
+      win.webContents.print({ silent: false, printBackground: true }, (success, failureReason) => {
+        if (!win.isDestroyed()) win.destroy();
+        resolve(success ? { success: true } : { success: false, reason: failureReason || 'Print was cancelled.' });
+      });
+    });
+  } catch (err) {
+    if (!win.isDestroyed()) win.destroy();
+    return { success: false, reason: err.message || 'Could not open invoice for printing.' };
   }
 }
 

@@ -3,21 +3,21 @@ import theme from '../../config/theme';
 import { Label, TextInput, Banner, Button } from '../../components/ui';
 
 export default function SetupCashier({ onActivated, onBack }) {
-  const [adminHost, setAdminHost] = useState('');
   const [stationCode, setStationCode] = useState('');
+  const [syncSecret, setSyncSecret] = useState('');
   const [error, setError] = useState('');
 
   async function handleActivate() {
     setError('');
-    if (!adminHost.trim()) {
-      setError('Enter the Admin PC address, e.g. 192.168.1.10:4000');
-      return;
-    }
     if (!stationCode.trim()) {
       setError('Enter a station code for this PC, e.g. C1');
       return;
     }
-    const res = await window.api.license.activateCashier({ adminHost: adminHost.trim(), stationCode: stationCode.trim() });
+    if (!syncSecret.trim()) {
+      setError("Enter the Sync Secret shown on the Admin PC's screen (or under Settings → Sync & PCs there).");
+      return;
+    }
+    const res = await window.api.license.activateCashier({ stationCode: stationCode.trim(), syncSecret: syncSecret.trim() });
     if (!res.success) {
       setError('Could not save cashier setup.');
       return;
@@ -31,17 +31,22 @@ export default function SetupCashier({ onActivated, onBack }) {
         <button style={styles.backLink} onClick={onBack}>&larr; Back</button>
         <h2 style={styles.title}>Set Up Cashier PC</h2>
         <p style={styles.subtitle}>
-          Enter the Admin PC's address on your shop's network. Ask the admin/manager for this.
+          This PC finds the Admin PC automatically over your shop's network — you just need a station code for this PC
+          and the Sync Secret from the Admin PC, so the two can talk to each other securely.
         </p>
-
-        <Label>Admin PC Address</Label>
-        <TextInput value={adminHost} onChange={(e) => setAdminHost(e.target.value)} placeholder="192.168.1.10:4000" />
 
         <Label>Station Code</Label>
         <TextInput
           value={stationCode}
           onChange={(e) => setStationCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
           placeholder="C1"
+        />
+
+        <Label>Sync Secret</Label>
+        <TextInput
+          value={syncSecret}
+          onChange={(e) => setSyncSecret(e.target.value.trim())}
+          placeholder="The code shown on the Admin PC"
         />
 
         <Banner>{error}</Banner>

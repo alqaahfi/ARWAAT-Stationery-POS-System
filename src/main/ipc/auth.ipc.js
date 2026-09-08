@@ -7,8 +7,8 @@ function registerAuthIpc() {
   ipcMain.handle('license:activate-admin', (event, { licenseKey, shopName, stationCode }) =>
     licenseManager.activateAdmin(licenseKey, shopName, stationCode)
   );
-  ipcMain.handle('license:activate-cashier', (event, { adminHost, stationCode }) =>
-    licenseManager.activateCashier(adminHost, stationCode)
+  ipcMain.handle('license:activate-cashier', (event, { adminHost, stationCode, syncSecret }) =>
+    licenseManager.activateCashier(adminHost, stationCode, syncSecret)
   );
 }
 

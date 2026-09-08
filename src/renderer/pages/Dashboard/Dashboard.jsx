@@ -3,11 +3,12 @@ import { useAuth } from '../../context/AuthContext';
 import AdminDashboard from './AdminDashboard';
 import Sale from '../POS/Sale';
 import theme from '../../config/theme';
+import { APP_NAME } from '../../config/appInfo';
 
-export default function Dashboard({ shopName }) {
+export default function Dashboard() {
   const { user, logout, hasPermission } = useAuth();
 
-  if (user.role === 'admin') return <AdminDashboard shopName={shopName} />;
+  if (user.role === 'admin') return <AdminDashboard />;
 
   // A cashier gets nothing but the POS screen — no sidebar, no other pages,
   // no tabs to switch between. Record Payment / Sales Report / everything
@@ -18,7 +19,7 @@ export default function Dashboard({ shopName }) {
     <div style={styles.container}>
       <div style={styles.header}>
         <div>
-          <h2 style={styles.title}>{shopName || 'Stationery POS'}</h2>
+          <h2 style={styles.title}>{APP_NAME}</h2>
           <div style={styles.subtitle}>{user.fullName}</div>
         </div>
 

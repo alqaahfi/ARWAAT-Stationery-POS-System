@@ -89,6 +89,13 @@ async function buildMergedInvoicePdf({ templatePath, data, settings, marginTopMm
     page.drawText(value, { x: drawX, y: yPos, size, font: activeFont, color });
   }
 
+  function centerText(str, yPos, { size = 9, bold = false, color = MUTED_COLOR } = {}) {
+    const activeFont = bold ? fontBold : font;
+    const value = String(str);
+    const textWidth = activeFont.widthOfTextAtSize(value, size);
+    page.drawText(value, { x: pageWidth / 2 - textWidth / 2, y: yPos, size, font: activeFont, color });
+  }
+
   function hLine(x1, x2, yPos, thickness = 0.75) {
     page.drawLine({ start: { x: x1, y: yPos }, end: { x: x2, y: yPos }, thickness, color: BORDER_COLOR });
   }
@@ -253,6 +260,20 @@ async function buildMergedInvoicePdf({ templatePath, data, settings, marginTopMm
     text(row.label, totalsX + 8, textY, { size, bold: row.bold, color: row.color || TEXT_COLOR, maxWidth: totalsLabelWidth - 12 });
     text(money(row.value), totalsX + totalsWidth - 8, textY, { size, bold: row.bold, color: row.color || TEXT_COLOR, align: 'right' });
   });
+
+  // Footer applies independently of whichever header this invoice used — the
+  // letterhead image (if any) only ever covers the header area, so this runs
+  // the same way whether or not a letterhead is set.
+  const footerLines = (settings.receipt_footer_text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  if (footerLines.length > 0) {
+    const footerLineHeight = 13;
+    const footerHeight = footerLines.length * footerLineHeight + 20;
+    if (y - footerHeight < marginBottom) {
+      await startNewPage();
+    }
+    y -= 20;
+    footerLines.forEach((line, i) => centerText(line, y - i * footerLineHeight));
+  }
 
   return outputDoc.save();
 }

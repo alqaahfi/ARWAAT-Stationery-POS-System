@@ -51,38 +51,49 @@ function getActivationStatus() {
   };
 }
 
+// The shared secret every /sync/exchange call must present (023_sync_secret.sql).
+// Generated once, here, on the Admin PC right after activation succeeds —
+// SetupAdmin.jsx displays it for the admin to copy and hand-enter on each
+// Cashier PC during its own setup (activateCashier below).
+function generateSyncSecret() {
+  return crypto.randomBytes(16).toString('hex');
+}
+
 function activateAdmin(licenseKey, shopName, stationCode) {
   const machineId = getMachineId();
   const check = verifyLicenseString(licenseKey, machineId);
   if (!check.valid) return { success: false, reason: check.reason };
 
+  const syncSecret = generateSyncSecret();
   const db = getDb();
   db.prepare(
-    `INSERT INTO license_activation (id, machine_id, shop_name, license_key, role, admin_host, station_code)
-     VALUES (1, ?, ?, ?, 'admin', NULL, ?)
+    `INSERT INTO license_activation (id, machine_id, shop_name, license_key, role, admin_host, station_code, sync_secret)
+     VALUES (1, ?, ?, ?, 'admin', NULL, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        machine_id = excluded.machine_id,
        shop_name = excluded.shop_name,
        license_key = excluded.license_key,
        role = excluded.role,
-       station_code = excluded.station_code`
-  ).run(machineId, shopName, licenseKey, stationCode || 'MAIN');
+       station_code = excluded.station_code,
+       sync_secret = excluded.sync_secret`
+  ).run(machineId, shopName, licenseKey, stationCode || 'MAIN', syncSecret);
 
-  return { success: true };
+  return { success: true, syncSecret };
 }
 
-function activateCashier(adminHost, stationCode) {
+function activateCashier(adminHost, stationCode, syncSecret) {
   const machineId = getMachineId();
   const db = getDb();
   db.prepare(
-    `INSERT INTO license_activation (id, machine_id, shop_name, license_key, role, admin_host, station_code)
-     VALUES (1, ?, '', 'CASHIER-NO-KEY', 'cashier', ?, ?)
+    `INSERT INTO license_activation (id, machine_id, shop_name, license_key, role, admin_host, station_code, sync_secret)
+     VALUES (1, ?, '', 'CASHIER-NO-KEY', 'cashier', ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        machine_id = excluded.machine_id,
        role = excluded.role,
        admin_host = excluded.admin_host,
-       station_code = excluded.station_code`
-  ).run(machineId, adminHost, stationCode || 'C1');
+       station_code = excluded.station_code,
+       sync_secret = excluded.sync_secret`
+  ).run(machineId, adminHost || null, stationCode || 'C1', syncSecret);
 
   return { success: true };
 }
