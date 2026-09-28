@@ -30,6 +30,8 @@ const glossary = {
   stockHistory: 'Stock History',
   purchases: 'Purchases',
   importSpreadsheet: 'Import from Spreadsheet',
+  mainComputer: 'Main computer',
+  counterComputer: 'Counter computer',
   computerName: 'Computer Name',
   connectedComputers: 'Connected Computers',
   connectionCode: 'Connection Code',

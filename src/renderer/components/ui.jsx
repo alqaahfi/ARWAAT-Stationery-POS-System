@@ -2,6 +2,7 @@
 export { Icon, IconTile, ICON_STROKE } from './kit/Icon';
 export { Button, IconButton } from './kit/Button';
 export { Field, Label, FieldError, HelperText, TextInput, NumberInput, TextArea, Textarea, Select, SearchField } from './kit/Field';
+export { PasswordInput } from './kit/PasswordInput';
 export { Toggle, Checkbox, SegmentedControl } from './kit/Toggle';
 export { Card, PageHeader, Banner, Badge, Kbd, ListSection, ListRow } from './kit/Surfaces';
 export { Spinner, Skeleton, EmptyState, ToastProvider, useToast, Modal, ConfirmProvider, useConfirm } from './kit/Feedback';

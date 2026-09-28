@@ -260,7 +260,7 @@ export default function AdminDashboard() {
       <div style={styles.main}>
         <TopUtilityBar title={pageTitle()} back={back} onNavigate={navigate} onOpenSearch={() => setSearchOpen(true)} />
 
-        <main style={styles.content}>
+        <main style={nav.route === '/pos' ? styles.posContent : styles.content}>
           <SectionTabs route={nav.route} onNavigate={navigate} />
           {renderContent()}
         </main>
@@ -276,4 +276,6 @@ const styles = {
   container: { display: 'flex', height: '100vh', overflow: 'hidden', backgroundColor: theme.colors.bg, fontFamily: theme.font.family },
   main: { flex: 1, minWidth: 0, height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
   content: { flex: 1, minHeight: 0, overflowY: 'auto', padding: theme.spacing.lg, backgroundColor: theme.colors.bg },
+  // New Sale fills the region itself; only its own lists scroll.
+  posContent: { flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: theme.spacing.md, backgroundColor: theme.colors.bg },
 };

@@ -5,6 +5,7 @@
 // --- Semantic palette (iOS-style, light) ---
 const palette = {
   accent: '#007AFF',
+  brandNavy: '#1B2B45', // ARWAAT brand badge (matches the app icon)
   accentPressed: '#0062CC',
   accentTint: 'rgba(0,122,255,0.12)',
   accentTintStrong: 'rgba(0,122,255,0.2)',

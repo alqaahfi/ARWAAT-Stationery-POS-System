@@ -27,6 +27,7 @@ import {
   Modal,
   NumberInput,
   PageHeader,
+  PasswordInput,
   Popover,
   SearchField,
   SegmentedControl,
@@ -239,6 +240,9 @@ export default function DesignGallery() {
           </Field>
           <Field label="Notes">
             <TextArea placeholder="Anything to remember about this item" />
+          </Field>
+          <Field label="Password" hint="Eye button shows or hides it.">
+            <PasswordInput defaultValue="secret123" />
           </Field>
         </div>
       </Section>

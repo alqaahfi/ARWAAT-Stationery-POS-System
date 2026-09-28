@@ -1,16 +1,24 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Lock, ShoppingCart } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import theme from '../../config/theme';
-import { formatCurrency, formatCount } from '../../utils/format';
-import ThermalContent from '../../components/receipt/ThermalContent';
-
-// Local filesystem paths need the file:// scheme (and a third slash on
-// Windows) to load as a src — same helper used across the Print pages.
-function toFileUrl(p) {
-  if (!p) return null;
-  const normalized = p.replace(/\\/g, '/');
-  return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`;
-}
+import { formatCount } from '../../utils/format';
+import { Card, EmptyState } from '../../components/ui';
+import StepStrip from './parts/StepStrip';
+import IdlePanel from './parts/IdlePanel';
+import CustomerPanel from './parts/CustomerPanel';
+import ItemSearchPanel from './parts/ItemSearchPanel';
+import QtyPanel from './parts/QtyPanel';
+import DiscountPanel from './parts/DiscountPanel';
+import FormatPanel from './parts/FormatPanel';
+import PaymentPanel from './parts/PaymentPanel';
+import CartList from './parts/CartList';
+import SummaryCard from './parts/SummaryCard';
+import KeyHints, { getKeyHints } from './parts/KeyHints';
+import UndoPill from './parts/UndoPill';
+import CancelSaleDialog from './parts/CancelSaleDialog';
+import SaleCompleteSheet from './parts/SaleCompleteSheet';
+import { InlineMessage } from './parts/common';
 
 // Cashier Mode is 100% keyboard-operable — see the build prompt for the full
 // stage-by-stage spec. Built as one component on purpose: a keyboard state
@@ -58,11 +66,8 @@ export const STAGE_LABELS = {
   confirm: 'Done',
 };
 
-// Pure — used by both this screen's own legend bar (via getLegend() below,
-// passing the live state) and the top utility bar's shortcuts popup (passing
-// no context, which falls back to each stage's baseline text — exactly what
-// a static reference should show). Keeping this as one function is what
-// keeps the two from ever listing different key bindings.
+// Plain-text legend per stage, kept for any shortcuts reference. The on-screen
+// key-hints bar is built by parts/KeyHints.jsx from the same handler below.
 export function getStageLegend(stage, ctx = {}) {
   const { draftAvailable, searchResultsOpen, editingLine, partialBlockedNoCustomer, confirmData } = ctx;
   switch (stage) {
@@ -181,6 +186,7 @@ export default function Sale() {
   const qtyInputRef = useRef(null);
   const editQtyInputRef = useRef(null);
   const discountInputRef = useRef(null);
+  const amountInputRef = useRef(null);
   const removedTimeoutRef = useRef(null);
   const handlerRef = useRef(() => {});
 
@@ -283,6 +289,7 @@ export default function Sale() {
       qtyInputRef.current?.focus();
       qtyInputRef.current?.select();
     } else if (stage === 'discount') discountInputRef.current?.focus();
+    else if (stage === 'payment') amountInputRef.current?.focus();
   }, [stage]);
 
   useEffect(() => {
@@ -1047,697 +1054,267 @@ export default function Sale() {
     return () => document.removeEventListener('keydown', listener);
   }, []);
 
-  // ---------------- contextual legend ----------------
 
-  function getLegend() {
-    return getStageLegend(stage, {
-      draftAvailable,
-      searchResultsOpen: searchResults.length > 0,
-      editingLine: editingLineIndex !== null,
-      partialBlockedNoCustomer,
-      confirmData,
-    });
-  }
+  // ---------------- presentation ----------------
+  // Everything below only renders state and forwards clicks to the handlers
+  // above; the visual pieces live in ./parts.
+
+  // Stable callbacks for the memoized result / cart rows, so typing in the
+  // search box never re-renders rows that didn't change.
+  const rowActionsRef = useRef(null);
+  rowActionsRef.current = {
+    onResultClick(idx) {
+      setSearchHighlight(idx);
+      resetSelectorsForIndex(idx);
+    },
+    onTypeClick(idx, tIdx) {
+      setSearchHighlight(idx);
+      setActiveSelector('type');
+      setTypeIndex(tIdx);
+    },
+    onUnitClick(group, uIdx) {
+      selectSearchResult(group, group.types.length > 1 ? typeIndex : 0, uIdx);
+    },
+    onCartRowClick(idx) {
+      // Mouse fallback — clicking a line from item-search (empty box) jumps
+      // into cart-edit, the same place ↑ from an empty search box goes.
+      if (stage === 'cart-edit') {
+        setCartHighlight(idx);
+      } else if (stage === 'item-search' && !searchQuery.trim()) {
+        setCartHighlight(idx);
+        setStage('cart-edit');
+      }
+    },
+    onCartRemove(idx) {
+      removeCartLineAt(idx);
+    },
+  };
+  const resultActions = useMemo(
+    () => ({
+      onRowClick: (idx) => rowActionsRef.current.onResultClick(idx),
+      onTypeClick: (idx, tIdx) => rowActionsRef.current.onTypeClick(idx, tIdx),
+      onUnitClick: (group, uIdx) => rowActionsRef.current.onUnitClick(group, uIdx),
+    }),
+    []
+  );
+  const cartActions = useMemo(
+    () => ({
+      onRowClick: (idx) => rowActionsRef.current.onCartRowClick(idx),
+      onRemove: (idx) => rowActionsRef.current.onCartRemove(idx),
+    }),
+    []
+  );
+
+  // Item count of the saved draft, for the resume banner (display only).
+  const draftItemCount = useMemo(() => {
+    if (!draftAvailable) return 0;
+    try {
+      return JSON.parse(localStorage.getItem(draftKey(stationCode)) || '{}').lines?.length || 0;
+    } catch {
+      return 0;
+    }
+  }, [draftAvailable, stationCode]);
 
   if (!canSell) {
     return (
-      <div style={styles.accessDenied}>
-        <h3 style={{ margin: 0 }}>You don't have access to this page</h3>
-        <p style={{ color: theme.colors.textSecondary }}>Ask your admin to grant you the "make sale" permission.</p>
-      </div>
+      <Card padding="0">
+        <EmptyState icon={Lock} title="You don't have access to this page" message={'Ask your admin to grant you the "make sale" permission.'} />
+      </Card>
     );
+  }
+
+  const inSale = stage !== 'idle' && stage !== 'confirm';
+  const hints = getKeyHints(stage, {
+    cancelOpen: showCancelConfirm,
+    draftAvailable,
+    resultsOpen: searchResults.length > 0,
+    hasQuery: !!searchQuery.trim(),
+    cartCount: cartLines.length,
+    editingLine: editingLineIndex !== null,
+    partialBlocked: partialBlockedNoCustomer,
+    amountTyped: amountTendered !== '',
+    printFailed: !!confirmData && !confirmData.printSuccess,
+  });
+
+  function renderEntry() {
+    switch (stage) {
+      case 'customer':
+        return (
+          <CustomerPanel
+            inputRef={customerInputRef}
+            query={customerQuery}
+            onQueryChange={setCustomerQuery}
+            results={customerResults}
+            highlight={customerHighlight}
+            onSelect={selectCustomerResult}
+          />
+        );
+      case 'item-search':
+      case 'cart-edit':
+        return (
+          <ItemSearchPanel
+            inputRef={searchInputRef}
+            query={searchQuery}
+            onQueryChange={setSearchQuery}
+            editingCart={stage === 'cart-edit'}
+            results={searchResults}
+            highlight={searchHighlight}
+            activeSelector={activeSelector}
+            typeIndex={typeIndex}
+            unitIndex={unitIndex}
+            saleType={saleType}
+            message={itemSearchMessage}
+            actions={resultActions}
+          />
+        );
+      case 'qty':
+        return pendingItem ? (
+          <QtyPanel
+            inputRef={qtyInputRef}
+            item={pendingItem}
+            value={qtyValue}
+            onChange={setQtyValue}
+            lineTotal={qtyNumber * (Number(pendingItem.unitPrice) || 0)}
+            stockError={qtyStockError}
+          />
+        ) : null;
+      case 'discount':
+        return (
+          <DiscountPanel
+            inputRef={discountInputRef}
+            mode={discountMode}
+            onModeChange={setDiscountMode}
+            value={discountInput}
+            onChange={setDiscountInput}
+            cap={effectiveDiscountCap}
+            discountAmount={discountAmount}
+            error={discountError}
+          />
+        );
+      case 'format':
+        return <FormatPanel value={printFormat} onChoose={toggleFormat} />;
+      case 'payment':
+        return (
+          <PaymentPanel
+            inputRef={amountInputRef}
+            amount={amountTendered}
+            onAmountChange={setAmountTendered}
+            total={totalAmount}
+            changeDue={changeDue}
+            balanceDue={balanceDue}
+            method={paymentMethod}
+            onMethodChange={setPaymentMethod}
+            showDuesOption={!!customer}
+            showDues={showDues}
+            onShowDuesChange={(checked) => {
+              setShowDuesTouched(true);
+              setShowDues(checked);
+            }}
+            blockedNoCustomer={partialBlockedNoCustomer}
+            error={paymentError}
+            completing={completing}
+          />
+        );
+      default:
+        return null;
+    }
   }
 
   return (
     <div style={styles.container}>
-      <div style={styles.legendBar}>
-        <span style={styles.legendStage}>{STAGE_LABELS[stage]}</span>
-        <span style={styles.legendKeys}>{getLegend()}</span>
+      <StepStrip stage={stage} showCancel={inSale} onCancel={requestCancelSale} />
+
+      <div style={styles.middle}>
+        {inSale ? (
+          <>
+            <div style={styles.left}>
+              <Card padding={theme.spacing.mdl} style={styles.entry}>
+                {renderEntry()}
+                <InlineMessage tone="error">{finalizeError}</InlineMessage>
+              </Card>
+              <CartList
+                lines={cartLines}
+                stockIssues={stockIssues}
+                selectedIndex={stage === 'cart-edit' ? cartHighlight : -1}
+                editingIndex={editingLineIndex}
+                editingValue={editingQtyValue}
+                onEditingChange={setEditingQtyValue}
+                editInputRef={editQtyInputRef}
+                editingError={editingQtyStockError}
+                isAdmin={isAdmin}
+                canRemove={stage === 'item-search' || stage === 'cart-edit'}
+                active={stage === 'cart-edit'}
+                actions={cartActions}
+              />
+            </div>
+            <SummaryCard
+              customer={customer}
+              customerNote={customerNote}
+              itemCount={cartLines.length}
+              subtotal={subtotal}
+              discountAmount={discountAmount}
+              total={totalAmount}
+              stage={stage}
+              printFormat={printFormat}
+              paymentMethod={paymentMethod}
+              amountReceived={tenderedNumber}
+              changeDue={changeDue}
+              balanceDue={balanceDue}
+            />
+          </>
+        ) : (
+          <Card padding="0" style={styles.idle}>
+            {stage === 'idle' ? (
+              <IdlePanel
+                draftAvailable={draftAvailable}
+                draftItemCount={draftItemCount}
+                onStart={startSale}
+                onResume={resumeDraft}
+                onStartNew={discardDraftAndStart}
+              />
+            ) : (
+              <EmptyState icon={ShoppingCart} color="green" title="Sale complete" style={{ margin: 'auto' }} />
+            )}
+          </Card>
+        )}
       </div>
 
-      {showCancelConfirm && (
-        <div style={styles.cancelBanner}>
-          Cancel this sale? <strong>Enter</strong> to confirm, <strong>Esc</strong> to keep working.
-        </div>
-      )}
-
       {recentlyRemoved && (
-        <div style={styles.undoBanner}>
-          <span>
-            Removed {recentlyRemoved.line.productName} ({recentlyRemoved.line.variantName !== 'Standard' ? recentlyRemoved.line.variantName : recentlyRemoved.line.baseUnitName})
-          </span>
-          <button style={styles.undoLink} onClick={undoRemove}>
-            Ctrl+Z to undo
-          </button>
-        </div>
+        <UndoPill
+          label={`${recentlyRemoved.line.productName} (${recentlyRemoved.line.variantName !== 'Standard' ? recentlyRemoved.line.variantName : recentlyRemoved.line.baseUnitName})`}
+          onUndo={undoRemove}
+        />
       )}
+      <KeyHints hints={hints} />
 
-      {finalizeError && <div style={styles.errorBanner}>{finalizeError}</div>}
-      {customerNote && stage !== 'customer' && <div style={styles.noteBanner}>{customerNote}</div>}
-
-      {stage === 'idle' && (
-        <div style={styles.idleCard}>
-          {draftAvailable ? (
-            <>
-              <div style={styles.idleTitle}>Resume previous sale?</div>
-              <div style={styles.idleHint}>
-                Press <strong>R</strong> to resume, <strong>N</strong> to start new.
-              </div>
-            </>
-          ) : (
-            <>
-              <div style={styles.idleTitle}>No sale in progress</div>
-              <div style={styles.idleHint}>
-                Press <strong>S</strong> to start a new sale.
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {stage !== 'idle' && stage !== 'confirm' && (
-        <div style={styles.columns}>
-          {/* -------- left: item search -------- */}
-          <div style={styles.leftCol}>
-            <div style={{ ...styles.panel, ...(stage === 'item-search' || stage === 'qty' ? styles.panelActive : {}) }}>
-              <div style={styles.panelHeader}>Add Items</div>
-
-              {stage === 'qty' && pendingItem ? (
-                <div style={styles.qtyBox}>
-                  <div style={styles.qtyItemName}>
-                    {pendingItem.productName}
-                    {pendingItem.variantName !== 'Standard' ? ` — ${pendingItem.variantName}` : ''}
-                  </div>
-                  <div style={styles.qtyItemMeta}>
-                    {formatCurrency(pendingItem.unitPrice)} / {pendingItem.units.find((u) => u.id === pendingItem.unitId)?.unitName}
-                  </div>
-                  <input
-                    ref={qtyInputRef}
-                    type="number"
-                    value={qtyValue}
-                    onChange={(e) => setQtyValue(e.target.value)}
-                    style={{ ...styles.qtyStageInput, ...(qtyStockError ? styles.inputError : {}) }}
-                  />
-                  {qtyStockError && <div style={styles.fieldError}>{qtyStockError}</div>}
-                </div>
-              ) : (
-                <>
-                  <input
-                    ref={searchInputRef}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Scan barcode or search by name / SKU…"
-                    style={styles.searchInput}
-                    disabled={stage !== 'item-search'}
-                  />
-                  {itemSearchMessage && <div style={styles.fieldError}>{itemSearchMessage}</div>}
-
-                  <div style={styles.resultsList}>
-                    {searchResults.map((group, idx) => {
-                      const isHighlighted = idx === searchHighlight;
-                      const hasTypes = group.types.length > 1;
-                      return (
-                        <div
-                          key={group.productId}
-                          style={{ ...styles.resultRow, ...(isHighlighted ? styles.resultRowActive : {}) }}
-                          onClick={() => {
-                            setSearchHighlight(idx);
-                            resetSelectorsForIndex(idx);
-                          }}
-                        >
-                          <div style={styles.resultName}>{group.productName}</div>
-                          {hasTypes && (
-                            <div style={styles.chipRow}>
-                              {group.types.map((t, tIdx) => (
-                                <span
-                                  key={t.variantId}
-                                  style={{ ...styles.chip, ...(isHighlighted && activeSelector === 'type' && tIdx === typeIndex ? styles.chipActive : {}) }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSearchHighlight(idx);
-                                    setActiveSelector('type');
-                                    setTypeIndex(tIdx);
-                                  }}
-                                >
-                                  {t.variantName}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          <div style={styles.chipRow}>
-                            {group.units.map((u, uIdx) => (
-                              <span
-                                key={u.id}
-                                style={{ ...styles.chip, ...(isHighlighted && activeSelector === 'unit' && uIdx === unitIndex ? styles.chipActive : {}) }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  selectSearchResult(group, hasTypes ? typeIndex : 0, uIdx);
-                                }}
-                              >
-                                {u.unitName}: {formatCurrency(saleType === 'wholesale' ? u.wholesalePrice : u.retailPrice)}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {searchQuery.trim() && searchResults.length === 0 && <div style={styles.resultMeta}>No matches.</div>}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* -------- center: customer + cart -------- */}
-          <div style={styles.centerCol}>
-            <div style={{ ...styles.panel, ...(stage === 'customer' ? styles.panelActive : {}) }}>
-              <div style={styles.panelHeader}>Customer</div>
-              {stage === 'customer' ? (
-                <>
-                  <input
-                    ref={customerInputRef}
-                    value={customerQuery}
-                    onChange={(e) => setCustomerQuery(e.target.value)}
-                    placeholder="Search existing customer, or leave blank for Walk-in…"
-                    style={styles.searchInput}
-                  />
-                  <div style={styles.resultsList}>
-                    {customerResults.map((c, idx) => (
-                      <div
-                        key={c.id}
-                        style={{ ...styles.resultRow, ...(idx === customerHighlight ? styles.resultRowActive : {}) }}
-                        onClick={() => selectCustomerResult(c)}
-                      >
-                        <div style={styles.resultName}>{c.name}</div>
-                        <div style={styles.resultMeta}>
-                          <span style={{ textTransform: 'capitalize' }}>{c.customer_type}</span>
-                          {c.phone ? ` · ${c.phone}` : ''}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div style={styles.selectedCustomer}>
-                  {customer ? (
-                    <>
-                      <div style={styles.resultName}>{customer.name}</div>
-                      <div style={styles.resultMeta}>
-                        <span style={{ textTransform: 'capitalize' }}>{customer.customer_type}</span>
-                        {customer.phone ? ` · ${customer.phone}` : ''}
-                      </div>
-                    </>
-                  ) : (
-                    <div style={styles.resultMeta}>Walk-in Customer</div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div style={{ ...styles.panel, ...(stage === 'cart-edit' ? styles.panelActive : {}), flex: 1, minHeight: 0, marginTop: '12px', display: 'flex', flexDirection: 'column' }}>
-              <div style={styles.panelHeader}>Cart</div>
-              {cartLines.length === 0 ? (
-                <div style={styles.resultMeta}>Cart is empty — search or scan an item to add it.</div>
-              ) : (
-                <div style={{ ...styles.resultsList, flex: 1 }}>
-                  {cartLines.map((line, idx) => {
-                    const isCartEditActive = stage === 'cart-edit' && idx === cartHighlight;
-                    const isEditingThis = editingLineIndex === idx;
-                    const lineTotal = (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0);
-                    return (
-                      <div
-                        key={line.key}
-                        style={{
-                          ...styles.cartLine,
-                          ...(stockIssues[line.key] ? styles.cartLineWarning : {}),
-                          ...(isCartEditActive ? styles.cartLineActive : {}),
-                        }}
-                        onClick={() => {
-                          // Mouse fallback — clicking a line from any stage
-                          // (not just once already in cart-edit) jumps
-                          // straight into editing it, same destination the
-                          // ↑-from-empty-search keyboard path reaches.
-                          if (stage === 'cart-edit') {
-                            setCartHighlight(idx);
-                          } else if (stage === 'item-search' && !searchQuery.trim()) {
-                            setCartHighlight(idx);
-                            setStage('cart-edit');
-                          }
-                        }}
-                      >
-                        <div style={styles.lineTop}>
-                          <div style={styles.lineName}>
-                            {line.productName}
-                            {line.variantName !== 'Standard' ? ` — ${line.variantName}` : ''}
-                          </div>
-                          <div style={styles.lineTotal}>{formatCurrency(lineTotal)}</div>
-                        </div>
-                        {isEditingThis ? (
-                          <div style={styles.lineRow}>
-                            <input
-                              ref={editQtyInputRef}
-                              type="number"
-                              value={editingQtyValue}
-                              onChange={(e) => setEditingQtyValue(e.target.value)}
-                              style={{ ...styles.editQtyInput, ...(editingQtyStockError ? styles.inputError : {}) }}
-                            />
-                            <span style={styles.resultMeta}>{line.units.find((u) => u.id === line.unitId)?.unitName}</span>
-                            {editingQtyStockError && <div style={styles.fieldError}>{editingQtyStockError}</div>}
-                          </div>
-                        ) : (
-                          <div style={styles.lineRow}>
-                            <span style={styles.resultMeta}>
-                              {line.quantity} {line.units.find((u) => u.id === line.unitId)?.unitName || line.baseUnitName} × {formatCurrency(line.unitPrice)}
-                            </span>
-                            {isAdmin && (
-                              <span style={styles.resultMeta}>
-                                Cost {formatCurrency(line.costPrice)} · Margin {formatCurrency(lineTotal - (Number(line.quantity) || 0) * (Number(line.costPrice) || 0))}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        {stockIssues[line.key] && <div style={styles.fieldError}>Not enough stock — only {line.stockQty} {line.baseUnitName} available.</div>}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* -------- right: discount / format / payment -------- */}
-          <div style={styles.rightCol}>
-            <Row label="Subtotal" value={formatCurrency(subtotal)} />
-
-            <div style={{ ...styles.panel, ...(stage === 'discount' ? styles.panelActive : {}) }}>
-              <div style={styles.panelHeader}>Discount</div>
-              <div style={styles.discountRow}>
-                <select
-                  style={styles.modeSelect}
-                  value={discountMode}
-                  onChange={(e) => setDiscountMode(e.target.value)}
-                  disabled={stage !== 'discount'}
-                >
-                  <option value="percentage">%</option>
-                  <option value="fixed">Rs</option>
-                </select>
-                <input
-                  ref={discountInputRef}
-                  type="number"
-                  value={discountInput}
-                  onChange={(e) => setDiscountInput(e.target.value)}
-                  disabled={stage !== 'discount'}
-                  style={styles.discountValInput}
-                />
-              </div>
-              {effectiveDiscountCap !== null && effectiveDiscountCap !== undefined && (
-                <div style={styles.resultMeta}>Your limit: {effectiveDiscountCap}%</div>
-              )}
-              {discountError && <div style={styles.fieldError}>{discountError}</div>}
-            </div>
-
-            <Row label="Discount Amount" value={`− ${formatCurrency(discountAmount)}`} />
-            <Row label="Total" value={formatCurrency(totalAmount)} bold />
-
-            <div style={{ ...styles.panel, ...(stage === 'format' ? styles.panelActive : {}) }}>
-              <div style={styles.panelHeader}>Receipt Format</div>
-              <div style={styles.formatGrid}>
-                <button
-                  style={{ ...styles.formatBtn, ...(printFormat === 'wholesale-a4' ? styles.formatBtnActive : {}) }}
-                  onClick={() => toggleFormat('wholesale-a4')}
-                  disabled={stage !== 'format'}
-                >
-                  Wholesale (A4)
-                </button>
-                <button
-                  style={{ ...styles.formatBtn, ...(printFormat === 'retail-thermal' ? styles.formatBtnActive : {}) }}
-                  onClick={() => toggleFormat('retail-thermal')}
-                  disabled={stage !== 'format'}
-                >
-                  Retail (Thermal)
-                </button>
-              </div>
-            </div>
-
-            <div style={{ ...styles.panel, ...(stage === 'payment' ? styles.panelActive : {}) }}>
-              <div style={styles.panelHeader}>Payment</div>
-              <div style={styles.resultMeta}>Amount Tendered (blank = exact)</div>
-              <input
-                type="number"
-                value={amountTendered}
-                onChange={(e) => setAmountTendered(e.target.value)}
-                disabled={stage !== 'payment'}
-                style={styles.discountValInput}
-              />
-              <div style={styles.paymentMethodRow}>
-                {['cash', 'bank', 'other'].map((m) => (
-                  <span key={m} style={{ ...styles.methodChip, ...(paymentMethod === m ? styles.methodChipActive : {}) }}>
-                    {m === 'cash' ? 'C' : m === 'bank' ? 'B' : 'O'} {m}
-                  </span>
-                ))}
-              </div>
-              {customer && (
-                <label style={styles.duesToggleLabel}>
-                  <input
-                    type="checkbox"
-                    checked={showDues}
-                    onChange={(e) => {
-                      setShowDuesTouched(true);
-                      setShowDues(e.target.checked);
-                    }}
-                    disabled={stage !== 'payment'}
-                  />
-                  Show Outstanding Balance on Receipt
-                </label>
-              )}
-              {changeDue > 0 && <Row label="Change Due" value={formatCurrency(changeDue)} bold />}
-              {balanceDue > 0 && <Row label="Balance Due" value={formatCurrency(balanceDue)} bold />}
-              {paymentError && <div style={styles.fieldError}>{paymentError}</div>}
-              {completing && <div style={styles.resultMeta}>Completing…</div>}
-            </div>
-          </div>
-        </div>
-      )}
+      {showCancelConfirm && <CancelSaleDialog onKeep={dismissCancelConfirm} onConfirm={confirmCancelSale} />}
 
       {stage === 'confirm' && confirmData && (
-        <div style={styles.overlay}>
-          <div style={styles.confirmCard}>
-            <h3 style={{ margin: '0 0 8px', color: theme.colors.textPrimary }}>Sale Completed</h3>
-            <div style={styles.resultMeta}>Invoice {confirmData.invoiceNo}</div>
-            <div style={styles.confirmTotal}>{formatCurrency(confirmData.totalAmount)}</div>
-            {confirmData.changeDue > 0 && <Row label="Change Due" value={formatCurrency(confirmData.changeDue)} bold />}
-            {confirmData.balanceDue > 0 && <Row label="Balance Due" value={formatCurrency(confirmData.balanceDue)} bold />}
-
-            {confirmData.printSuccess ? (
-              <div style={{ color: theme.colors.success, fontSize: theme.font.sizeSm, marginTop: theme.spacing.sm }}>Receipt sent to print.</div>
-            ) : (
-              <div style={styles.warningBox}>
-                {confirmData.printReason || 'Could not print receipt — check the printer.'}
-                <button style={styles.retryBtn} onClick={retryPrint} disabled={retryingPrint}>
-                  {retryingPrint ? 'Retrying…' : 'Retry Print (R)'}
-                </button>
-              </div>
-            )}
-
-            {/* Always shown, regardless of whether the physical print
-                succeeded — this is the cashier's visual confirmation the
-                sale went through, separate from whether paper came out.
-                A4 embeds the exact merged PDF that was (or would be) sent to
-                the printer; thermal renders the same shared content the
-                physical print formats from. */}
-            <div style={styles.receiptPreviewWrap}>
-              {confirmData.printType === 'wholesale-a4' ? (
-                confirmData.pdfPath ? (
-                  <embed src={toFileUrl(confirmData.pdfPath)} type="application/pdf" style={styles.receiptPreviewPdf} />
-                ) : (
-                  <div style={styles.resultMeta}>No invoice preview available — see the message above.</div>
-                )
-              ) : receiptPreview ? (
-                <div style={styles.receiptPreviewThermal}>
-                  <ThermalContent data={receiptPreview.data} settings={receiptPreview.settings} />
-                </div>
-              ) : (
-                <div style={styles.resultMeta}>Loading receipt preview…</div>
-              )}
-            </div>
-
-            <button style={styles.closeBtn} onClick={dismissConfirm}>
-              Close (Enter / Esc)
-            </button>
-          </div>
-        </div>
+        <SaleCompleteSheet
+          data={confirmData}
+          receiptPreview={receiptPreview}
+          retrying={retryingPrint}
+          onRetry={retryPrint}
+          onClose={dismissConfirm}
+        />
       )}
-    </div>
-  );
-}
-
-function Row({ label, value, bold }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        padding: '6px 2px',
-        color: bold ? theme.colors.textPrimary : theme.colors.textSecondary,
-        fontWeight: bold ? theme.font.weightSemibold : theme.font.weightNormal,
-        fontSize: bold ? theme.font.sizeMd : theme.font.sizeSm,
-      }}
-    >
-      <span>{label}</span>
-      <span>{value}</span>
     </div>
   );
 }
 
 const styles = {
-  container: { display: 'flex', flexDirection: 'column', height: '100%', fontFamily: theme.font.family },
-  legendBar: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: theme.colors.sidebarBackground,
-    color: theme.colors.textOnSidebarActive,
-    padding: '8px 16px',
-    borderRadius: theme.radius.md,
-    marginBottom: '10px',
-    fontSize: theme.font.sizeSm,
-  },
-  legendStage: { fontWeight: theme.font.weightSemibold },
-  legendKeys: { color: theme.colors.textOnSidebar, fontSize: theme.font.sizeXs },
-  cancelBanner: {
-    backgroundColor: theme.colors.dangerBackground,
-    color: theme.colors.danger,
-    border: `1px solid ${theme.colors.danger}`,
-    padding: '10px 16px',
-    borderRadius: theme.radius.md,
-    marginBottom: '10px',
-    fontSize: theme.font.sizeSm,
-  },
-  undoBanner: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: theme.colors.warningBackground,
-    color: theme.colors.warning,
-    border: `1px solid ${theme.colors.warning}`,
-    padding: '8px 16px',
-    borderRadius: theme.radius.md,
-    marginBottom: '10px',
-    fontSize: theme.font.sizeSm,
-  },
-  undoLink: { background: 'none', border: 'none', color: theme.colors.warning, textDecoration: 'underline', cursor: 'pointer', fontSize: theme.font.sizeSm },
-  errorBanner: {
-    backgroundColor: theme.colors.dangerBackground,
-    color: theme.colors.danger,
-    border: `1px solid ${theme.colors.danger}`,
-    padding: '8px 16px',
-    borderRadius: theme.radius.md,
-    marginBottom: '10px',
-    fontSize: theme.font.sizeSm,
-  },
-  noteBanner: {
-    backgroundColor: theme.colors.infoBackground,
-    color: theme.colors.info,
-    border: `1px solid ${theme.colors.info}`,
-    padding: '8px 16px',
-    borderRadius: theme.radius.md,
-    marginBottom: '10px',
-    fontSize: theme.font.sizeSm,
-  },
-  idleCard: {
+  container: {
+    position: 'relative',
     flex: 1,
+    minHeight: 0,
+    height: '100%',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.cardBackground,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.lg,
-    boxShadow: theme.shadow.card,
-    gap: '8px',
+    gap: theme.spacing.smd,
+    fontFamily: theme.font.family,
   },
-  idleTitle: { fontSize: theme.font.sizeLg, fontWeight: theme.font.weightSemibold, color: theme.colors.textPrimary },
-  idleHint: { color: theme.colors.textSecondary, fontSize: theme.font.sizeBase },
-  columns: { display: 'flex', gap: '14px', flex: 1, minHeight: 0 },
-  leftCol: { flex: '1.1', minWidth: 0, display: 'flex', flexDirection: 'column' },
-  centerCol: { flex: '1.4', minWidth: 0, display: 'flex', flexDirection: 'column' },
-  rightCol: { flex: '1', minWidth: '280px', maxWidth: '340px', overflowY: 'auto' },
-  panel: {
-    backgroundColor: theme.colors.cardBackground,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.lg,
-    boxShadow: theme.shadow.card,
-    padding: theme.spacing.md,
-    marginBottom: '10px',
-    transition: 'border-color 0.15s ease',
-  },
-  panelActive: { borderColor: theme.colors.primary, borderWidth: '2px' },
-  panelHeader: { color: theme.colors.textSecondary, fontSize: theme.font.sizeXs, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.03em' },
-  searchInput: {
-    width: '100%',
-    padding: '12px 14px',
-    borderRadius: theme.radius.md,
-    border: `1px solid ${theme.colors.border}`,
-    backgroundColor: theme.colors.cardBackground,
-    color: theme.colors.textPrimary,
-    fontSize: theme.font.sizeMd,
-    boxSizing: 'border-box',
-  },
-  resultsList: { marginTop: '10px', overflowY: 'auto', maxHeight: '100%' },
-  resultRow: {
-    padding: '10px',
-    borderRadius: theme.radius.md,
-    cursor: 'pointer',
-    borderBottom: `1px solid ${theme.colors.border}`,
-  },
-  resultRowActive: { backgroundColor: theme.colors.infoBackground, borderLeft: `3px solid ${theme.colors.primary}` },
-  resultName: { color: theme.colors.textPrimary, fontSize: theme.font.sizeBase, fontWeight: theme.font.weightMedium },
-  resultMeta: { color: theme.colors.textSecondary, fontSize: theme.font.sizeXs, marginTop: '2px' },
-  chipRow: { display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' },
-  chip: {
-    padding: '3px 8px',
-    borderRadius: theme.radius.sm,
-    border: `1px solid ${theme.colors.border}`,
-    backgroundColor: theme.colors.appBackground,
-    color: theme.colors.textSecondary,
-    fontSize: theme.font.sizeXs,
-    cursor: 'pointer',
-  },
-  chipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary, color: theme.colors.primaryText, fontWeight: theme.font.weightSemibold },
-  selectedCustomer: { padding: '4px 0' },
-  qtyBox: { display: 'flex', flexDirection: 'column', gap: '6px' },
-  qtyItemName: { color: theme.colors.textPrimary, fontSize: theme.font.sizeMd, fontWeight: theme.font.weightSemibold },
-  qtyItemMeta: { color: theme.colors.textSecondary, fontSize: theme.font.sizeSm },
-  qtyStageInput: {
-    width: '140px',
-    padding: '12px',
-    fontSize: theme.font.sizeLg,
-    borderRadius: theme.radius.md,
-    border: `2px solid ${theme.colors.primary}`,
-    textAlign: 'center',
-  },
-  inputError: { borderColor: theme.colors.danger },
-  fieldError: { color: theme.colors.danger, fontSize: theme.font.sizeXs, marginTop: '4px' },
-  cartLine: { border: `1px solid ${theme.colors.border}`, borderRadius: theme.radius.md, padding: '8px 10px', marginBottom: '6px' },
-  cartLineWarning: { borderColor: theme.colors.warning },
-  cartLineActive: { borderColor: theme.colors.primary, borderWidth: '2px', backgroundColor: theme.colors.infoBackground },
-  lineTop: { display: 'flex', justifyContent: 'space-between' },
-  lineName: { color: theme.colors.textPrimary, fontSize: theme.font.sizeSm, fontWeight: theme.font.weightMedium },
-  lineTotal: { color: theme.colors.textPrimary, fontWeight: theme.font.weightSemibold, fontSize: theme.font.sizeSm },
-  lineRow: { display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap' },
-  editQtyInput: { width: '70px', padding: '5px 8px', borderRadius: theme.radius.sm, border: `1px solid ${theme.colors.primary}`, fontSize: theme.font.sizeSm },
-  discountRow: { display: 'flex', gap: '8px' },
-  modeSelect: { padding: '8px', borderRadius: theme.radius.md, border: `1px solid ${theme.colors.border}`, fontSize: theme.font.sizeSm },
-  discountValInput: {
-    flex: 1,
-    width: '100%',
-    padding: '9px 10px',
-    borderRadius: theme.radius.md,
-    border: `1px solid ${theme.colors.border}`,
-    fontSize: theme.font.sizeSm,
-    boxSizing: 'border-box',
-    marginTop: '6px',
-  },
-  formatGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' },
-  formatBtn: {
-    padding: '10px',
-    borderRadius: theme.radius.md,
-    border: `1px solid ${theme.colors.border}`,
-    backgroundColor: theme.colors.cardBackground,
-    color: theme.colors.textSecondary,
-    fontSize: theme.font.sizeSm,
-    fontWeight: theme.font.weightMedium,
-    cursor: 'pointer',
-  },
-  formatBtnActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.infoBackground, color: theme.colors.primary },
-  paymentMethodRow: { display: 'flex', gap: '6px', marginTop: '8px' },
-  methodChip: {
-    padding: '4px 10px',
-    borderRadius: theme.radius.sm,
-    border: `1px solid ${theme.colors.border}`,
-    color: theme.colors.textSecondary,
-    fontSize: theme.font.sizeXs,
-    textTransform: 'capitalize',
-  },
-  methodChipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary, color: theme.colors.primaryText },
-  overlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
-  confirmCard: {
-    backgroundColor: theme.colors.cardBackground,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.lg,
-    boxShadow: theme.shadow.dropdown,
-    padding: '28px',
-    width: '560px',
-    maxHeight: '90vh',
-    overflowY: 'auto',
-    textAlign: 'center',
-  },
-  confirmTotal: { fontSize: theme.font.sizeXl, fontWeight: theme.font.weightSemibold, color: theme.colors.primary, margin: '8px 0' },
-  warningBox: {
-    marginTop: theme.spacing.sm,
-    backgroundColor: theme.colors.warningBackground,
-    color: theme.colors.warning,
-    border: `1px solid ${theme.colors.warning}`,
-    borderRadius: theme.radius.md,
-    padding: '10px',
-    fontSize: theme.font.sizeSm,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  retryBtn: {
-    padding: '8px',
-    borderRadius: theme.radius.md,
-    border: `1px solid ${theme.colors.warning}`,
-    backgroundColor: theme.colors.cardBackground,
-    color: theme.colors.warning,
-    cursor: 'pointer',
-    fontSize: theme.font.sizeSm,
-  },
-  closeBtn: {
-    marginTop: theme.spacing.lg,
-    width: '100%',
-    padding: '12px',
-    borderRadius: theme.radius.md,
-    border: 'none',
-    backgroundColor: theme.colors.primary,
-    color: theme.colors.primaryText,
-    cursor: 'pointer',
-    fontSize: theme.font.sizeBase,
-    fontWeight: theme.font.weightSemibold,
-  },
-  duesToggleLabel: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    marginTop: '10px',
-    fontSize: theme.font.sizeSm,
-    color: theme.colors.textPrimary,
-    cursor: 'pointer',
-  },
-  // The preview content itself is styled black-on-white/print-appropriate —
-  // this wrapper just gives it a bordered "sheet of paper" frame inside the
-  // otherwise dark-chrome confirm card. A4 embeds the actual merged PDF
-  // (Chromium's built-in PDF viewer handles the <embed>); thermal renders
-  // ThermalContent, the same shared component the dev-mode preview uses.
-  receiptPreviewWrap: { marginTop: theme.spacing.md, textAlign: 'left' },
-  receiptPreviewPdf: {
-    width: '100%',
-    height: '440px',
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.md,
-  },
-  receiptPreviewThermal: {
-    backgroundColor: '#ffffff',
-    color: '#000000',
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.md,
-    padding: '16px',
-    maxHeight: '360px',
-    overflowY: 'auto',
-    fontFamily: "'Courier New', monospace",
-    fontSize: '12px',
-    lineHeight: '1.6',
-  },
-  accessDenied: { padding: '40px', color: theme.colors.textPrimary, fontFamily: theme.font.family },
+  middle: { flex: 1, minHeight: 0, display: 'flex', gap: theme.spacing.md },
+  left: { flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', gap: theme.spacing.md },
+  entry: { flex: '0 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxSizing: 'border-box' },
+  idle: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto' },
 };

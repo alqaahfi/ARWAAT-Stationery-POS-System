@@ -28,7 +28,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main style={styles.content}>
+      <main style={canSell ? styles.posContent : styles.content}>
         {canSell ? (
           <Sale />
         ) : (
@@ -67,4 +67,6 @@ const styles = {
   right: { display: 'flex', alignItems: 'center', gap: theme.spacing.smd, flexShrink: 0 },
   divider: { width: '1px', height: '24px', backgroundColor: c.separator },
   content: { flex: 1, minHeight: 0, padding: '16px 24px', overflowY: 'auto' },
+  // New Sale fills the region itself; only its own lists scroll.
+  posContent: { flex: 1, minHeight: 0, padding: theme.spacing.md, overflow: 'hidden', display: 'flex', flexDirection: 'column' },
 };
