@@ -126,7 +126,11 @@ function DataRow({ children, onClick }) {
       onKeyDown={
         onClick
           ? (e) => {
-              if (e.key === 'Enter') onClick();
+              if (e.target !== e.currentTarget) return;
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onClick();
+              }
             }
           : undefined
       }

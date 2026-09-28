@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Bell, ChevronLeft, Plus, Search } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import theme from '../config/theme';
@@ -6,11 +6,10 @@ import appIcons from '../config/appIcons';
 import glossary from '../config/glossary';
 import { Badge, Icon, IconButton, Kbd, Menu, MenuItem, Popover } from '../components/ui';
 import useInteraction from '../components/kit/useInteraction';
-import { SALE_COMPLETED_EVENT } from '../pages/POS/Sale';
 import { SyncChip } from './ShellParts';
+import useAlerts, { ALERT_TYPES } from './useAlerts';
 
 const c = theme.colors;
-const REFRESH_INTERVAL_MS = 60000;
 
 // The Admin app's top bar: back button + page title on the left; search
 // trigger, sync chip, alerts and quick add on the right.
@@ -68,39 +67,10 @@ function SearchTrigger({ onClick }) {
 
 // ---------------- Alerts ----------------
 
-function useAlerts() {
-  const [counts, setCounts] = useState({ low: 0, dead: 0, overdue: 0 });
-  useEffect(() => {
-    let alive = true;
-    function refresh() {
-      Promise.all([
-        window.api.products.getLowStock(),
-        window.api.products.getDeadStock(),
-        window.api.ledgers.getAgingReport(),
-      ]).then(([low, dead, aging]) => {
-        if (alive) setCounts({ low: low.length, dead: dead.length, overdue: aging.filter((r) => r.b90plus > 0).length });
-      });
-    }
-    refresh();
-    const interval = setInterval(refresh, REFRESH_INTERVAL_MS);
-    window.addEventListener(SALE_COMPLETED_EVENT, refresh);
-    return () => {
-      alive = false;
-      clearInterval(interval);
-      window.removeEventListener(SALE_COMPLETED_EVENT, refresh);
-    };
-  }, []);
-  return counts;
-}
-
 function AlertsBell({ onNavigate }) {
   const [open, setOpen] = useState(false);
   const counts = useAlerts();
-  const rows = [
-    { key: 'low', label: glossary.runningLow, count: counts.low, route: '/products/low-stock', ...appIcons.runningLow, tone: 'orange' },
-    { key: 'dead', label: glossary.notSelling, count: counts.dead, route: '/products/dead-stock', ...appIcons.notSelling, tone: 'neutral' },
-    { key: 'overdue', label: `${glossary.overduePayments} (90+ days)`, count: counts.overdue, route: '/ledgers/aging', ...appIcons.overdue, tone: 'red' },
-  ].filter((r) => r.count > 0);
+  const rows = ALERT_TYPES.map((a) => ({ ...a, count: counts[a.key] })).filter((r) => r.count > 0);
   const total = counts.low + counts.dead + counts.overdue;
 
   return (

@@ -8,4 +8,7 @@ export { Card, PageHeader, Banner, Badge, Kbd, ListSection, ListRow } from './ki
 export { Spinner, Skeleton, EmptyState, ToastProvider, useToast, Modal, ConfirmProvider, useConfirm } from './kit/Feedback';
 export { Popover, Menu, MenuItem, MenuDivider, MenuHeader } from './kit/Popover';
 export { Tr, tableStyles, DataTable } from './kit/Table';
+export { Disclosure } from './kit/Disclosure';
+export { Stepper } from './kit/Stepper';
+export { ChipGroup } from './kit/ChipGroup';
 export { default as GlobalStyles } from './GlobalStyles';

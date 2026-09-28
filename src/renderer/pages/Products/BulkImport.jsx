@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Card, PageHeader, Button, Banner, tableStyles } from '../../components/ui';
+import { Stepper } from '../../components/ui';
 import theme from '../../config/theme';
+import { CheckStep, ImportStep, UploadStep } from './import/ImportSteps';
 import { parseCsv, toCsv, downloadCsv } from '../../utils/csv';
 
 const TEMPLATE_HEADERS = [
@@ -74,36 +75,36 @@ async function validateGroups(rawGroups, categories) {
   const validated = [];
   for (const g of rawGroups) {
     const errors = [];
-    if (!g.name) errors.push('Missing product name.');
+    if (!g.name) errors.push('The product name is missing.');
 
     let categoryId = null;
     if (g.categoryName) {
       const match = categories.find((c) => c.name.toLowerCase() === g.categoryName.toLowerCase());
-      if (!match) errors.push(`Unknown category "${g.categoryName}".`);
+      if (!match) errors.push(`There is no category called "${g.categoryName}". Add it under Categories first, or fix the spelling.`);
       else categoryId = match.id;
     }
 
-    if (!['fixed', 'percentage'].includes(g.pricingType)) errors.push(`Invalid pricing_type "${g.pricingType}".`);
+    if (!['fixed', 'percentage'].includes(g.pricingType)) errors.push(`pricing_type must be "fixed" or "percentage", not "${g.pricingType}".`);
 
     if (g.sku) {
-      if (skuCounts[g.sku] > 1) errors.push(`SKU "${g.sku}" appears more than once in this file.`);
+      if (skuCounts[g.sku] > 1) errors.push(`Item code "${g.sku}" is used by more than one product in this file.`);
       const res = await window.api.products.checkSkuUnique({ sku: g.sku });
-      if (!res.available) errors.push(`SKU "${g.sku}" already exists.`);
+      if (!res.available) errors.push(`Item code "${g.sku}" is already used by a product in the shop.`);
     }
 
     for (const v of g.variants) {
       if (v.barcode) {
         if (barcodeCounts[v.barcode] > 1) errors.push(`Barcode "${v.barcode}" appears more than once in this file.`);
         const res = await window.api.products.checkBarcodeUnique({ barcode: v.barcode });
-        if (!res.available) errors.push(`Barcode "${v.barcode}" already exists.`);
+        if (!res.available) errors.push(`Barcode "${v.barcode}" is already used by another item.`);
       }
-      if (Number.isNaN(Number(v.startingStock))) errors.push(`Invalid starting_stock for variant "${v.variantName}".`);
+      if (Number.isNaN(Number(v.startingStock))) errors.push(`Starting stock for Type "${v.variantName}" is not a number.`);
     }
 
-    if (g.units.length === 0) errors.push('No unit rows found for this product.');
+    if (g.units.length === 0) errors.push('No pack sizes found — fill in unit_name on at least one row.');
     for (const u of g.units) {
       if ([u.conversionFactor, u.retailPrice, u.wholesalePrice, u.costPrice].some((n) => Number.isNaN(Number(n)))) {
-        errors.push(`Invalid numeric value in unit "${u.unitName}".`);
+        errors.push(`Pack size "${u.unitName}" has a price or "contains" value that is not a number.`);
       }
     }
 
@@ -143,14 +144,17 @@ function buildPayload(g) {
   };
 }
 
+const STEPS = ['Upload', 'Check', 'Import'];
+
 export default function BulkImport({ onNavigate, onDone }) {
   const [step, setStep] = useState('upload'); // upload | preview | done
   const [categories, setCategories] = useState([]);
   const [groups, setGroups] = useState([]);
   const [parseError, setParseError] = useState('');
-  const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState(null);
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState(null); // null while importing
   const fileInputRef = useRef(null);
+  const importingRef = useRef(false);
 
   useEffect(() => {
     window.api.categories.list().then(setCategories);
@@ -160,32 +164,52 @@ export default function BulkImport({ onNavigate, onDone }) {
     downloadCsv('product-import-template.csv', toCsv(TEMPLATE_HEADERS, TEMPLATE_ROWS));
   }
 
-  async function handleFileChange(e) {
-    const file = e.target.files[0];
-    if (!file) return;
+  async function handleFile(file) {
     setParseError('');
-
-    const text = await file.text();
-    const rawRows = parseCsv(text);
-    if (rawRows.length === 0) {
-      setParseError('No rows found in that file.');
+    if (!/\.csv$/i.test(file.name)) {
+      setParseError('Please choose a .csv file.');
       return;
     }
 
-    const rawGroups = groupRows(rawRows);
-    const validated = await validateGroups(rawGroups, categories);
-    setGroups(validated);
-    setStep('preview');
+    setChecking(true);
+    try {
+      const text = await file.text();
+      const rawRows = parseCsv(text);
+      if (rawRows.length === 0) {
+        setParseError('No rows found in that file.');
+        return;
+      }
+
+      const rawGroups = groupRows(rawRows);
+      if (rawGroups.length === 0) {
+        setParseError('No products found — every row needs a name or item code.');
+        return;
+      }
+      const validated = await validateGroups(rawGroups, categories);
+      setGroups(validated);
+      setStep('preview');
+    } catch {
+      setParseError("That file couldn't be read. Check it is a CSV file and try again.");
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  function handleFileChange(e) {
+    const file = e.target.files[0];
     e.target.value = '';
+    if (file) handleFile(file);
   }
 
   async function handleConfirm() {
-    setImporting(true);
+    if (importingRef.current) return;
+    importingRef.current = true;
+    setResult(null);
+    setStep('done');
     const products = groups.map(buildPayload);
     const res = await window.api.products.bulkImport({ products });
-    setImporting(false);
+    importingRef.current = false;
     setResult(res);
-    setStep('done');
   }
 
   function reset() {
@@ -195,117 +219,38 @@ export default function BulkImport({ onNavigate, onDone }) {
     setStep('upload');
   }
 
-  const totalErrors = groups.reduce((sum, g) => sum + g.errors.length, 0);
+  const current = step === 'upload' ? 0 : step === 'preview' ? 1 : result?.success ? 3 : 2;
 
   return (
-    <div>
-      <PageHeader title="Bulk Import Products" />
+    <div style={{ maxWidth: '720px', margin: '0 auto', paddingBottom: theme.spacing.xxl }}>
+      <Stepper steps={STEPS} current={current} style={{ marginBottom: theme.spacing.lg }} />
 
       {step === 'upload' && (
-        <Card>
-          <p style={{ color: theme.colors.textSecondary, fontSize: '14px', marginTop: 0 }}>
-            Import many products at once from a CSV file. Each variant/unit combination is one row —
-            rows sharing the same SKU (or name, if SKU is blank) are grouped back into one product.
-          </p>
-          <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-            <Button variant="secondary" onClick={handleDownloadTemplate}>
-              Download CSV Template
-            </Button>
-            <Button onClick={() => fileInputRef.current.click()}>Upload CSV</Button>
-            <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileChange} style={{ display: 'none' }} />
-          </div>
-          <Banner>{parseError}</Banner>
-        </Card>
+        <UploadStep
+          fileInputRef={fileInputRef}
+          onFileChange={handleFileChange}
+          onDropFile={handleFile}
+          onDownloadTemplate={handleDownloadTemplate}
+          checking={checking}
+          error={parseError}
+        />
       )}
 
-      {step === 'preview' && (
-        <>
-          <Banner tone={totalErrors > 0 ? 'error' : 'info'}>
-            {groups.length} product{groups.length === 1 ? '' : 's'} found.{' '}
-            {totalErrors > 0
-              ? `Fix ${totalErrors} error${totalErrors === 1 ? '' : 's'} before importing — nothing is written until every row is valid.`
-              : 'No errors found — ready to import.'}
-          </Banner>
-
-          <Card style={{ padding: 0, marginTop: '16px' }}>
-            <div style={tableStyles.scroll}>
-              <table style={tableStyles.table}>
-                <thead>
-                  <tr>
-                    <th style={tableStyles.th}>Product</th>
-                    <th style={tableStyles.th}>SKU</th>
-                    <th style={tableStyles.th}>Category</th>
-                    <th style={tableStyles.th}>Pricing</th>
-                    <th style={tableStyles.th}>Variants</th>
-                    <th style={tableStyles.th}>Units</th>
-                    <th style={tableStyles.th}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {groups.map((g, i) => (
-                    <tr key={i}>
-                      <td style={tableStyles.td}>{g.name || <span style={{ color: theme.colors.danger }}>(missing)</span>}</td>
-                      <td style={{ ...tableStyles.td, color: theme.colors.textSecondary }}>{g.sku || '—'}</td>
-                      <td style={{ ...tableStyles.td, color: theme.colors.textSecondary }}>{g.categoryName || '—'}</td>
-                      <td style={{ ...tableStyles.td, textTransform: 'capitalize' }}>{g.pricingType}</td>
-                      <td style={tableStyles.td}>{g.variants.length}</td>
-                      <td style={tableStyles.td}>{g.units.length}</td>
-                      <td style={tableStyles.td}>
-                        {g.errors.length === 0 ? (
-                          <span style={{ color: theme.colors.success }}>● OK</span>
-                        ) : (
-                          <div>
-                            {g.errors.map((err, j) => (
-                              <div key={j} style={{ color: theme.colors.danger, fontSize: '12px' }}>
-                                ● {err}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-
-          <div style={{ display: 'flex', gap: '10px', marginTop: '18px' }}>
-            <Button onClick={handleConfirm} disabled={totalErrors > 0 || importing}>
-              {importing ? 'Importing…' : 'Confirm Import'}
-            </Button>
-            <Button variant="ghost" onClick={reset}>
-              Start Over
-            </Button>
-          </div>
-        </>
-      )}
+      {step === 'preview' && <CheckStep groups={groups} onImport={handleConfirm} onChooseAnother={reset} />}
 
       {step === 'done' && (
-        <Card>
-          {result?.success ? (
-            <>
-              <p style={{ color: theme.colors.success, fontSize: '15px' }}>
-                ✔ Imported {result.results.length} product{result.results.length === 1 ? '' : 's'} successfully.
-              </p>
-              <Button
-                onClick={() => {
-                  reset();
-                  onDone ? onDone() : onNavigate('/products');
-                }}
-              >
-                Done
-              </Button>
-            </>
-          ) : (
-            <>
-              <p style={{ color: theme.colors.danger, fontSize: '15px' }}>Import failed — nothing was saved: {result?.reason}</p>
-              <Button variant="ghost" onClick={reset}>
-                Back
-              </Button>
-            </>
-          )}
-        </Card>
+        <ImportStep
+          result={result}
+          onViewProducts={() => {
+            reset();
+            onDone ? onDone() : onNavigate('/products');
+          }}
+          onImportMore={reset}
+          onBackToCheck={() => {
+            setResult(null);
+            setStep('preview');
+          }}
+        />
       )}
     </div>
   );

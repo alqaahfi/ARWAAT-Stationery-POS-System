@@ -1,219 +1,151 @@
-import React, { useEffect, useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import React, { useCallback, useEffect, useState } from 'react';
 import theme from '../../config/theme';
-import StatTile from '../../components/StatTile';
-import { formatCount, formatCurrency, formatDateTime } from '../../utils/format';
+import appIcons from '../../config/appIcons';
+import glossary from '../../config/glossary';
+import { Button } from '../../components/ui';
+import { formatCount, formatCurrency } from '../../utils/format';
+import { Panel } from './parts/Panel';
+import GreetingHeader from './parts/GreetingHeader';
+import GettingStartedCard from './parts/GettingStartedCard';
+import StatTile from './parts/StatTile';
+import RevenueChartCard from './parts/RevenueChartCard';
+import NeedsAttentionCard from './parts/NeedsAttentionCard';
+import RecentSalesCard from './parts/RecentSalesCard';
+import QuickActionsCard from './parts/QuickActionsCard';
+import SignedInCard from './parts/SignedInCard';
 
-const PERIODS = [7, 30, 90];
+const c = theme.colors;
+const NARROW_QUERY = '(max-width: 899px)';
 
-// A. Essential stats, B. an interactive revenue graph, C. active users — the
-// three sections this page was rebuilt around. `onNavigate` lets the stat
-// cards and the chart's bar-click drill into the pages they summarize.
+function useNarrow() {
+  const [narrow, setNarrow] = useState(() => window.matchMedia(NARROW_QUERY).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(NARROW_QUERY);
+    const onChange = () => setNarrow(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
+}
+
+// Admin Home. Loads once on mount (summary + sessions); the chart card loads
+// its own trend per period. `onNavigate` drives every drill-in.
 export default function Overview({ onNavigate }) {
+  const narrow = useNarrow();
   const [summary, setSummary] = useState(null);
-  const [error, setError] = useState('');
-  const [period, setPeriod] = useState(30);
-  const [trend, setTrend] = useState(null);
+  const [summaryError, setSummaryError] = useState(false);
   const [sessions, setSessions] = useState(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadSummary = useCallback(() => {
+    let alive = true;
+    setSummaryError(false);
+    setSummary(null);
     window.api.dashboard
       .getSummary()
-      .then((res) => {
-        if (!cancelled) setSummary(res);
-      })
-      .catch(() => {
-        if (!cancelled) setError('Could not load dashboard data.');
-      });
-    window.api.dashboard.getActiveSessions().then((res) => {
-      if (!cancelled) setSessions(res);
-    });
+      .then((res) => alive && setSummary(res || {}))
+      .catch(() => alive && setSummaryError(true));
     return () => {
-      cancelled = true;
+      alive = false;
     };
   }, []);
 
-  useEffect(() => {
-    window.api.dashboard.getRevenueTrend({ days: period }).then(setTrend);
-  }, [period]);
+  useEffect(() => loadSummary(), [loadSummary]);
 
-  if (error) return <div style={styles.error}>{error}</div>;
-  if (!summary) return <div style={styles.loading}>Loading dashboard…</div>;
+  useEffect(() => {
+    let alive = true;
+    window.api.dashboard
+      .getActiveSessions()
+      .then((res) => alive && setSessions(Array.isArray(res) ? res : []))
+      .catch(() => alive && setSessions([]));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const loading = !summary;
+  const s = summary || {};
+  const salesCount = Number(s.todaySalesCount) || 0;
+  const lowCount = Number(s.lowStockCount) || 0;
+
+  const tiles = [
+    {
+      label: glossary.salesToday,
+      ...appIcons.sell,
+      value: formatCurrency(s.todaySalesTotal),
+      footnote: salesCount ? `${formatCount(salesCount)} ${salesCount === 1 ? 'sale' : 'sales'}` : 'No sales yet today',
+      route: '/reports/sales',
+    },
+    {
+      label: glossary.customersOweYou,
+      ...appIcons.accounts,
+      value: formatCurrency(s.outstandingReceivables),
+      footnote: 'Across all customers',
+      route: '/ledgers',
+    },
+    {
+      label: glossary.runningLow,
+      ...appIcons.runningLow,
+      value: formatCount(lowCount),
+      footnote: lowCount ? 'Items to reorder' : 'All stocked up',
+      footnoteColor: lowCount ? c.orangeText : undefined,
+      route: '/products/low-stock',
+    },
+    {
+      label: glossary.expensesThisMonth,
+      ...appIcons.expenses,
+      value: formatCurrency(s.monthExpenses),
+      footnote: 'Since the 1st',
+      route: '/expenses',
+    },
+  ];
 
   return (
-    <div>
-      {/* A. Essential stats */}
-      <div style={styles.grid}>
-        <StatTile
-          label="Today's Revenue"
-          value={formatCurrency(summary.todaySalesTotal)}
-          accent={theme.colors.accentBlue}
-        />
-        <StatTile
-          label="Today's Sales Count"
-          value={formatCount(summary.todaySalesCount)}
-          accent={theme.colors.accentGreen}
-        />
-        <ClickableTile onClick={() => onNavigate?.('/products/low-stock')}>
-          <StatTile label="Low Stock Count" value={formatCount(summary.lowStockCount)} hint="Click to view" accent={theme.colors.accentAmber} />
-        </ClickableTile>
-        <ClickableTile onClick={() => onNavigate?.('/products/dead-stock')}>
-          <StatTile label="Dead Stock Count" value={formatCount(summary.deadStockCount)} hint="Click to view" accent={theme.colors.accentPurple} />
-        </ClickableTile>
-      </div>
+    <div style={styles.page}>
+      <GreetingHeader />
 
-      {/* B. Interactive revenue graph */}
-      <div style={styles.chartCard}>
-        <div style={styles.chartHeader}>
-          <h4 style={{ margin: 0, color: theme.colors.textPrimary }}>Revenue Trend</h4>
-          <div style={styles.periodToggle}>
-            {PERIODS.map((p) => (
-              <button
-                key={p}
-                style={{ ...styles.periodBtn, ...(period === p ? styles.periodBtnActive : {}) }}
-                onClick={() => setPeriod(p)}
-              >
-                {p} days
-              </button>
+      {summaryError ? (
+        <Panel>
+          <div style={styles.error}>
+            <span style={styles.errorText}>Couldn't load your shop's numbers.</span>
+            <Button variant="tinted" size="sm" onClick={loadSummary}>
+              Try again
+            </Button>
+          </div>
+        </Panel>
+      ) : (
+        <>
+          {summary && <GettingStartedCard summary={summary} onNavigate={onNavigate} />}
+          <div style={{ ...styles.tiles, gridTemplateColumns: narrow ? 'repeat(2, minmax(0, 1fr))' : 'repeat(4, minmax(0, 1fr))' }}>
+            {tiles.map((t) => (
+              <StatTile key={t.route} {...t} loading={loading} onClick={() => onNavigate(t.route)} />
             ))}
           </div>
-        </div>
-        <span style={styles.chartHint}>Click a bar to view that day in the Sales Report</span>
-        {trend ? (
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={trend}>
-              <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border} />
-              <XAxis dataKey="date" tick={{ fontSize: 11, fill: theme.colors.textSecondary }} />
-              <YAxis tick={{ fontSize: 11, fill: theme.colors.textSecondary }} />
-              <Tooltip />
-              <Bar
-                dataKey="revenue"
-                fill={theme.colors.accentBlue}
-                radius={[4, 4, 0, 0]}
-                cursor="pointer"
-                onClick={(entry) => {
-                  const day = entry?.payload?.date ?? entry?.date;
-                  if (day) onNavigate?.('/reports/sales', { date: day });
-                }}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <div style={{ color: theme.colors.textSecondary, padding: '24px' }}>Loading…</div>
-        )}
-      </div>
+        </>
+      )}
 
-      {/* C. Active users */}
-      <div style={styles.tableCard}>
-        <div style={styles.tableHeader}>
-          <div>Active Users</div>
-          <div style={styles.limitationNote}>
-            Shows sessions on this PC only. Full multi-PC visibility requires the Sync module's live connection status, not
-            yet built.
-          </div>
+      <div style={{ ...styles.columns, gridTemplateColumns: narrow ? 'minmax(0, 1fr)' : 'minmax(0, 2fr) minmax(0, 1fr)' }}>
+        <div style={styles.column}>
+          <RevenueChartCard onNavigate={onNavigate} />
+          {!summaryError && <RecentSalesCard sales={s.recentSales} loading={loading} />}
         </div>
-        {!sessions ? (
-          <div style={styles.emptyState}>Loading…</div>
-        ) : sessions.length === 0 ? (
-          <div style={styles.emptyState}>No active sessions.</div>
-        ) : (
-          <div style={styles.tableScroll}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Name</th>
-                  <th style={styles.th}>Role</th>
-                  <th style={styles.th}>Station</th>
-                  <th style={styles.th}>Logged In Since</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sessions.map((s) => (
-                  <tr key={s.id}>
-                    <td style={styles.td}>{s.full_name}</td>
-                    <td style={{ ...styles.td, textTransform: 'capitalize' }}>{s.role}</td>
-                    <td style={styles.td}>{s.stationCode || '—'}</td>
-                    <td style={{ ...styles.td, color: theme.colors.textSecondary }}>{formatDateTime(s.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <div style={styles.column}>
+          <NeedsAttentionCard onNavigate={onNavigate} />
+          <QuickActionsCard onNavigate={onNavigate} />
+          <SignedInCard sessions={sessions} />
+        </div>
       </div>
     </div>
   );
 }
 
-function ClickableTile({ onClick, children }) {
-  return (
-    <div onClick={onClick} style={{ cursor: 'pointer' }}>
-      {children}
-    </div>
-  );
-}
+const GAP = '20px';
 
 const styles = {
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
-  },
-  loading: { color: theme.colors.textSecondary, fontFamily: theme.font.family, padding: '24px' },
-  error: { color: theme.colors.danger, fontFamily: theme.font.family, padding: '24px' },
-  chartCard: {
-    backgroundColor: theme.colors.cardBackground,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.lg,
-    boxShadow: theme.shadow.card,
-    padding: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
-    fontFamily: theme.font.family,
-  },
-  chartHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  chartHint: { color: theme.colors.textSecondary, fontSize: theme.font.sizeXs, display: 'block', marginBottom: '8px' },
-  periodToggle: { display: 'flex', gap: '6px' },
-  periodBtn: {
-    padding: '6px 12px',
-    borderRadius: theme.radius.md,
-    border: `1px solid ${theme.colors.border}`,
-    backgroundColor: theme.colors.cardBackground,
-    color: theme.colors.textSecondary,
-    fontSize: theme.font.sizeXs,
-    cursor: 'pointer',
-  },
-  periodBtnActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary, color: theme.colors.primaryText },
-  tableCard: {
-    backgroundColor: theme.colors.cardBackground,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.lg,
-    boxShadow: theme.shadow.card,
-    fontFamily: theme.font.family,
-    overflow: 'hidden',
-  },
-  tableHeader: {
-    padding: '16px 20px',
-    borderBottom: `1px solid ${theme.colors.border}`,
-  },
-  limitationNote: { color: theme.colors.textSecondary, fontSize: theme.font.sizeXs, fontWeight: theme.font.weightNormal, marginTop: '4px' },
-  emptyState: { color: theme.colors.textSecondary, padding: '32px 20px', textAlign: 'center', fontSize: theme.font.sizeBase },
-  tableScroll: { overflowX: 'auto' },
-  table: { width: '100%', borderCollapse: 'collapse', fontSize: theme.font.sizeSm, minWidth: '480px' },
-  th: {
-    textAlign: 'left',
-    color: theme.colors.textSecondary,
-    fontWeight: theme.font.weightSemibold,
-    padding: '10px 20px',
-    borderBottom: `1px solid ${theme.colors.border}`,
-    backgroundColor: '#f8fafc',
-    whiteSpace: 'nowrap',
-  },
-  td: {
-    padding: '12px 20px',
-    color: theme.colors.textPrimary,
-    borderBottom: `1px solid ${theme.colors.border}`,
-    whiteSpace: 'nowrap',
-  },
+  // Extra bottom room so the Dev Panel corner icon never covers the last card.
+  page: { maxWidth: '1200px', display: 'flex', flexDirection: 'column', gap: GAP, paddingBottom: theme.spacing.xxl, fontFamily: theme.font.family },
+  tiles: { display: 'grid', gap: GAP },
+  columns: { display: 'grid', gap: GAP, alignItems: 'start' },
+  column: { display: 'flex', flexDirection: 'column', gap: GAP, minWidth: 0 },
+  error: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing.md, paddingTop: theme.spacing.smd },
+  errorText: { ...theme.type.body, color: c.redText },
 };

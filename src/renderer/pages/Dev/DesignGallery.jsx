@@ -1,7 +1,7 @@
 // Dev-only reference page for the design system. Loaded lazily and only when
 // import.meta.env.DEV, so it never ships in production builds.
 import React, { useState } from 'react';
-import { ArrowRight, Download, Inbox, Package, Plus, Printer, Search, Trash2 } from 'lucide-react';
+import { ArrowRight, CalendarX, ClipboardList, Download, Inbox, Package, Plus, Printer, Search, Trash2 } from 'lucide-react';
 import theme from '../../config/theme';
 import appIcons from '../../config/appIcons';
 import { glossaryChanges } from '../../config/glossary';
@@ -11,7 +11,9 @@ import {
   Button,
   Card,
   Checkbox,
+  ChipGroup,
   DataTable,
+  Disclosure,
   EmptyState,
   Field,
   Icon,
@@ -34,6 +36,7 @@ import {
   Select,
   Skeleton,
   Spinner,
+  Stepper,
   TextArea,
   TextInput,
   Toggle,
@@ -78,6 +81,8 @@ export default function DesignGallery() {
   const [toggle, setToggle] = useState(true);
   const [check, setCheck] = useState(true);
   const [segment, setSegment] = useState('retail');
+  const [chip, setChip] = useState('damaged');
+  const [chipSm, setChipSm] = useState('all');
   const [search, setSearch] = useState('pens');
   const [rowToggle, setRowToggle] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -408,6 +413,53 @@ export default function DesignGallery() {
               </Menu>
             )}
           </Popover>
+        </Row>
+      </Section>
+
+      <Section title="Disclosure · Stepper">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: theme.spacing.md, alignItems: 'start' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
+            <Disclosure title="Special prices" summary="None set">
+              <div style={{ ...theme.type.subhead, color: c.labelSecondary }}>Collapsed by default; the summary shows while closed.</div>
+            </Disclosure>
+            <Disclosure title="Types" summary="2 Types" defaultOpen>
+              <div style={{ ...theme.type.subhead, color: c.labelSecondary }}>Open by default. The body fades in.</div>
+            </Disclosure>
+          </div>
+          <Card>
+            <SubTitle>Step 2 of 3</SubTitle>
+            <Stepper steps={['Upload', 'Check', 'Import']} current={1} />
+            <SubTitle style={{ marginTop: theme.spacing.lg }}>All done</SubTitle>
+            <Stepper steps={['Upload', 'Check', 'Import']} current={3} />
+          </Card>
+        </div>
+      </Section>
+
+      <Section title="Chip group">
+        <Row label="Size lg, with icons">
+          <ChipGroup
+            size="lg"
+            aria-label="What happened?"
+            value={chip}
+            onChange={setChip}
+            options={[
+              { value: 'damaged', label: 'Damaged', icon: Trash2 },
+              { value: 'expired', label: 'Expired', icon: CalendarX },
+              { value: 'recount', label: 'Recount', icon: ClipboardList },
+            ]}
+          />
+        </Row>
+        <Row label="Size md">
+          <ChipGroup
+            aria-label="Show"
+            value={chipSm}
+            onChange={setChipSm}
+            options={[
+              { value: 'all', label: 'All' },
+              { value: 'low', label: 'Running Low' },
+              { value: 'out', label: 'Out of stock' },
+            ]}
+          />
         </Row>
       </Section>
 

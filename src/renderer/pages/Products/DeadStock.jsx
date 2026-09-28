@@ -1,64 +1,74 @@
-import React, { useEffect, useState } from 'react';
-import { Card, PageHeader, Button, tableStyles, Tr } from '../../components/ui';
+import React, { useCallback, useEffect, useState } from 'react';
+import { CircleCheck } from 'lucide-react';
 import theme from '../../config/theme';
-import { formatCount } from '../../utils/format';
+import glossary from '../../config/glossary';
+import { EmptyState } from '../../components/ui';
+import { formatCount, formatDateOnly } from '../../utils/format';
+import { StockIntro } from './stock/StockIntro';
+import { StockTable, TwoLine } from './stock/StockTable';
+
+const muted = { color: theme.colors.labelSecondary };
+
+// Rows come straight from Product.js (via products:get-dead-stock).
+const columns = [
+  { key: 'name', label: 'Product', render: (r) => <TwoLine title={r.name} sub={r.category_name || 'No category'} /> },
+  { key: 'total_stock', label: 'In stock', numeric: true, width: '100px', render: (r) => formatCount(r.total_stock) },
+  {
+    key: 'last_sold_at',
+    label: 'Last sold',
+    width: '140px',
+    render: (r) => (r.last_sold_at ? formatDateOnly(r.last_sold_at) : <span style={muted}>{glossary.neverSold}</span>),
+  },
+  {
+    key: 'days',
+    label: 'Days without a sale',
+    numeric: true,
+    width: '160px',
+    render: (r) => (r.last_sold_at ? formatCount(r.days_since_last_sale) : <span style={muted}>—</span>),
+  },
+  { key: 'dead_stock_days', label: 'Flag after (days)', numeric: true, width: '140px', render: (r) => formatCount(r.dead_stock_days) },
+];
 
 export default function DeadStock({ onNavigate }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-  useEffect(() => {
-    window.api.products.getDeadStock().then((res) => {
-      setRows(res);
-      setLoading(false);
-    });
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      setRows(await window.api.products.getDeadStock());
+    } catch {
+      setError(true);
+    }
+    setLoading(false);
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
   return (
-    <div>
-      <PageHeader title="Dead Stock" />
-      <Card style={{ padding: 0 }}>
-        {loading ? (
-          <div style={tableStyles.emptyState}>Loading…</div>
-        ) : rows.length === 0 ? (
-          <div style={tableStyles.emptyState}>No dead stock right now.</div>
-        ) : (
-          <div style={tableStyles.scroll}>
-            <table style={tableStyles.table}>
-              <thead>
-                <tr>
-                  <th style={tableStyles.th}>Name</th>
-                  <th style={tableStyles.th}>Category</th>
-                  <th style={tableStyles.th}>Current Stock</th>
-                  <th style={tableStyles.th}>Days Since Last Sale</th>
-                  <th style={tableStyles.th}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <Tr key={r.id}>
-                    <td style={tableStyles.td}>{r.name}</td>
-                    <td style={{ ...tableStyles.td, color: theme.colors.textSecondary }}>{r.category_name || '—'}</td>
-                    <td style={tableStyles.td}>{formatCount(r.total_stock)}</td>
-                    <td style={{ ...tableStyles.td, color: theme.colors.warning }}>
-                      {formatCount(r.days_since_last_sale)} days{r.last_sold_at ? '' : ' (never sold)'}
-                    </td>
-                    <td style={{ ...tableStyles.td, textAlign: 'right' }}>
-                      <Button
-                        variant="ghost"
-                        style={{ padding: '6px 12px', fontSize: '12px' }}
-                        onClick={() => onNavigate('/products/edit', { id: r.id })}
-                      >
-                        Go to Product
-                      </Button>
-                    </td>
-                  </Tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+    <div style={{ paddingBottom: theme.spacing.xxl }}>
+      <StockIntro>Items that haven't sold for longer than you chose. Think about a discount, or stop reordering.</StockIntro>
+      <StockTable
+        columns={columns}
+        rows={rows}
+        loading={loading}
+        error={error}
+        onRetry={load}
+        footnote={rows.length > 0 && `${formatCount(rows.length)} items`}
+        onRowClick={(r) => onNavigate('/products/edit', { id: r.id })}
+        emptyState={
+          <EmptyState
+            icon={CircleCheck}
+            color="green"
+            title="Everything is selling"
+            message={`Items appear here only when you set '${glossary.notSellingDays}' on the product.`}
+          />
+        }
+      />
     </div>
   );
 }

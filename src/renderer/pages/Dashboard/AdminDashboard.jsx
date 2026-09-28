@@ -126,6 +126,7 @@ export default function AdminDashboard() {
         return (
           <ProductForm
             productId={nav.params.id}
+            onNavigate={navigate}
             onDone={() => navigate('/products')}
             onCancel={() => navigate('/products')}
           />
@@ -139,7 +140,7 @@ export default function AdminDashboard() {
       case '/products/bulk-import':
         return <BulkImport onNavigate={navigate} onDone={() => navigate('/products')} />;
       case '/products/purchases':
-        return <PurchaseEntry />;
+        return <PurchaseEntry onNavigate={navigate} />;
       case '/products/stock-adjustments':
         return <StockAdjustment productId={nav.params.productId} />;
       case '/products/stock-movements':

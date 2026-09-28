@@ -1,64 +1,69 @@
-import React, { useEffect, useState } from 'react';
-import { Card, PageHeader, Button, tableStyles, Tr } from '../../components/ui';
+import React, { useCallback, useEffect, useState } from 'react';
+import { CircleCheck } from 'lucide-react';
 import theme from '../../config/theme';
+import glossary from '../../config/glossary';
+import { Badge, EmptyState } from '../../components/ui';
 import { formatCount } from '../../utils/format';
+import { StockIntro } from './stock/StockIntro';
+import { StockTable, TwoLine } from './stock/StockTable';
+
+// Rows come straight from Product.js (via products:get-low-stock) — the same
+// rule the Product List chips use. No prices here: cashiers can open this page.
+const columns = [
+  { key: 'name', label: 'Product', render: (r) => <TwoLine title={r.name} sub={r.category_name || 'No category'} /> },
+  { key: 'total_stock', label: 'In stock', numeric: true, width: '110px', render: (r) => formatCount(r.total_stock) },
+  { key: 'min_stock_alert', label: 'Warn below', numeric: true, width: '110px', render: (r) => formatCount(r.min_stock_alert) },
+  {
+    key: 'deficit',
+    label: 'Short by',
+    numeric: true,
+    width: '110px',
+    render: (r) => <span style={{ color: theme.colors.orangeText, fontWeight: theme.font.weightSemibold }}>{formatCount(r.deficit)}</span>,
+  },
+  {
+    key: 'status',
+    label: 'Status',
+    width: '140px',
+    render: (r) =>
+      Number(r.total_stock) === 0 ? <Badge tone="red">{glossary.outOfStock}</Badge> : <Badge tone="orange">{glossary.runningLow}</Badge>,
+  },
+];
 
 export default function LowStock({ onNavigate }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-  useEffect(() => {
-    window.api.products.getLowStock().then((res) => {
-      setRows(res);
-      setLoading(false);
-    });
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      setRows(await window.api.products.getLowStock());
+    } catch {
+      setError(true);
+    }
+    setLoading(false);
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const outCount = rows.filter((r) => Number(r.total_stock) === 0).length;
+
   return (
-    <div>
-      <PageHeader title="Low Stock" />
-      <Card style={{ padding: 0 }}>
-        {loading ? (
-          <div style={tableStyles.emptyState}>Loading…</div>
-        ) : rows.length === 0 ? (
-          <div style={tableStyles.emptyState}>Nothing is low on stock right now.</div>
-        ) : (
-          <div style={tableStyles.scroll}>
-            <table style={tableStyles.table}>
-              <thead>
-                <tr>
-                  <th style={tableStyles.th}>Name</th>
-                  <th style={tableStyles.th}>Category</th>
-                  <th style={tableStyles.th}>Current Stock</th>
-                  <th style={tableStyles.th}>Min Stock Alert</th>
-                  <th style={tableStyles.th}>Deficit</th>
-                  <th style={tableStyles.th}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <Tr key={r.id}>
-                    <td style={tableStyles.td}>{r.name}</td>
-                    <td style={{ ...tableStyles.td, color: theme.colors.textSecondary }}>{r.category_name || '—'}</td>
-                    <td style={tableStyles.td}>{formatCount(r.total_stock)}</td>
-                    <td style={tableStyles.td}>{formatCount(r.min_stock_alert)}</td>
-                    <td style={{ ...tableStyles.td, color: theme.colors.warning, fontWeight: 600 }}>{formatCount(r.deficit)}</td>
-                    <td style={{ ...tableStyles.td, textAlign: 'right' }}>
-                      <Button
-                        variant="ghost"
-                        style={{ padding: '6px 12px', fontSize: '12px' }}
-                        onClick={() => onNavigate('/products/edit', { id: r.id })}
-                      >
-                        Go to Product
-                      </Button>
-                    </td>
-                  </Tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+    <div style={{ paddingBottom: theme.spacing.xxl }}>
+      <StockIntro>Items at or below the level you set. Reorder these soon.</StockIntro>
+      <StockTable
+        columns={columns}
+        rows={rows}
+        loading={loading}
+        error={error}
+        onRetry={load}
+        footnote={rows.length > 0 && `${formatCount(rows.length)} items · ${formatCount(outCount)} out of stock`}
+        onRowClick={(r) => onNavigate('/products/edit', { id: r.id })}
+        emptyState={<EmptyState icon={CircleCheck} color="green" title="Nothing is running low" message="All your items are above their warning level." />}
+      />
     </div>
   );
 }
