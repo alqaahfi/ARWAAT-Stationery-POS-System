@@ -1,0 +1,28 @@
+appId: com.arwaat.stationerysystems
+productName: ARWAAT Stationery Systems
+
+directories:
+  output: release
+  buildResources: build-resources
+
+files:
+  - src/main/**/*
+  - src/renderer/dist/**/*
+  - src/shared/**/*
+  - package.json
+
+# Native modules (better-sqlite3, bcrypt, printer) must stay unpacked from the
+# asar archive — their compiled .node binaries can't be loaded from inside it.
+asarUnpack:
+  - node_modules/better-sqlite3/**/*
+  - node_modules/bcrypt/**/*
+
+win:
+  target: nsis
+  icon: build-resources/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true

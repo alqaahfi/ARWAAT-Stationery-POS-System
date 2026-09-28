@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('api', {
 
   users: {
     hasAnyUser: () => ipcRenderer.invoke('users:has-any-user'),
+    hasAdminUser: () => ipcRenderer.invoke('users:has-admin-user'),
     createFirstAdmin: (data) => ipcRenderer.invoke('users:create-first-admin', data),
     login: (data) => ipcRenderer.invoke('users:login', data),
     validateSession: (data) => ipcRenderer.invoke('users:validate-session', data),
@@ -135,6 +136,11 @@ contextBridge.exposeInMainWorld('api', {
     export: () => ipcRenderer.invoke('backup:export'),
     restore: () => ipcRenderer.invoke('backup:restore'),
     relaunchApp: () => ipcRenderer.invoke('backup:relaunch-app'),
+    validateAndRestore: () => ipcRenderer.invoke('backup:validate-and-restore'),
+  },
+
+  system: {
+    factoryReset: () => ipcRenderer.invoke('system:factory-reset'),
   },
 
   printers: {

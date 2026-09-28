@@ -21,6 +21,7 @@ const { registerSyncIpc } = require('./ipc/sync.ipc');
 const { registerPurchasesIpc } = require('./ipc/purchases.ipc');
 const { registerSettingsIpc } = require('./ipc/settings.ipc');
 const { registerBackupIpc } = require('./ipc/backup.ipc');
+const { registerSystemIpc } = require('./ipc/system.ipc');
 const { registerGlobalIpc } = require('./ipc/global.ipc');
 const { registerDevPanelIpc } = require('./ipc/devpanel.ipc');
 const { installAuditMiddleware, pruneAuditLog } = require('./devpanel/auditMiddleware');
@@ -88,6 +89,7 @@ app.whenReady().then(() => {
       registerPurchasesIpc();
       registerSettingsIpc();
       registerBackupIpc();
+      registerSystemIpc();
       registerGlobalIpc();
       registerDevPanelIpc();
       seedDummyCashier();

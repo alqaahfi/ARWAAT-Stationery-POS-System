@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import theme from '../../config/theme';
-import { Card, PageHeader, Button, Banner } from '../../components/ui';
+import { Card, PageHeader, Button, Banner, Label, TextInput } from '../../components/ui';
 
 export default function BackupRestore() {
   const { user } = useAuth();
@@ -11,6 +11,10 @@ export default function BackupRestore() {
   const [restoring, setRestoring] = useState(false);
   const [error, setError] = useState('');
   const [restoredAwaitingRestart, setRestoredAwaitingRestart] = useState(false);
+
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState('');
 
   async function handleExport() {
     setExporting(true);
@@ -42,6 +46,19 @@ export default function BackupRestore() {
 
   function handleRestartNow() {
     window.api.backup.relaunchApp();
+  }
+
+  async function handleFactoryReset() {
+    if (resetConfirmText !== 'RESET') return;
+    setResetError('');
+    setResetting(true);
+    const res = await window.api.system.factoryReset();
+    if (!res.success) {
+      setResetting(false);
+      setResetError(res.reason || 'Could not reset the app.');
+      return;
+    }
+    // On success the main process relaunches the app itself — nothing more to do here.
   }
 
   if (user.role !== 'admin') {
@@ -92,6 +109,42 @@ export default function BackupRestore() {
         </Button>
         <Banner>{error}</Banner>
       </Card>
+
+      <div
+        style={{
+          maxWidth: '480px',
+          marginTop: theme.spacing.xl,
+          padding: theme.spacing.md,
+          borderRadius: theme.radius.lg,
+          backgroundColor: theme.colors.dangerBackground,
+          border: `1px solid ${theme.colors.danger}`,
+        }}
+      >
+        <h4 style={{ margin: '0 0 8px', color: theme.colors.danger }}>Danger Zone — Factory Reset</h4>
+        <p style={{ color: theme.colors.textSecondary, fontSize: theme.font.sizeSm }}>
+          Wipes all sales, products, customers, suppliers, users, and other business data on this PC, and clears its
+          license activation — the app returns to the Setup screen and needs a new activation key. This cannot be
+          undone. Back up first using Export Backup above if there's any chance you'll need this data again.
+        </p>
+
+        <Label>Type RESET to enable the button below</Label>
+        <TextInput
+          value={resetConfirmText}
+          onChange={(e) => setResetConfirmText(e.target.value)}
+          placeholder="RESET"
+          style={{ borderColor: theme.colors.danger }}
+        />
+
+        <Button
+          variant="danger"
+          onClick={handleFactoryReset}
+          disabled={resetConfirmText !== 'RESET' || resetting}
+          style={{ marginTop: theme.spacing.md }}
+        >
+          {resetting ? 'Resetting…' : 'Factory Reset This PC'}
+        </Button>
+        <Banner>{resetError}</Banner>
+      </div>
     </div>
   );
 }

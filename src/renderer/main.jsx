@@ -1,10 +1,12 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import '@fontsource-variable/inter';
 import App from './app.jsx';
 import PrintReport from './pages/Print/PrintReport.jsx';
 import PrintReceipt from './pages/Print/PrintReceipt.jsx';
 import PrintPaymentReceipt from './pages/Print/PrintPaymentReceipt.jsx';
 import PrintInvoice from './pages/Print/PrintInvoice.jsx';
+import { GlobalStyles, ToastProvider, ConfirmProvider } from './components/ui';
 
 // A hidden/standalone BrowserWindow used for PDF export, payment-receipt
 // printing, or (dev-mode) the sale receipt preview loads this exact same
@@ -36,5 +38,10 @@ function PrintRoot() {
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>{isPrintMode ? <PrintRoot /> : <App />}</React.StrictMode>
+  <React.StrictMode>
+    <GlobalStyles />
+    <ToastProvider>
+      <ConfirmProvider>{isPrintMode ? <PrintRoot /> : <App />}</ConfirmProvider>
+    </ToastProvider>
+  </React.StrictMode>
 );

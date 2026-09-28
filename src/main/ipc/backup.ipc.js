@@ -1,5 +1,6 @@
 const { ipcMain, app, dialog } = require('electron');
 const fs = require('fs');
+const Database = require('better-sqlite3');
 const { getDbPath, closeDatabase, initDatabase } = require('../db/connection');
 
 async function exportBackup() {
@@ -26,20 +27,11 @@ async function exportBackup() {
 // closed on success (the renderer prompts for a "Restart Now"). On failure
 // the original connection is reopened so the app isn't left in a broken,
 // DB-less state without a restart.
-async function restoreBackup() {
-  const result = await dialog.showOpenDialog({
-    title: 'Restore from Backup',
-    filters: [{ name: 'SQLite Database', extensions: ['db'] }],
-    properties: ['openFile'],
-  });
-  if (result.canceled || result.filePaths.length === 0) return { success: false, canceled: true };
-
-  const src = result.filePaths[0];
+function swapDatabaseFile(srcPath) {
   const dbPath = getDbPath();
-
   try {
     closeDatabase();
-    fs.copyFileSync(src, dbPath);
+    fs.copyFileSync(srcPath, dbPath);
     // Drop any leftover WAL/SHM sidecar files from the pre-restore database
     // so they don't get replayed against the newly-restored file.
     for (const suffix of ['-wal', '-shm']) {
@@ -56,15 +48,70 @@ async function restoreBackup() {
   }
 }
 
+async function restoreBackup() {
+  const result = await dialog.showOpenDialog({
+    title: 'Restore from Backup',
+    filters: [{ name: 'SQLite Database', extensions: ['db'] }],
+    properties: ['openFile'],
+  });
+  if (result.canceled || result.filePaths.length === 0) return { success: false, canceled: true };
+
+  return swapDatabaseFile(result.filePaths[0]);
+}
+
+// Opens the selected file read-only and checks it has the tables a real
+// backup of this app would have, before letting SetupAdmin commit to
+// overwriting the fresh (pre-activation) database with it.
+function isValidBackupFile(filePath) {
+  let testDb;
+  try {
+    testDb = new Database(filePath, { readonly: true, fileMustExist: true });
+    const tables = testDb
+      .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('license_activation', 'users')`)
+      .all()
+      .map((r) => r.name);
+    return tables.length === 2;
+  } catch {
+    return false;
+  } finally {
+    if (testDb) testDb.close();
+  }
+}
+
 function relaunchApp() {
   app.relaunch();
   app.exit();
+}
+
+// Used from Setup (pre-activation): validates the chosen file looks like a
+// real backup of this app before swapping it in, then relaunches straight
+// away — the restored file already carries its own license_activation row
+// and user accounts, so the app boots to the normal Login screen next time.
+async function validateAndRestoreBackup() {
+  const result = await dialog.showOpenDialog({
+    title: 'Restore from Backup',
+    filters: [{ name: 'SQLite Database', extensions: ['db'] }],
+    properties: ['openFile'],
+  });
+  if (result.canceled || result.filePaths.length === 0) return { success: false, canceled: true };
+
+  const src = result.filePaths[0];
+  if (!isValidBackupFile(src)) {
+    return { success: false, reason: "That file doesn't look like a valid ARWAAT POS backup." };
+  }
+
+  const swapResult = swapDatabaseFile(src);
+  if (!swapResult.success) return swapResult;
+
+  relaunchApp();
+  return { success: true };
 }
 
 function registerBackupIpc() {
   ipcMain.handle('backup:export', () => exportBackup());
   ipcMain.handle('backup:restore', () => restoreBackup());
   ipcMain.handle('backup:relaunch-app', () => relaunchApp());
+  ipcMain.handle('backup:validate-and-restore', () => validateAndRestoreBackup());
 }
 
 module.exports = { registerBackupIpc };

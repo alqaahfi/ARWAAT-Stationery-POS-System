@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import Sidebar, { SIDEBAR_WIDTH } from '../../layout/Sidebar';
+import Sidebar from '../../layout/Sidebar';
 import TopUtilityBar from '../../layout/TopUtilityBar';
-import { ROUTE_TITLES } from '../../config/navConfig';
+import SectionTabs from '../../layout/SectionTabs';
+import SearchPalette from '../../layout/SearchPalette';
+import { ROUTE_TITLES, getSectionForRoute } from '../../config/navConfig';
+import glossary from '../../config/glossary';
 import PlaceholderPage from '../../components/PlaceholderPage';
 import Overview from './Overview';
 import CategoryList from '../Products/CategoryList';
@@ -50,6 +53,10 @@ import LicenseInfo from '../Settings/LicenseInfo';
 import Preferences from '../Settings/Preferences';
 import theme from '../../config/theme';
 
+// Dev-only design reference (Ctrl+Shift+G). The DEV guard lets Vite drop the
+// import entirely from production builds.
+const DesignGallery = import.meta.env.DEV ? lazy(() => import('../Dev/DesignGallery')) : null;
+
 // Simple state-based router (no react-router in this project): `nav.route`
 // matches a navConfig route string, `nav.params` carries anything a fixed
 // sidebar link can't (e.g. which product id to edit).
@@ -69,18 +76,37 @@ export default function AdminDashboard() {
     setNav({ route, params });
   }
 
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
+  useEffect(() => {
+    function onKey(e) {
+      if (!e.ctrlKey || e.altKey || e.metaKey) return;
+      const key = e.key.toLowerCase();
+      if (DesignGallery && e.shiftKey && key === 'g') {
+        e.preventDefault();
+        navigateRef.current('/dev/design-gallery');
+      } else if (!e.shiftKey && key === 'k') {
+        // Leave the shortcut alone while a modal or confirm is up.
+        if (document.querySelector('[aria-modal="true"]:not([data-search-palette] *)')) return;
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Tab routes and standalone pages show the section name; forms and detail
+  // pages show their own title plus a "‹ Section" back button.
+  const match = getSectionForRoute(nav.route);
+  const back = match?.page ? { label: match.section.label, route: match.section.route } : null;
+
   function pageTitle() {
-    // No longer a navConfig entry (Cashier Mode moved to the top utility
-    // bar's POS icon), so ROUTE_TITLES has nothing for '/pos' — set here.
-    if (nav.route === '/pos') return 'Cashier Mode';
-    if (nav.route === '/products/edit') return nav.params.id ? 'Edit Product' : 'Add New Product';
-    if (nav.route === '/customers/edit') return 'Edit Customer';
-    if (nav.route === '/suppliers/edit') return 'Edit Supplier';
-    if (nav.route === '/ledgers/customers') return nav.params.name ? `Ledger — ${nav.params.name}` : 'Customer Ledger';
-    if (nav.route === '/ledgers/suppliers') return nav.params.name ? `Ledger — ${nav.params.name}` : 'Supplier Ledger';
-    if (nav.route === '/expenses/edit') return 'Edit Expense';
-    if (nav.route === '/cashiers/edit') return 'Edit Cashier';
-    if (nav.route === '/cashiers/sessions/detail') return 'Session Detail';
+    if (nav.route === '/pos') return glossary.newSale;
+    if (import.meta.env.DEV && nav.route === '/dev/design-gallery') return 'Design Gallery';
+    if (nav.route === '/products/edit') return nav.params.id ? glossary.editProduct : glossary.addProduct;
     return ROUTE_TITLES[nav.route] || nav.route;
   }
 
@@ -214,6 +240,14 @@ export default function AdminDashboard() {
       case '/settings/preferences':
         return <Preferences />;
 
+      case '/dev/design-gallery':
+        if (!DesignGallery) return <PlaceholderPage title={nav.route} />;
+        return (
+          <Suspense fallback={null}>
+            <DesignGallery />
+          </Suspense>
+        );
+
       default:
         return <PlaceholderPage title={ROUTE_TITLES[nav.route] || nav.route} />;
     }
@@ -221,33 +255,25 @@ export default function AdminDashboard() {
 
   return (
     <div style={styles.container}>
-      <Sidebar
-        activeRoute={nav.route}
-        onNavigate={navigate}
-        user={user}
-        onLogout={logout}
-      />
+      <Sidebar activeRoute={nav.route} onNavigate={navigate} user={user} onLogout={logout} />
 
       <div style={styles.main}>
-        <TopUtilityBar pageTitle={pageTitle()} activeRoute={nav.route} onNavigate={navigate} />
+        <TopUtilityBar title={pageTitle()} back={back} onNavigate={navigate} onOpenSearch={() => setSearchOpen(true)} />
 
-        <div style={styles.content}>{renderContent()}</div>
+        <main style={styles.content}>
+          <SectionTabs route={nav.route} onNavigate={navigate} />
+          {renderContent()}
+        </main>
       </div>
+
+      <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} onNavigate={navigate} />
     </div>
   );
 }
 
-// Sidebar is `position: fixed` and always fully open at a steady width —
-// main content's margin-left matches that width so it never sits underneath it.
+// Only the content region scrolls; sidebar and top bar stay put.
 const styles = {
-  container: { height: '100vh', backgroundColor: theme.colors.appBackground, fontFamily: theme.font.family },
-  main: {
-    marginLeft: SIDEBAR_WIDTH,
-    height: '100vh',
-    display: 'flex',
-    flexDirection: 'column',
-    minWidth: 0,
-    overflow: 'hidden',
-  },
-  content: { flex: 1, overflowY: 'auto', padding: '24px 28px' },
+  container: { display: 'flex', height: '100vh', overflow: 'hidden', backgroundColor: theme.colors.bg, fontFamily: theme.font.family },
+  main: { flex: 1, minWidth: 0, height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  content: { flex: 1, minHeight: 0, overflowY: 'auto', padding: theme.spacing.lg, backgroundColor: theme.colors.bg },
 };

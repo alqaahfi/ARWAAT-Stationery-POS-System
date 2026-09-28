@@ -1,44 +1,11 @@
 const crypto = require('crypto');
 const { getDb } = require('../db/connection');
 const { getMachineId } = require('./machineId');
-const publicKey = require('./publicKey');
-
-function verifyLicenseString(licenseKey, expectedMachineId) {
-  try {
-    const [payloadStr, signature] = licenseKey.split('.');
-    if (!payloadStr || !signature) return { valid: false, reason: 'Malformed license key' };
-
-    const isValidSig = crypto.verify(
-      null,
-      Buffer.from(payloadStr),
-      publicKey,
-      Buffer.from(signature, 'base64url')
-    );
-    if (!isValidSig) return { valid: false, reason: 'Invalid signature' };
-
-    const payload = JSON.parse(Buffer.from(payloadStr, 'base64url').toString('utf8'));
-
-    if (payload.machineId !== expectedMachineId) {
-      return { valid: false, reason: 'This license is not valid for this machine' };
-    }
-    if (payload.expiry && new Date(payload.expiry) < new Date()) {
-      return { valid: false, reason: 'This license has expired' };
-    }
-    return { valid: true, payload };
-  } catch (err) {
-    return { valid: false, reason: 'Could not read this license key' };
-  }
-}
 
 function getActivationStatus() {
   const db = getDb();
   const row = db.prepare('SELECT * FROM license_activation WHERE id = 1').get();
   if (!row) return { activated: false };
-
-  if (row.role === 'admin') {
-    const check = verifyLicenseString(row.license_key, row.machine_id);
-    if (!check.valid) return { activated: false, reason: check.reason };
-  }
 
   return {
     activated: true,
@@ -59,24 +26,46 @@ function generateSyncSecret() {
   return crypto.randomBytes(16).toString('hex');
 }
 
-function activateAdmin(licenseKey, shopName, stationCode) {
-  const machineId = getMachineId();
-  const check = verifyLicenseString(licenseKey, machineId);
-  if (!check.valid) return { success: false, reason: check.reason };
+// Forgiving of case and stray whitespace on entry — "abc12-..." or " ABC12 - ... "
+// should still match the exact pool value stored in license_keys.
+function normalizeKeyValue(keyValue) {
+  return (keyValue || '').replace(/\s+/g, '').toUpperCase();
+}
 
-  const syncSecret = generateSyncSecret();
+// Activation against the fixed pool of 500 pre-generated keys baked into the
+// app by 025_license_keys.sql (plain local lookup, not a cryptographic
+// signature). Enforcement is per-installation only: consuming a key here
+// marks it used in THIS PC's own database, but a different installation has
+// its own identical copy of the same table and would independently accept
+// the same key value — see the migration file's header comment. Preventing
+// that is on the developer, not this code.
+function activateAdmin(keyValue, shopName, stationCode) {
+  const normalized = normalizeKeyValue(keyValue);
   const db = getDb();
-  db.prepare(
-    `INSERT INTO license_activation (id, machine_id, shop_name, license_key, role, admin_host, station_code, sync_secret)
-     VALUES (1, ?, ?, ?, 'admin', NULL, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET
-       machine_id = excluded.machine_id,
-       shop_name = excluded.shop_name,
-       license_key = excluded.license_key,
-       role = excluded.role,
-       station_code = excluded.station_code,
-       sync_secret = excluded.sync_secret`
-  ).run(machineId, shopName, licenseKey, stationCode || 'MAIN', syncSecret);
+
+  const keyRow = db.prepare('SELECT * FROM license_keys WHERE key_value = ? AND is_used = 0').get(normalized);
+  if (!keyRow) {
+    return { success: false, reason: 'Invalid or already-used activation key.' };
+  }
+
+  const machineId = getMachineId();
+  const syncSecret = generateSyncSecret();
+
+  const activate = db.transaction(() => {
+    db.prepare(`UPDATE license_keys SET is_used = 1, used_at = datetime('now') WHERE id = ?`).run(keyRow.id);
+    db.prepare(
+      `INSERT INTO license_activation (id, machine_id, shop_name, license_key, role, admin_host, station_code, sync_secret)
+       VALUES (1, ?, ?, ?, 'admin', NULL, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         machine_id = excluded.machine_id,
+         shop_name = excluded.shop_name,
+         license_key = excluded.license_key,
+         role = excluded.role,
+         station_code = excluded.station_code,
+         sync_secret = excluded.sync_secret`
+    ).run(machineId, shopName || '', normalized, stationCode || 'MAIN', syncSecret);
+  });
+  activate();
 
   return { success: true, syncSecret };
 }

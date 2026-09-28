@@ -1,162 +1,234 @@
 // src/renderer/config/navConfig.js
 //
-// Ledger access removed from Customers and Suppliers — now lives in its own
-// top-level "Ledgers" module. Cashier Mode has moved out of here too — it's
-// now the "POS" icon in the top utility bar (TopUtilityBar.jsx) instead of a
-// sidebar link, so there's no 'cashier-mode' entry below.
+// The Admin app's whole map. Each entry is one sidebar item (a "section"):
+//   group     — sidebar group header (null = above the groups, e.g. Home)
+//   icon      — a key into config/appIcons.js
+//   route     — where the sidebar item goes
+//   tabs      — the section's sub-pages, shown as a SegmentedControl at the
+//               top of the page (only when 2+ are visible)
+//   pages     — other routes that belong to the section but aren't tabs
+//               (forms, detail views); they show a "‹ Section" back button
+//   children  — tabs + pages, kept for older code that walks the tree
+// Visibility: `adminOnly` is a hard role gate, `permissionKey` a cashier
+// permission (admin implicitly has every permission).
+//
+// New Sale (/pos) isn't a section — it's the button at the top of the sidebar.
+
+import glossary from './glossary';
+
+const g = glossary;
+
+function section(def) {
+  const tabs = def.tabs || [];
+  const pages = def.pages || [];
+  return { permissionKey: null, adminOnly: false, ...def, tabs, pages, children: [...tabs, ...pages] };
+}
 
 const navConfig = [
-  {
-    key: 'dashboard',
-    label: 'Dashboard',
-    icon: 'LayoutDashboard',
-    route: '/dashboard',
-    permissionKey: null,
-    children: null,
-  },
-  {
+  section({ key: 'dashboard', label: g.home, icon: 'home', group: null, route: '/dashboard' }),
+
+  section({
+    key: 'products',
+    label: g.products,
+    icon: 'products',
+    group: g.navShop,
+    route: '/products',
+    tabs: [
+      { key: 'products-all', label: g.allProducts, route: '/products', permissionKey: 'view_products' },
+      { key: 'products-low-stock', label: g.runningLow, route: '/products/low-stock', permissionKey: 'view_products' },
+      { key: 'products-dead-stock', label: g.notSelling, route: '/products/dead-stock' },
+      { key: 'products-categories', label: g.categories, route: '/products/categories' },
+      { key: 'products-purchases', label: g.purchases, route: '/products/purchases' },
+      { key: 'products-adjustments', label: g.fixStockCount, route: '/products/stock-adjustments' },
+      { key: 'products-movements', label: g.stockHistory, route: '/products/stock-movements' },
+    ],
+    pages: [
+      { key: 'products-new', label: g.addProduct, route: '/products/new' },
+      { key: 'products-edit', label: g.editProduct, route: '/products/edit', needsParams: true },
+      { key: 'products-bulk-import', label: g.importSpreadsheet, route: '/products/bulk-import' },
+    ],
+  }),
+  section({
+    key: 'customers',
+    label: g.customers,
+    icon: 'customers',
+    group: g.navShop,
+    route: '/customers',
+    adminOnly: true,
+    tabs: [
+      { key: 'customers-all', label: g.allCustomers, route: '/customers' },
+      { key: 'customers-percentage-rules', label: g.specialMargins, route: '/customers/percentage-rules' },
+    ],
+    pages: [
+      { key: 'customers-new', label: g.addCustomer, route: '/customers/new' },
+      { key: 'customers-edit', label: g.editCustomer, route: '/customers/edit', needsParams: true },
+    ],
+  }),
+  section({
+    key: 'suppliers',
+    label: g.suppliers,
+    icon: 'suppliers',
+    group: g.navShop,
+    route: '/suppliers',
+    adminOnly: true,
+    tabs: [{ key: 'suppliers-all', label: g.suppliers, route: '/suppliers' }],
+    pages: [
+      { key: 'suppliers-new', label: g.addSupplier, route: '/suppliers/new' },
+      { key: 'suppliers-edit', label: g.editSupplier, route: '/suppliers/edit', needsParams: true },
+    ],
+  }),
+  section({
+    key: 'sales',
+    label: g.sales,
+    icon: 'sales',
+    group: g.navShop,
+    route: '/sales',
+    tabs: [
+      { key: 'sales-history', label: g.sales, route: '/sales', permissionKey: 'view_sales_history' },
+      { key: 'sales-returns', label: g.returns, route: '/sales/returns' },
+    ],
+  }),
+
+  section({
     key: 'record-payment',
-    label: 'Record Payment',
-    icon: 'Wallet',
+    label: g.receivePayment,
+    icon: 'receivePayment',
+    group: g.navMoney,
     route: '/payments/record',
     permissionKey: 'record_payment',
-    children: null,
-  },
-  {
-    key: 'products',
-    label: 'Products',
-    icon: 'Package',
-    route: null,
-    permissionKey: null,
-    children: [
-      { key: 'products-all', label: 'All Products', route: '/products', permissionKey: 'view_products' },
-      { key: 'products-new', label: 'Add New Product', route: '/products/new', permissionKey: null },
-      { key: 'products-categories', label: 'Categories', route: '/products/categories', permissionKey: null },
-      { key: 'products-low-stock', label: 'Low Stock', route: '/products/low-stock', permissionKey: 'view_products' },
-      { key: 'products-dead-stock', label: 'Dead Stock', route: '/products/dead-stock', permissionKey: null },
-      { key: 'products-purchases', label: 'Purchase Entry', route: '/products/purchases', permissionKey: null },
-      { key: 'products-adjustments', label: 'Stock Adjustments', route: '/products/stock-adjustments', permissionKey: null },
-      { key: 'products-movements', label: 'Stock Movement History', route: '/products/stock-movements', permissionKey: null },
-    ],
-  },
-  {
-    key: 'customers',
-    label: 'Customers',
-    icon: 'Users',
-    route: null,
-    permissionKey: null,
-    children: [
-      { key: 'customers-all', label: 'All Customers', route: '/customers', permissionKey: null },
-      { key: 'customers-new', label: 'Add Customer', route: '/customers/new', permissionKey: null },
-      { key: 'customers-percentage-rules', label: 'Percentage Pricing Rules', route: '/customers/percentage-rules', permissionKey: null },
-    ],
-  },
-  {
-    key: 'suppliers',
-    label: 'Suppliers',
-    icon: 'Truck',
-    route: null,
-    permissionKey: null,
-    children: [
-      { key: 'suppliers-all', label: 'All Suppliers', route: '/suppliers', permissionKey: null },
-      { key: 'suppliers-new', label: 'Add Supplier', route: '/suppliers/new', permissionKey: null },
-    ],
-  },
-  {
+    tabs: [{ key: 'record-payment', label: g.receivePayment, route: '/payments/record', permissionKey: 'record_payment' }],
+  }),
+  section({
     key: 'ledgers',
-    label: 'Ledgers',
-    icon: 'BookText',
-    route: null,
-    permissionKey: null,
-    children: [
-      { key: 'ledgers-overview', label: 'Overview', route: '/ledgers', permissionKey: null },
-      { key: 'ledgers-customers', label: 'Customer Ledger', route: '/ledgers/customers', permissionKey: null },
-      { key: 'ledgers-suppliers', label: 'Supplier Ledger', route: '/ledgers/suppliers', permissionKey: null },
-      { key: 'ledgers-payments', label: 'Payment History', route: '/ledgers/payments', permissionKey: null },
-      { key: 'ledgers-advances', label: 'Advances & Credits', route: '/ledgers/advances', permissionKey: null },
-      { key: 'ledgers-aging', label: 'Aging / Overdue', route: '/ledgers/aging', permissionKey: null },
-      { key: 'ledgers-adjustments', label: 'Manual Adjustments', route: '/ledgers/adjustments', permissionKey: null },
+    label: g.accounts,
+    icon: 'accounts',
+    group: g.navMoney,
+    route: '/ledgers',
+    adminOnly: true,
+    tabs: [
+      { key: 'ledgers-overview', label: g.overview, route: '/ledgers' },
+      { key: 'ledgers-customers', label: g.customerAccounts, route: '/ledgers/customers' },
+      { key: 'ledgers-suppliers', label: g.supplierAccounts, route: '/ledgers/suppliers' },
+      { key: 'ledgers-payments', label: g.payments, route: '/ledgers/payments' },
+      { key: 'ledgers-advances', label: g.paidInAdvance, route: '/ledgers/advances' },
+      { key: 'ledgers-aging', label: g.overduePayments, route: '/ledgers/aging' },
+      { key: 'ledgers-adjustments', label: g.balanceCorrections, route: '/ledgers/adjustments' },
     ],
-  },
-  {
-    key: 'sales',
-    label: 'Sales',
-    icon: 'Receipt',
-    route: null,
-    permissionKey: null,
-    children: [
-      { key: 'sales-history', label: 'Sales History', route: '/sales', permissionKey: 'view_sales_history' },
-      { key: 'sales-returns', label: 'Returns / Refunds', route: '/sales/returns', permissionKey: null },
-    ],
-  },
-  {
+  }),
+  section({
     key: 'expenses',
-    label: 'Expenses',
-    icon: 'Wallet',
-    route: null,
+    label: g.expenses,
+    icon: 'expenses',
+    group: g.navMoney,
+    route: '/expenses',
     permissionKey: 'manage_expenses',
-    children: [
-      { key: 'expenses-all', label: 'All Expenses', route: '/expenses', permissionKey: 'manage_expenses' },
-      { key: 'expenses-new', label: 'Add Expense', route: '/expenses/new', permissionKey: 'manage_expenses' },
+    tabs: [{ key: 'expenses-all', label: g.expenses, route: '/expenses', permissionKey: 'manage_expenses' }],
+    pages: [
+      { key: 'expenses-new', label: g.addExpense, route: '/expenses/new', permissionKey: 'manage_expenses' },
+      { key: 'expenses-edit', label: g.editExpense, route: '/expenses/edit', permissionKey: 'manage_expenses', needsParams: true },
     ],
-  },
-  {
+  }),
+  section({
     key: 'reports',
-    label: 'Reports',
-    icon: 'BarChart3',
-    route: null,
+    label: g.reports,
+    icon: 'reports',
+    group: g.navMoney,
+    route: '/reports/sales',
     permissionKey: 'view_reports',
-    children: [
-      { key: 'reports-sales', label: 'Sales Report', route: '/reports/sales', permissionKey: 'view_reports' },
-      { key: 'reports-profit-loss', label: 'Profit & Loss', route: '/reports/profit-loss', permissionKey: null },
-      { key: 'reports-stock', label: 'Stock Report', route: '/reports/stock', permissionKey: null },
-      { key: 'reports-customers', label: 'Customer Statements', route: '/reports/customers', permissionKey: null },
-      { key: 'reports-suppliers', label: 'Supplier Statements', route: '/reports/suppliers', permissionKey: null },
-      { key: 'reports-cashiers', label: 'Cashier Performance', route: '/reports/cashiers', permissionKey: null },
-      { key: 'reports-expenses', label: 'Expense Report', route: '/reports/expenses', permissionKey: null },
+    tabs: [
+      { key: 'reports-sales', label: g.sales, route: '/reports/sales', permissionKey: 'view_reports' },
+      { key: 'reports-profit-loss', label: g.profitLoss, route: '/reports/profit-loss' },
+      { key: 'reports-stock', label: g.stock, route: '/reports/stock' },
+      { key: 'reports-customers', label: g.customers, route: '/reports/customers' },
+      { key: 'reports-suppliers', label: g.suppliers, route: '/reports/suppliers' },
+      { key: 'reports-cashiers', label: g.cashiers, route: '/reports/cashiers' },
+      { key: 'reports-expenses', label: g.expenses, route: '/reports/expenses' },
     ],
-  },
-  {
+  }),
+
+  section({
     key: 'cashiers',
-    label: 'Cashiers',
-    icon: 'ShieldCheck',
-    route: null,
-    permissionKey: null,
-    children: [
-      { key: 'cashiers-all', label: 'All Cashiers', route: '/cashiers', permissionKey: null },
-      { key: 'cashiers-new', label: 'Add Cashier', route: '/cashiers/new', permissionKey: null },
-      { key: 'cashiers-sessions', label: 'Session Activity', route: '/cashiers/sessions', permissionKey: null },
+    label: g.cashiers,
+    icon: 'cashiers',
+    group: g.navManage,
+    route: '/cashiers',
+    adminOnly: true,
+    tabs: [
+      { key: 'cashiers-all', label: g.cashiers, route: '/cashiers' },
+      { key: 'cashiers-sessions', label: g.sessionActivity, route: '/cashiers/sessions' },
     ],
-  },
-  {
+    pages: [
+      { key: 'cashiers-new', label: g.addCashier, route: '/cashiers/new' },
+      { key: 'cashiers-edit', label: g.editCashier, route: '/cashiers/edit', needsParams: true },
+      { key: 'cashiers-session-detail', label: g.sessionDetail, route: '/cashiers/sessions/detail', needsParams: true },
+    ],
+  }),
+  section({
     key: 'settings',
-    label: 'Settings',
-    icon: 'Settings',
-    route: null,
-    permissionKey: null,
-    children: [
-      { key: 'settings-receipt-content', label: 'Receipt Header & Footer', route: '/settings/receipt-content', permissionKey: null },
-      { key: 'settings-letterheads', label: 'Letterheads', route: '/settings/letterheads', permissionKey: null },
-      { key: 'settings-printers', label: 'Printer Settings', route: '/settings/printers', permissionKey: null },
-      { key: 'settings-sync', label: 'Sync & PCs', route: '/settings/sync', permissionKey: null },
-      { key: 'settings-backup', label: 'Backup & Restore', route: '/settings/backup', permissionKey: null },
-      { key: 'settings-license', label: 'License Info', route: '/settings/license', permissionKey: null },
-      { key: 'settings-preferences', label: 'App Preferences', route: '/settings/preferences', permissionKey: null },
+    label: g.settings,
+    icon: 'settings',
+    group: g.navManage,
+    route: '/settings/preferences',
+    adminOnly: true,
+    tabs: [
+      { key: 'settings-preferences', label: g.preferences, route: '/settings/preferences' },
+      { key: 'settings-receipt-content', label: g.receiptHeaderFooter, route: '/settings/receipt-content' },
+      { key: 'settings-letterheads', label: g.letterheads, route: '/settings/letterheads' },
+      { key: 'settings-printers', label: g.printers, route: '/settings/printers' },
+      { key: 'settings-sync', label: g.connectedComputers, route: '/settings/sync' },
+      { key: 'settings-backup', label: g.backupRestore, route: '/settings/backup' },
+      { key: 'settings-license', label: g.license, route: '/settings/license' },
     ],
-  },
+  }),
 ];
 
 export default navConfig;
 
-// Flat lookup: route -> display title for the topbar heading ("Parent — Child"
-// for nested pages, just the label for a single-link item).
-export const ROUTE_TITLES = navConfig.reduce((acc, section) => {
-  if (!section.children) {
-    acc[section.route] = section.label;
-    return acc;
-  }
-  for (const child of section.children) {
-    acc[child.route] = `${section.label} — ${child.label}`;
-  }
+// Sidebar group order (sections with group: null render above the first header).
+export const NAV_GROUPS = [g.navShop, g.navMoney, g.navManage];
+
+// Flat lookup: route -> display title. A section's own tabs map to the
+// section name; forms/detail pages map to their own label.
+export const ROUTE_TITLES = navConfig.reduce((acc, s) => {
+  acc[s.route] = s.label;
+  for (const tab of s.tabs) acc[tab.route] = s.label;
+  for (const page of s.pages) acc[page.route] = page.label;
   return acc;
 }, {});
+
+// route -> { section, tab } for tab routes, { section, page } for the other
+// routes a section owns, or null (e.g. /pos).
+export function getSectionForRoute(route) {
+  for (const s of navConfig) {
+    const tab = s.tabs.find((t) => t.route === route);
+    if (tab) return { section: s, tab };
+    const page = s.pages.find((p) => p.route === route);
+    if (page) return { section: s, page };
+    if (s.route === route) return { section: s };
+  }
+  return null;
+}
+
+// Same rules the app has always used: admin sees everything; otherwise a
+// hard role gate first, then the cashier permission.
+export function canSee(item, user, hasPermission) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  if (item.adminOnly) return false;
+  return !item.permissionKey || hasPermission(item.permissionKey);
+}
+
+export function visibleTabs(section, user, hasPermission) {
+  if (!canSee(section, user, hasPermission)) return [];
+  return section.tabs.filter((t) => canSee(t, user, hasPermission));
+}
+
+export function visibleSections(user, hasPermission) {
+  return navConfig.filter((s) => canSee(s, user, hasPermission) && (s.tabs.length === 0 || visibleTabs(s, user, hasPermission).length > 0));
+}
+
+// Where a sidebar item goes: its main route, or its first tab the user may see.
+export function sectionEntryRoute(section, user, hasPermission) {
+  const tabs = visibleTabs(section, user, hasPermission);
+  return tabs.some((t) => t.route === section.route) || !tabs.length ? section.route : tabs[0].route;
+}

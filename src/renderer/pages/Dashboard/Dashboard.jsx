@@ -1,9 +1,12 @@
 import React from 'react';
+import { Lock } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import AdminDashboard from './AdminDashboard';
 import Sale from '../POS/Sale';
 import theme from '../../config/theme';
 import { APP_NAME } from '../../config/appInfo';
+import { Card, EmptyState } from '../../components/ui';
+import { Brand, SyncChip, UserChip } from '../../layout/ShellParts';
 
 export default function Dashboard() {
   const { user, logout, hasPermission } = useAuth();
@@ -11,62 +14,57 @@ export default function Dashboard() {
   if (user.role === 'admin') return <AdminDashboard />;
 
   // A cashier gets nothing but the POS screen — no sidebar, no other pages,
-  // no tabs to switch between. Record Payment / Sales Report / everything
-  // else lives only in the admin sidebar now.
+  // no tabs to switch between.
   const canSell = hasPermission('make_sale');
 
   return (
     <div style={styles.container}>
-      <div style={styles.header}>
-        <div>
-          <h2 style={styles.title}>{APP_NAME}</h2>
-          <div style={styles.subtitle}>{user.fullName}</div>
+      <header style={styles.header}>
+        <Brand name={APP_NAME} />
+        <div style={styles.right}>
+          <SyncChip />
+          <div style={styles.divider} />
+          <UserChip user={user} onLogout={logout} style={{ width: '200px' }} />
         </div>
+      </header>
 
-        <button style={styles.logoutButton} onClick={logout}>
-          Logout
-        </button>
-      </div>
-
-      <div style={styles.content}>
+      <main style={styles.content}>
         {canSell ? (
           <Sale />
         ) : (
-          <div style={styles.accessDenied}>
-            <h3 style={{ margin: 0 }}>You don't have access to the POS screen yet</h3>
-            <p style={{ color: theme.colors.textSecondary }}>Ask your admin to grant you the "Make Sales" permission.</p>
-          </div>
+          <Card padding="0">
+            <EmptyState
+              icon={Lock}
+              color="gray"
+              title="You can't make sales yet"
+              message={'Ask your admin to turn on "Make Sales" for your account.'}
+              style={{ padding: '56px 24px' }}
+            />
+          </Card>
         )}
-      </div>
+      </main>
     </div>
   );
 }
 
+const c = theme.colors;
+
 const styles = {
-  container: { height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: theme.colors.appBackground, color: theme.colors.textPrimary, fontFamily: theme.font.family },
+  container: { height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: c.bg, color: c.label, fontFamily: theme.font.family },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: '16px',
-    padding: '0 28px',
+    gap: theme.spacing.md,
+    padding: '0 20px 0 24px',
     height: '56px',
     minHeight: '56px',
-    backgroundColor: theme.colors.cardBackground,
-    borderBottom: `1px solid ${theme.colors.border}`,
+    boxSizing: 'border-box',
+    backgroundColor: c.surface,
+    borderBottom: `1px solid ${c.separator}`,
     flexShrink: 0,
   },
-  title: { fontSize: theme.font.sizeMd, fontWeight: theme.font.weightSemibold, margin: 0 },
-  subtitle: { color: theme.colors.textSecondary, marginTop: '2px', fontSize: theme.font.sizeXs },
-  logoutButton: {
-    padding: '9px 16px',
-    borderRadius: theme.radius.md,
-    border: `1px solid ${theme.colors.borderStrong}`,
-    backgroundColor: theme.colors.cardBackground,
-    color: theme.colors.textPrimary,
-    cursor: 'pointer',
-    fontSize: theme.font.sizeSm,
-  },
-  content: { flex: 1, minHeight: 0, padding: '16px 28px', overflowY: 'auto' },
-  accessDenied: { padding: '40px' },
+  right: { display: 'flex', alignItems: 'center', gap: theme.spacing.smd, flexShrink: 0 },
+  divider: { width: '1px', height: '24px', backgroundColor: c.separator },
+  content: { flex: 1, minHeight: 0, padding: '16px 24px', overflowY: 'auto' },
 };

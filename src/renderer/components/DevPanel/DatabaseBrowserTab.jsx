@@ -61,7 +61,7 @@ export default function DatabaseBrowserTab() {
                   padding: '7px 10px',
                   fontFamily: theme.font.mono,
                   fontSize: theme.font.sizeXs,
-                  color: t.name === selectedTable ? theme.colors.textOnSidebarActive : theme.colors.panelText,
+                  color: t.name === selectedTable ? theme.colors.labelOnAccent : theme.colors.panelText,
                   backgroundColor: t.name === selectedTable ? theme.colors.primary : 'transparent',
                   cursor: 'pointer',
                   display: 'flex',

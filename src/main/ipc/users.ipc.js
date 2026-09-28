@@ -23,10 +23,21 @@ function hasAnyUser() {
   return row.count > 0;
 }
 
+// Specifically "is there an admin account yet" — NOT hasAnyUser(). seedDummyCashier()
+// below inserts a demo cashier unconditionally on every boot, before Setup ever runs,
+// so hasAnyUser() is true on a completely fresh install too; gating first-admin
+// creation on it would (and did) reject every fresh setup with a false "Setup has
+// already been completed" before an admin account ever existed.
+function hasAdminUser() {
+  const db = getDb();
+  const row = db.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin'").get();
+  return row.count > 0;
+}
+
 function createFirstAdmin(fullName, username, password) {
   const db = getDb();
 
-  if (hasAnyUser()) {
+  if (hasAdminUser()) {
     return { success: false, reason: 'Setup has already been completed on this PC.' };
   }
   if (!fullName || !username || !password || password.length < 6) {
@@ -420,6 +431,7 @@ function getSessionDetail(sessionId) {
 
 function registerUsersIpc() {
   ipcMain.handle('users:has-any-user', () => hasAnyUser());
+  ipcMain.handle('users:has-admin-user', () => hasAdminUser());
 
   ipcMain.handle('users:create-first-admin', (event, { fullName, username, password } = {}) =>
     createFirstAdmin(fullName, username, password)

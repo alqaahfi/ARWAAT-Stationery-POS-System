@@ -12,6 +12,12 @@ import DevPanelTrigger from './components/DevPanelTrigger';
 function AppRouter() {
   const { user, loading } = useAuth();
   const [activationStatus, setActivationStatus] = useState(null);
+  // True when license_activation exists for an admin PC but no user account
+  // has been created yet — e.g. the app was closed/crashed/restarted between
+  // the key-activation step and the create-admin-account step. Without this,
+  // activationStatus.activated alone would send the app straight to Login
+  // with no account able to ever log in, stranding whoever set it up.
+  const [needsAdminAccount, setNeedsAdminAccount] = useState(false);
   const [setupView, setSetupView] = useState('choose');
   const [checkingActivation, setCheckingActivation] = useState(true);
   // Set the instant SetupCashier.jsx finishes, cleared once its forced first
@@ -26,8 +32,9 @@ function AppRouter() {
 
   function refreshActivation() {
     setCheckingActivation(true);
-    window.api.license.getStatus().then((res) => {
-      setActivationStatus(res);
+    Promise.all([window.api.license.getStatus(), window.api.users.hasAdminUser()]).then(([status, hasAdminUser]) => {
+      setActivationStatus(status);
+      setNeedsAdminAccount(Boolean(status.activated) && status.role === 'admin' && !hasAdminUser);
       setCheckingActivation(false);
     });
   }
@@ -50,6 +57,10 @@ function AppRouter() {
       );
     }
     return <ChooseRole onChoose={(role) => setSetupView(role)} />;
+  }
+
+  if (needsAdminAccount) {
+    return <SetupAdmin onActivated={refreshActivation} resumeCreateAccount />;
   }
 
   if (pendingCashierSync) {
