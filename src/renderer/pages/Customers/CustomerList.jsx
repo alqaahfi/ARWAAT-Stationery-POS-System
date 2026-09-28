@@ -1,47 +1,91 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import theme from '../../config/theme';
-import { Card, PageHeader, Button, TextInput, Select, tableStyles, Tr } from '../../components/ui';
+import { Card, DataTable, useToast } from '../../components/ui';
 import { formatCurrency } from '../../utils/format';
-
-const TIERS = ['C1', 'C2', 'C3', 'C4', 'C5'];
+import { CustomerToolbar, NoCustomers, customerColumns } from './parts/CustomerListParts';
+import { ListSummary, LoadError, NoMatch, RestrictedNotice } from '../Parties/PartyParts';
 
 export default function CustomerList({ onNavigate }) {
   const { user } = useAuth();
+  const toast = useToast();
 
   const [customers, setCustomers] = useState([]);
   const [tierFilter, setTierFilter] = useState('');
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const debounceRef = useRef(null);
+  const searchRef = useRef('');
+  const requestRef = useRef(0);
+
+  const load = useCallback(
+    async ({ silent = false } = {}) => {
+      const req = ++requestRef.current;
+      if (!silent) setLoading(true);
+      try {
+        const rows = await window.api.customers.list({
+          search: searchRef.current,
+          tier: tierFilter || null,
+          customerType: typeFilter || null,
+        });
+        if (req !== requestRef.current) return;
+        setCustomers(rows || []);
+        setLoadFailed(false);
+      } catch {
+        if (req === requestRef.current) setLoadFailed(true);
+      } finally {
+        if (req === requestRef.current) setLoading(false);
+      }
+    },
+    [tierFilter, typeFilter]
+  );
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tierFilter, typeFilter]);
+  }, [load]);
+
+  useEffect(() => () => clearTimeout(debounceRef.current), []);
 
   function handleSearchChange(value) {
     setSearch(value);
+    searchRef.current = value;
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(load, 250);
+    debounceRef.current = setTimeout(() => load(), 250);
   }
 
-  async function load() {
-    setLoading(true);
-    const rows = await window.api.customers.list({
-      search,
-      tier: tierFilter || null,
-      customerType: typeFilter || null,
-    });
-    setCustomers(rows);
-    setLoading(false);
+  function clearFilters() {
+    clearTimeout(debounceRef.current);
+    setSearch('');
+    searchRef.current = '';
+    const unchanged = !tierFilter && !typeFilter;
+    setTierFilter('');
+    setTypeFilter('');
+    if (unchanged) load();
   }
 
-  async function toggleActive(c) {
-    await window.api.customers.setActive({ id: c.id, isActive: c.is_active ? 0 : 1 });
-    load();
-  }
+  const toggleActive = useCallback(
+    async (c) => {
+      const next = c.is_active ? 0 : 1;
+      setCustomers((list) => list.map((row) => (row.id === c.id ? { ...row, is_active: next } : row)));
+      try {
+        await window.api.customers.setActive({ id: c.id, isActive: next });
+        toast.success(next ? `${c.name} is active again` : `${c.name} is now inactive`);
+      } catch {
+        toast.error("Couldn't change that. Please try again.");
+      }
+      load({ silent: true });
+    },
+    [load, toast]
+  );
+
+  const columns = useMemo(() => customerColumns({ onToggleActive: toggleActive }), [toggleActive]);
+
+  const summary = useMemo(() => {
+    const owed = customers.reduce((sum, c) => (Number(c.balance_owed) > 0 ? sum + Number(c.balance_owed) : sum), 0);
+    const hasBalances = customers.some((c) => c.balance_owed !== undefined);
+    return { count: customers.length, owed, hasBalances };
+  }, [customers]);
 
   // Hard role gate — Customers is admin-only regardless of the permission
   // system. Sidebar already never renders this route for a cashier, but this
@@ -52,122 +96,42 @@ export default function CustomerList({ onNavigate }) {
     return <RestrictedNotice />;
   }
 
+  const filtered = !!(search.trim() || tierFilter || typeFilter);
+  const goAdd = () => onNavigate('/customers/new');
+
   return (
-    <div>
-      <PageHeader
-        title="Customers"
-        actions={<Button onClick={() => onNavigate('/customers/new')}>+ Add Customer</Button>}
+    <div style={{ paddingBottom: '48px' }}>
+      <CustomerToolbar
+        search={search}
+        onSearch={handleSearchChange}
+        typeFilter={typeFilter}
+        onTypeFilter={setTypeFilter}
+        tierFilter={tierFilter}
+        onTierFilter={setTierFilter}
+        onAdd={goAdd}
       />
 
-      <Card style={{ marginBottom: theme.spacing.md }}>
-        <div style={styles.filterRow}>
-          <TextInput
-            placeholder="Search name or phone…"
-            value={search}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            style={{ flex: 1 }}
-          />
-          <Select value={tierFilter} onChange={(e) => setTierFilter(e.target.value)} style={{ width: '220px' }}>
-            <option value="">All Tiers</option>
-            <option value="NONE">None</option>
-            {TIERS.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </Select>
-          <Select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ width: '160px' }}>
-            <option value="">All Types</option>
-            <option value="retail">Retail</option>
-            <option value="wholesale">Wholesale</option>
-          </Select>
-        </div>
-      </Card>
+      <ListSummary>
+        {loading
+          ? 'Loading…'
+          : `${summary.count} customer${summary.count === 1 ? '' : 's'}${
+              summary.hasBalances && summary.owed > 0 ? ` · ${formatCurrency(summary.owed)} owed to you in total` : ''
+            }`}
+      </ListSummary>
 
-      <Card style={{ padding: 0 }}>
-        <div style={tableStyles.scroll}>
-          <table style={tableStyles.table}>
-            <thead>
-              <tr>
-                <th style={tableStyles.th}>Name</th>
-                <th style={tableStyles.th}>Type</th>
-                <th style={tableStyles.th}>Tier</th>
-                <th style={tableStyles.th}>Phone</th>
-                <th style={{ ...tableStyles.th, textAlign: 'right' }}>Balance Owed</th>
-                <th style={tableStyles.th}>Active</th>
-                <th style={tableStyles.th}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {customers.map((c) => (
-                <Tr key={c.id} onClick={() => onNavigate('/ledgers/customers', { id: c.id, name: c.name })}>
-                  <td style={tableStyles.td}>{c.name}</td>
-                  <td style={{ ...tableStyles.td, textTransform: 'capitalize' }}>
-                    <span style={c.customer_type === 'wholesale' ? styles.badgeWholesale : styles.badgeRetail}>
-                      {c.customer_type}
-                    </span>
-                  </td>
-                  <td style={tableStyles.td}>{c.tier || '—'}</td>
-                  <td style={tableStyles.td}>{c.phone || '—'}</td>
-                  <td
-                    style={{
-                      ...tableStyles.td,
-                      textAlign: 'right',
-                      color: c.balance_owed > 0 ? theme.colors.danger : theme.colors.success,
-                      fontWeight: theme.font.weightMedium,
-                    }}
-                  >
-                    {formatCurrency(c.balance_owed)}
-                  </td>
-                  <td style={tableStyles.td} onClick={(e) => e.stopPropagation()}>
-                    <input type="checkbox" checked={!!c.is_active} onChange={() => toggleActive(c)} />
-                  </td>
-                  <td style={tableStyles.td} onClick={(e) => e.stopPropagation()}>
-                    <Button variant="ghost" style={{ padding: '5px 10px', fontSize: theme.font.sizeXs }} onClick={() => onNavigate('/customers/edit', { id: c.id })}>
-                      Edit
-                    </Button>
-                  </td>
-                </Tr>
-              ))}
-              {!loading && customers.length === 0 && (
-                <tr>
-                  <td colSpan={7} style={tableStyles.emptyState}>
-                    No customers found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+      <Card padding="0" style={{ overflow: 'hidden' }}>
+        {loadFailed ? (
+          <LoadError message="The customer list couldn't be loaded." onRetry={() => load()} />
+        ) : (
+          <DataTable
+            columns={columns}
+            rows={customers}
+            loading={loading}
+            onRowClick={(c) => onNavigate('/customers/edit', { id: c.id })}
+            emptyState={filtered ? <NoMatch what="customers" onClear={clearFilters} /> : <NoCustomers onAdd={goAdd} />}
+          />
+        )}
       </Card>
     </div>
   );
 }
-
-function RestrictedNotice() {
-  return (
-    <Card style={{ padding: '48px', textAlign: 'center' }}>
-      <h3 style={{ margin: 0, color: theme.colors.textPrimary }}>This section is restricted to Admin accounts</h3>
-    </Card>
-  );
-}
-
-const styles = {
-  filterRow: { display: 'flex', gap: theme.spacing.sm },
-  badgeRetail: {
-    display: 'inline-block',
-    padding: '2px 8px',
-    borderRadius: theme.radius.sm,
-    backgroundColor: theme.colors.infoBackground,
-    color: theme.colors.info,
-    fontSize: theme.font.sizeXs,
-  },
-  badgeWholesale: {
-    display: 'inline-block',
-    padding: '2px 8px',
-    borderRadius: theme.radius.sm,
-    backgroundColor: theme.colors.warningBackground,
-    color: theme.colors.warning,
-    fontSize: theme.font.sizeXs,
-  },
-};

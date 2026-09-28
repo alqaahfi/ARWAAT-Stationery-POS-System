@@ -6,6 +6,7 @@ import theme from '../../config/theme';
 import appIcons from '../../config/appIcons';
 import { glossaryChanges } from '../../config/glossary';
 import {
+  Avatar,
   Badge,
   Banner,
   Button,
@@ -460,6 +461,18 @@ export default function DesignGallery() {
               { value: 'out', label: 'Out of stock' },
             ]}
           />
+        </Row>
+      </Section>
+
+      <Section title="Avatar">
+        <Row label="Sizes 28 · 36 · 56 (tint follows the name)">
+          <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.md }}>
+            <Avatar name="Ali Traders" size={28} />
+            <Avatar name="Fatima Book Depot" size={36} />
+            <Avatar name="Usman" size={56} />
+            <Avatar name="City School" size={36} />
+            <Avatar name="Rehman Stationers" size={36} />
+          </div>
         </Row>
       </Section>
 

@@ -11,4 +11,5 @@ export { Tr, tableStyles, DataTable } from './kit/Table';
 export { Disclosure } from './kit/Disclosure';
 export { Stepper } from './kit/Stepper';
 export { ChipGroup } from './kit/ChipGroup';
+export { Avatar } from './kit/Avatar';
 export { default as GlobalStyles } from './GlobalStyles';

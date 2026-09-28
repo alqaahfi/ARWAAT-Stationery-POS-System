@@ -61,7 +61,7 @@ const navConfig = [
     ],
     pages: [
       { key: 'customers-new', label: g.addCustomer, route: '/customers/new' },
-      { key: 'customers-edit', label: g.editCustomer, route: '/customers/edit', needsParams: true },
+      { key: 'customers-edit', label: g.customer, route: '/customers/edit', needsParams: true },
     ],
   }),
   section({
@@ -74,7 +74,7 @@ const navConfig = [
     tabs: [{ key: 'suppliers-all', label: g.suppliers, route: '/suppliers' }],
     pages: [
       { key: 'suppliers-new', label: g.addSupplier, route: '/suppliers/new' },
-      { key: 'suppliers-edit', label: g.editSupplier, route: '/suppliers/edit', needsParams: true },
+      { key: 'suppliers-edit', label: g.supplier, route: '/suppliers/edit', needsParams: true },
     ],
   }),
   section({

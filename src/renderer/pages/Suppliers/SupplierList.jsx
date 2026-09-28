@@ -1,108 +1,112 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import theme from '../../config/theme';
-import { Card, PageHeader, Button, TextInput, tableStyles, Tr } from '../../components/ui';
+import { Card, DataTable, useToast } from '../../components/ui';
 import { formatCurrency } from '../../utils/format';
+import { NoSuppliers, SupplierToolbar, supplierColumns } from './parts/SupplierListParts';
+import { ListSummary, LoadError, NoMatch, RestrictedNotice } from '../Parties/PartyParts';
 
 export default function SupplierList({ onNavigate }) {
   const { user } = useAuth();
+  const toast = useToast();
 
   const [suppliers, setSuppliers] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const debounceRef = useRef(null);
+  const searchRef = useRef('');
+  const requestRef = useRef(0);
+
+  const load = useCallback(async ({ silent = false } = {}) => {
+    const req = ++requestRef.current;
+    if (!silent) setLoading(true);
+    try {
+      const rows = await window.api.suppliers.list({ search: searchRef.current });
+      if (req !== requestRef.current) return;
+      setSuppliers(rows || []);
+      setLoadFailed(false);
+    } catch {
+      if (req === requestRef.current) setLoadFailed(true);
+    } finally {
+      if (req === requestRef.current) setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return () => clearTimeout(debounceRef.current);
+  }, [load]);
 
   function handleSearchChange(value) {
     setSearch(value);
+    searchRef.current = value;
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(load, 250);
+    debounceRef.current = setTimeout(() => load(), 250);
   }
 
-  async function load() {
-    setLoading(true);
-    const rows = await window.api.suppliers.list({ search });
-    setSuppliers(rows);
-    setLoading(false);
-  }
-
-  async function toggleActive(s) {
-    await window.api.suppliers.setActive({ id: s.id, isActive: s.is_active ? 0 : 1 });
+  function clearFilters() {
+    clearTimeout(debounceRef.current);
+    setSearch('');
+    searchRef.current = '';
     load();
   }
+
+  const toggleActive = useCallback(
+    async (s) => {
+      const next = s.is_active ? 0 : 1;
+      setSuppliers((list) => list.map((row) => (row.id === s.id ? { ...row, is_active: next } : row)));
+      try {
+        await window.api.suppliers.setActive({ id: s.id, isActive: next });
+        toast.success(next ? `${s.name} is active again` : `${s.name} is now inactive`);
+      } catch {
+        toast.error("Couldn't change that. Please try again.");
+      }
+      load({ silent: true });
+    },
+    [load, toast]
+  );
+
+  const columns = useMemo(() => supplierColumns({ onToggleActive: toggleActive }), [toggleActive]);
+
+  const summary = useMemo(() => {
+    const owed = suppliers.reduce((sum, s) => (Number(s.balance_owed) > 0 ? sum + Number(s.balance_owed) : sum), 0);
+    const hasBalances = suppliers.some((s) => s.balance_owed !== undefined);
+    return { count: suppliers.length, owed, hasBalances };
+  }, [suppliers]);
 
   // Hard role gate — Suppliers is admin-only regardless of the permission
   // system, same rule as Customers. All hooks above run unconditionally every
   // render; this check only decides the returned JSX.
   if (user.role !== 'admin') {
-    return (
-      <Card style={{ padding: '48px', textAlign: 'center' }}>
-        <h3 style={{ margin: 0, color: theme.colors.textPrimary }}>This section is restricted to Admin accounts</h3>
-      </Card>
-    );
+    return <RestrictedNotice />;
   }
 
+  const goAdd = () => onNavigate('/suppliers/new');
+
   return (
-    <div>
-      <PageHeader title="Suppliers" actions={<Button onClick={() => onNavigate('/suppliers/new')}>+ Add Supplier</Button>} />
+    <div style={{ paddingBottom: '48px' }}>
+      <SupplierToolbar search={search} onSearch={handleSearchChange} onAdd={goAdd} />
 
-      <Card style={{ marginBottom: theme.spacing.md }}>
-        <TextInput placeholder="Search name or phone…" value={search} onChange={(e) => handleSearchChange(e.target.value)} />
-      </Card>
+      <ListSummary>
+        {loading
+          ? 'Loading…'
+          : `${summary.count} supplier${summary.count === 1 ? '' : 's'}${
+              summary.hasBalances && summary.owed > 0 ? ` · You owe ${formatCurrency(summary.owed)} in total` : ''
+            }`}
+      </ListSummary>
 
-      <Card style={{ padding: 0 }}>
-        <div style={tableStyles.scroll}>
-          <table style={tableStyles.table}>
-            <thead>
-              <tr>
-                <th style={tableStyles.th}>Name</th>
-                <th style={tableStyles.th}>Contact Person</th>
-                <th style={tableStyles.th}>Phone</th>
-                <th style={{ ...tableStyles.th, textAlign: 'right' }}>Balance Owed</th>
-                <th style={tableStyles.th}>Active</th>
-                <th style={tableStyles.th}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {suppliers.map((s) => (
-                <Tr key={s.id} onClick={() => onNavigate('/ledgers/suppliers', { id: s.id, name: s.name })}>
-                  <td style={tableStyles.td}>{s.name}</td>
-                  <td style={tableStyles.td}>{s.contact_person || '—'}</td>
-                  <td style={tableStyles.td}>{s.phone || '—'}</td>
-                  <td
-                    style={{
-                      ...tableStyles.td,
-                      textAlign: 'right',
-                      color: s.balance_owed > 0 ? theme.colors.danger : theme.colors.success,
-                      fontWeight: theme.font.weightMedium,
-                    }}
-                  >
-                    {formatCurrency(s.balance_owed)}
-                  </td>
-                  <td style={tableStyles.td} onClick={(e) => e.stopPropagation()}>
-                    <input type="checkbox" checked={!!s.is_active} onChange={() => toggleActive(s)} />
-                  </td>
-                  <td style={tableStyles.td} onClick={(e) => e.stopPropagation()}>
-                    <Button variant="ghost" style={{ padding: '5px 10px', fontSize: theme.font.sizeXs }} onClick={() => onNavigate('/suppliers/edit', { id: s.id })}>
-                      Edit
-                    </Button>
-                  </td>
-                </Tr>
-              ))}
-              {!loading && suppliers.length === 0 && (
-                <tr>
-                  <td colSpan={6} style={tableStyles.emptyState}>
-                    No suppliers found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+      <Card padding="0" style={{ overflow: 'hidden' }}>
+        {loadFailed ? (
+          <LoadError message="The supplier list couldn't be loaded." onRetry={() => load()} />
+        ) : (
+          <DataTable
+            columns={columns}
+            rows={suppliers}
+            loading={loading}
+            onRowClick={(s) => onNavigate('/suppliers/edit', { id: s.id })}
+            emptyState={search.trim() ? <NoMatch what="suppliers" onClear={clearFilters} /> : <NoSuppliers onAdd={goAdd} />}
+          />
+        )}
       </Card>
     </div>
   );

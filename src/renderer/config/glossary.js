@@ -109,6 +109,18 @@ const glossary = {
   customerOwes: (amount) => `Owes you ${amount}`,
   supplierOwed: (amount) => `You owe ${amount}`,
   paidAdvance: (amount) => `Paid ${amount} in advance`,
+  noBalance: 'No balance',
+
+  // Customers & Suppliers
+  customer: 'Customer',
+  supplier: 'Supplier',
+  noPriceLevel: 'None',
+  addMargin: 'Add Margin',
+  seeAccount: 'See account',
+  openAccount: 'Open account',
+  seeFullAccount: 'See full account',
+  newPurchase: 'New Purchase',
+  shopDefaultLetterhead: 'Shop default letterhead',
 };
 
 // Old wording -> new wording, for review in the Design Gallery.

@@ -154,6 +154,7 @@ export default function AdminDashboard() {
         return (
           <CustomerForm
             customerId={nav.params.id}
+            onNavigate={navigate}
             onDone={() => navigate('/customers')}
             onCancel={() => navigate('/customers')}
           />
@@ -169,6 +170,7 @@ export default function AdminDashboard() {
         return (
           <SupplierForm
             supplierId={nav.params.id}
+            onNavigate={navigate}
             onDone={() => navigate('/suppliers')}
             onCancel={() => navigate('/suppliers')}
           />
