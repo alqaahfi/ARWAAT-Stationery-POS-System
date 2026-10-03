@@ -89,7 +89,8 @@ const SYNC_TABLES = {
     },
   },
   sales: {
-    kind: 'insert_only',
+    kind: 'upsert',
+    deletable: true, // bills can be edited/voided (030)
     fks: {
       customer_id: { table: 'customers', nullable: true },
       cashier_id: { table: 'users' },
@@ -97,7 +98,8 @@ const SYNC_TABLES = {
     },
   },
   sale_items: {
-    kind: 'insert_only',
+    kind: 'upsert',
+    deletable: true, // bills can be edited/voided (030)
     fks: {
       sale_id: { table: 'sales' },
       product_id: { table: 'products' },
@@ -121,7 +123,8 @@ const SYNC_TABLES = {
     },
   },
   payments: {
-    kind: 'insert_only',
+    kind: 'upsert',
+    deletable: true, // bills can be edited/voided (030)
     fks: { sale_id: { table: 'sales', nullable: true }, received_by: { table: 'users', nullable: true } },
     polymorphicFk: { column: 'party_id', typeColumn: 'party_type', targets: { customer: 'customers', supplier: 'suppliers' } },
   },

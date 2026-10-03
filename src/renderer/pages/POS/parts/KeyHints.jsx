@@ -35,9 +35,9 @@ export function getKeyHints(stage, ctx) {
         [['Esc'], 'Cancel sale'],
       ];
     case 'qty':
-      return [[['Enter'], 'Add to sale'], [['Esc'], 'Back']];
+      return [[['Enter'], 'Add to sale'], [['Tab'], 'Quantity / Free'], [['Esc'], 'Back']];
     case 'cart-edit':
-      if (editingLine) return [[['Enter'], 'Save quantity'], [['Esc'], 'Cancel change']];
+      if (editingLine) return [[['Enter'], 'Save quantity'], [['Tab'], 'Quantity / Free'], [['Esc'], 'Cancel change']];
       return [
         [['↑', '↓'], 'Choose'],
         [['Enter'], 'Change quantity'],

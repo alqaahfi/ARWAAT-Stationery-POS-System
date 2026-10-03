@@ -13,6 +13,9 @@ export default function CartList({
   editingValue,
   onEditingChange,
   editInputRef,
+  editingFocValue,
+  onEditingFocChange,
+  editFocInputRef,
   editingError,
   isAdmin,
   canRemove,
@@ -49,6 +52,9 @@ export default function CartList({
                 editError={editing ? editingError : ''}
                 onEditChange={onEditingChange}
                 editInputRef={editing ? editInputRef : null}
+                editFocValue={editing ? editingFocValue : null}
+                onEditFocChange={onEditingFocChange}
+                editFocInputRef={editing ? editFocInputRef : null}
                 stockIssue={!!stockIssues[line.key]}
                 isAdmin={isAdmin}
                 canRemove={canRemove}
@@ -62,9 +68,10 @@ export default function CartList({
   );
 }
 
-const CartRow = memo(function CartRow({ line, idx, selected, editing, editValue, editError, onEditChange, editInputRef, stockIssue, isAdmin, canRemove, actions }) {
+const CartRow = memo(function CartRow({ line, idx, selected, editing, editValue, editError, onEditChange, editInputRef, editFocValue, onEditFocChange, editFocInputRef, stockIssue, isAdmin, canRemove, actions }) {
   const [hovered, setHovered] = useState(false);
   const qty = Number(line.quantity) || 0;
+  const foc = Number(line.focQuantity) || 0;
   const lineTotal = qty * (Number(line.unitPrice) || 0);
   const pack = packSizeName(line);
   const detail = [typeName(line.variantName), pack].filter(Boolean).join(' · ');
@@ -89,7 +96,7 @@ const CartRow = memo(function CartRow({ line, idx, selected, editing, editValue,
             {detail}
             {isAdmin && (
               <span style={theme.font.numeric}>
-                {' '}· Buying {formatCurrency(line.costPrice)} · Margin {formatCurrency(lineTotal - qty * (Number(line.costPrice) || 0))}
+                {' '}· Buying {formatCurrency(line.costPrice)} · Margin {formatCurrency(lineTotal - (qty + foc) * (Number(line.costPrice) || 0))}
               </span>
             )}
           </div>
@@ -97,6 +104,7 @@ const CartRow = memo(function CartRow({ line, idx, selected, editing, editValue,
 
         <div style={styles.colQty}>
           {editing ? (
+            <div style={{ display: 'flex', gap: theme.spacing.xs, alignItems: 'center' }}>
             <TextInput
               ref={editInputRef}
               type="number"
@@ -104,10 +112,24 @@ const CartRow = memo(function CartRow({ line, idx, selected, editing, editValue,
               onChange={(e) => onEditChange(e.target.value)}
               aria-label={`Quantity for ${line.productName}`}
               aria-invalid={editError ? true : undefined}
-              style={{ ...theme.font.numeric, textAlign: 'right', width: '96px' }}
+              style={{ ...theme.font.numeric, textAlign: 'right', width: '80px' }}
             />
+            <TextInput
+              ref={editFocInputRef}
+              type="number"
+              min="0"
+              value={editFocValue}
+              onChange={(e) => onEditFocChange(e.target.value)}
+              aria-label={`Free quantity for ${line.productName}`}
+              placeholder="Free"
+              style={{ ...theme.font.numeric, textAlign: 'right', width: '72px' }}
+            />
+            </div>
           ) : (
-            <Money value={`${line.quantity} × ${formatCurrency(line.unitPrice)}`} style={{ ...theme.type.subhead, color: c.labelSecondary }} />
+            <div style={{ textAlign: 'right' }}>
+              <Money value={`${line.quantity} × ${formatCurrency(line.unitPrice)}`} style={{ ...theme.type.subhead, color: c.labelSecondary }} />
+              {foc > 0 && <div style={{ ...theme.type.caption, color: c.greenText }}>+ {foc} free</div>}
+            </div>
           )}
         </div>
         <Money value={formatCurrency(lineTotal)} style={{ ...styles.colTotal, ...theme.type.headline, color: c.label }} />

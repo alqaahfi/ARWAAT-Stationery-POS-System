@@ -137,7 +137,7 @@ function getSaleDetail(input = {}) {
   const lines = db
     .prepare(
       `SELECT si.id, p.name AS item_name, pv.variant_name, pu.unit_name,
-              si.quantity, si.unit_price, si.discount_amount, si.line_total,
+              si.quantity, si.foc_quantity, si.unit_price, si.discount_amount, si.line_total,
               COALESCE((SELECT SUM(sri.quantity) FROM sale_return_items sri WHERE sri.sale_item_id = si.id), 0) AS quantity_returned
        FROM sale_items si
        JOIN products p ON p.id = si.product_id

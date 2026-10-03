@@ -174,7 +174,7 @@ function getProfitLoss(filters) {
   // is the line's cost directly, no conversion_factor multiplication needed.
   const cogsRows = db
     .prepare(
-      `SELECT ${salesExpr} AS bucket, COALESCE(SUM(si.quantity * pu.cost_price), 0) AS cogs
+      `SELECT ${salesExpr} AS bucket, COALESCE(SUM((si.quantity + si.foc_quantity) * pu.cost_price), 0) AS cogs
        FROM sale_items si
        JOIN sales s ON s.id = si.sale_id
        JOIN product_units pu ON pu.id = si.product_unit_id

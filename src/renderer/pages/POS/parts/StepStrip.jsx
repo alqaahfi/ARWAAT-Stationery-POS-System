@@ -19,7 +19,7 @@ const STEP_OF_STAGE = {
   confirm: STEPS.length,
 };
 
-export default function StepStrip({ stage, showCancel, onCancel }) {
+export default function StepStrip({ stage, showCancel, onCancel, heldCount = 0, canHold, onRecent, onHold, onRecall }) {
   const current = STEP_OF_STAGE[stage] ?? -1;
   return (
     <div style={styles.bar}>
@@ -53,11 +53,28 @@ export default function StepStrip({ stage, showCancel, onCancel }) {
           );
         })}
       </ol>
-      {showCancel && (
-        <Button variant="danger" size="sm" tabIndex={-1} onMouseDown={keepFocus} onClick={onCancel}>
-          Cancel sale <Kbd>Esc</Kbd>
-        </Button>
-      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
+        {stage !== 'confirm' && (
+          <>
+            <Button variant="secondary" size="sm" tabIndex={-1} onMouseDown={keepFocus} onClick={onRecent}>
+              Today's bills <Kbd>F2</Kbd>
+            </Button>
+            <Button variant="secondary" size="sm" tabIndex={-1} onMouseDown={keepFocus} onClick={onRecall}>
+              Held{heldCount > 0 ? ` (${heldCount})` : ''} <Kbd>F3</Kbd>
+            </Button>
+            {canHold && (
+              <Button variant="secondary" size="sm" tabIndex={-1} onMouseDown={keepFocus} onClick={onHold}>
+                Hold <Kbd>F4</Kbd>
+              </Button>
+            )}
+          </>
+        )}
+        {showCancel && (
+          <Button variant="danger" size="sm" tabIndex={-1} onMouseDown={keepFocus} onClick={onCancel}>
+            Cancel sale <Kbd>Esc</Kbd>
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

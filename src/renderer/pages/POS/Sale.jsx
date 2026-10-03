@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Lock, ShoppingCart } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import glossary from '../../config/glossary';
 import theme from '../../config/theme';
 import { formatCount } from '../../utils/format';
-import { Card, EmptyState } from '../../components/ui';
+import { Card, EmptyState, useToast } from '../../components/ui';
 import StepStrip from './parts/StepStrip';
 import IdlePanel from './parts/IdlePanel';
 import CustomerPanel from './parts/CustomerPanel';
@@ -16,6 +17,8 @@ import CartList from './parts/CartList';
 import SummaryCard from './parts/SummaryCard';
 import KeyHints, { getKeyHints } from './parts/KeyHints';
 import UndoPill from './parts/UndoPill';
+import RecentBillsPanel from './parts/RecentBillsPanel';
+import HeldBillsPanel from './parts/HeldBillsPanel';
 import CancelSaleDialog from './parts/CancelSaleDialog';
 import SaleCompleteSheet from './parts/SaleCompleteSheet';
 import { InlineMessage } from './parts/common';
@@ -35,6 +38,23 @@ function round2(n) {
 function draftKey(stationCode) {
   return `pos_sale_draft_${stationCode || 'MAIN'}`;
 }
+
+// Held bills: any number of parked carts, kept per station in localStorage.
+function heldKey(stationCode) {
+  return `pos_held_bills_${stationCode || 'MAIN'}`;
+}
+
+function readHeld(stationCode) {
+  try {
+    const list = JSON.parse(localStorage.getItem(heldKey(stationCode)) || '[]');
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+// Sold + free units both leave the shelf.
+const lineUnits = (l) => (Number(l.quantity) || 0) + (Number(l.focQuantity) || 0);
 
 // Fired on `window` right after a sale is committed — the top utility bar's
 // Today's Revenue tile listens for this so it updates immediately rather
@@ -111,12 +131,18 @@ export default function Sale() {
   const { user, hasPermission, getPermissionValue } = useAuth();
   const isAdmin = user.role === 'admin';
   const canSell = hasPermission('make_sale');
+  const toast = useToast();
 
   // ---------------- stage machine ----------------
   const [stage, setStage] = useState('idle');
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [draftAvailable, setDraftAvailable] = useState(false);
   const [stationCode, setStationCode] = useState('MAIN');
+  const [showRecent, setShowRecent] = useState(false);
+  const [showRecall, setShowRecall] = useState(false);
+  const [heldBills, setHeldBills] = useState([]);
+  // Set while an existing bill is loaded for editing: { id, invoiceNo, customerId, owedBySale }.
+  const [editingSale, setEditingSale] = useState(null);
 
   // ---------------- sale data ----------------
   const [customer, setCustomer] = useState(null);
@@ -159,11 +185,13 @@ export default function Sale() {
   // ---------------- stage 3: qty ----------------
   const [pendingItem, setPendingItem] = useState(null);
   const [qtyValue, setQtyValue] = useState('1');
+  const [focValue, setFocValue] = useState('');
 
   // ---------------- stage 4: cart-edit ----------------
   const [cartHighlight, setCartHighlight] = useState(0);
   const [editingLineIndex, setEditingLineIndex] = useState(null);
   const [editingQtyValue, setEditingQtyValue] = useState('');
+  const [editingFocValue, setEditingFocValue] = useState('');
   const [recentlyRemoved, setRecentlyRemoved] = useState(null);
 
   // ---------------- errors ----------------
@@ -185,6 +213,10 @@ export default function Sale() {
   const searchInputRef = useRef(null);
   const qtyInputRef = useRef(null);
   const editQtyInputRef = useRef(null);
+  const focInputRef = useRef(null);
+  const editFocInputRef = useRef(null);
+  // Loading a saved bill sets the customer; its stored prices must survive that.
+  const skipRepriceRef = useRef(false);
   const discountInputRef = useRef(null);
   const amountInputRef = useRef(null);
   const removedTimeoutRef = useRef(null);
@@ -199,11 +231,16 @@ export default function Sale() {
 
   useEffect(() => {
     setDraftAvailable(!!localStorage.getItem(draftKey(stationCode)));
+    setHeldBills(readHeld(stationCode));
   }, [stationCode]);
 
   // Re-resolve every line's price whenever the customer changes (net-rate /
   // percentage rules key off the customer, retail vs wholesale too).
   useEffect(() => {
+    if (skipRepriceRef.current) {
+      skipRepriceRef.current = false;
+      return;
+    }
     if (cartLines.length === 0) return;
     (async () => {
       const updated = await Promise.all(
@@ -227,12 +264,12 @@ export default function Sale() {
 
   // Draft autosave — only once there's something worth saving.
   useEffect(() => {
-    if (stage === 'idle' || stage === 'confirm') return;
+    if (stage === 'idle' || stage === 'confirm' || editingSale) return;
     if (cartLines.length === 0 && !customer) return;
     const t = setTimeout(() => {
       const draft = {
         customerId: customer?.id || null,
-        lines: cartLines.map((l) => ({ variantId: l.variantId, unitId: l.unitId, quantity: l.quantity })),
+        lines: cartLines.map((l) => ({ variantId: l.variantId, unitId: l.unitId, quantity: l.quantity, focQuantity: l.focQuantity || 0 })),
         discountMode,
         discountInput,
       };
@@ -244,7 +281,7 @@ export default function Sale() {
       }
     }, 400);
     return () => clearTimeout(t);
-  }, [customer, cartLines, discountMode, discountInput, stage, stationCode]);
+  }, [customer, cartLines, discountMode, discountInput, stage, stationCode, editingSale]);
 
   // Customer search (debounced).
   useEffect(() => {
@@ -333,7 +370,7 @@ export default function Sale() {
 
   const stockIssues = {};
   for (const line of cartLines) {
-    if ((Number(line.quantity) || 0) * line.conversionFactor > line.stockQty) stockIssues[line.key] = true;
+    if (lineUnits(line) * line.conversionFactor > line.stockQty) stockIssues[line.key] = true;
   }
   const hasStockIssue = Object.keys(stockIssues).length > 0;
 
@@ -353,6 +390,12 @@ export default function Sale() {
   const balanceDue = Math.max(0, round2(totalAmount - paidAmount));
   const partialBlockedNoCustomer = balanceDue > 0 && !customer;
 
+  // Live ledger preview: what they owed before this bill, and what they will owe after it.
+  // Until the payment step the bill counts as unpaid, so the figure moves with every cart change.
+  const paidForBalance = stage === 'payment' || amountTendered !== '' ? paidAmount : 0;
+  const previousBalance = customer && customerBalanceBeforeSale !== null ? customerBalanceBeforeSale : null;
+  const newBalance = previousBalance !== null ? round2(previousBalance + totalAmount - paidForBalance) : null;
+
   // Smart default: pre-check "Show Outstanding Balance" once the predicted
   // post-sale balance (what the customer owed before + whatever of this sale
   // stays unpaid) is nonzero — recomputes as the tendered amount changes,
@@ -364,15 +407,17 @@ export default function Sale() {
   }, [stage, customer, balanceDue, customerBalanceBeforeSale, showDuesTouched]);
 
   const qtyNumber = Number(qtyValue) || 0;
+  const focNumber = Math.max(0, Number(focValue) || 0);
   const qtyStockError =
-    pendingItem && qtyNumber > 0 && qtyNumber * pendingItem.conversionFactor > pendingItem.stockQty
+    pendingItem && qtyNumber > 0 && (qtyNumber + focNumber) * pendingItem.conversionFactor > pendingItem.stockQty
       ? `Only ${formatCount(pendingItem.stockQty / pendingItem.conversionFactor)} in stock.`
       : '';
 
   const editingLine = editingLineIndex !== null ? cartLines[editingLineIndex] : null;
   const editingQtyNumber = Number(editingQtyValue) || 0;
+  const editingFocNumber = Math.max(0, Number(editingFocValue) || 0);
   const editingQtyStockError =
-    editingLine && editingQtyNumber > 0 && editingQtyNumber * editingLine.conversionFactor > editingLine.stockQty
+    editingLine && editingQtyNumber > 0 && (editingQtyNumber + editingFocNumber) * editingLine.conversionFactor > editingLine.stockQty
       ? `Only ${formatCount(editingLine.stockQty / editingLine.conversionFactor)} in stock.`
       : '';
 
@@ -399,9 +444,12 @@ export default function Sale() {
     setSearchHighlight(0);
     setPendingItem(null);
     setQtyValue('1');
+    setFocValue('');
     setCartHighlight(0);
     setEditingLineIndex(null);
     setEditingQtyValue('');
+    setEditingFocValue('');
+    setEditingSale(null);
     setRecentlyRemoved(null);
     setDiscountError('');
     setPaymentError('');
@@ -421,6 +469,52 @@ export default function Sale() {
     setStage('customer');
   }
 
+  // Rebuilds the cart from a saved snapshot ({ customerId, lines, discountMode, discountInput }) —
+  // shared by Resume draft and Recall held bill. Lines are re-priced for the customer.
+  async function restoreSnapshot(snap) {
+    clearSaleState();
+
+    let restoredCustomer = null;
+    if (snap.customerId) {
+      restoredCustomer = await window.api.customers.getById({ id: snap.customerId });
+      const letterheads = await window.api.letterheads.list();
+      skipRepriceRef.current = true;
+      setCustomer(restoredCustomer);
+      setLetterheadId(restoredCustomer?.assigned_letterhead_id || resolveDefaultLetterheadId(letterheads) || null);
+      const ledger = await window.api.customers.getLedger({ id: snap.customerId });
+      setCustomerBalanceBeforeSale(ledger.success ? ledger.balance : 0);
+    }
+
+    const lines = [];
+    for (const dl of snap.lines || []) {
+      const detail = await window.api.sales.getVariantForCart({ variantId: dl.variantId });
+      if (!detail) continue;
+      const unit = detail.units.find((u) => u.id === dl.unitId) || detail.units.find((u) => u.id === detail.defaultUnitId);
+      if (!unit) continue;
+      const priceRes = await window.api.sales.resolvePrice({ productUnitId: unit.id, customerId: snap.customerId || null });
+      lines.push({
+        key: `${detail.variant.id}-${unit.id}-${Date.now()}-${Math.random()}`,
+        variantId: detail.variant.id,
+        variantName: detail.variant.variantName,
+        productId: detail.product.id,
+        productName: detail.product.name,
+        baseUnitName: detail.product.baseUnitName,
+        stockQty: detail.variant.stockQty,
+        units: detail.units,
+        unitId: unit.id,
+        conversionFactor: unit.conversionFactor,
+        quantity: dl.quantity,
+        focQuantity: dl.focQuantity || 0,
+        unitPrice: priceRes.price,
+        costPrice: unit.costPrice,
+      });
+    }
+    setCartLines(lines);
+    setDiscountMode(snap.discountMode || 'percentage');
+    setDiscountInput(snap.discountInput || 0);
+    setStage(lines.length > 0 || restoredCustomer ? 'item-search' : 'customer');
+  }
+
   async function resumeDraft() {
     const raw = localStorage.getItem(draftKey(stationCode));
     if (!raw) {
@@ -428,50 +522,131 @@ export default function Sale() {
       return;
     }
     try {
-      const draft = JSON.parse(raw);
-      clearSaleState();
-
-      let resumedCustomer = null;
-      if (draft.customerId) {
-        resumedCustomer = await window.api.customers.getById({ id: draft.customerId });
-        const letterheads = await window.api.letterheads.list();
-        setCustomer(resumedCustomer);
-        setLetterheadId(resumedCustomer?.assigned_letterhead_id || resolveDefaultLetterheadId(letterheads) || null);
-        const ledger = await window.api.customers.getLedger({ id: draft.customerId });
-        setCustomerBalanceBeforeSale(ledger.success ? ledger.balance : 0);
-      }
-
-      const lines = [];
-      for (const dl of draft.lines || []) {
-        const detail = await window.api.sales.getVariantForCart({ variantId: dl.variantId });
-        if (!detail) continue;
-        const unit = detail.units.find((u) => u.id === dl.unitId) || detail.units.find((u) => u.id === detail.defaultUnitId);
-        if (!unit) continue;
-        const priceRes = await window.api.sales.resolvePrice({ productUnitId: unit.id, customerId: draft.customerId || null });
-        lines.push({
-          key: `${detail.variant.id}-${unit.id}-${Date.now()}-${Math.random()}`,
-          variantId: detail.variant.id,
-          variantName: detail.variant.variantName,
-          productId: detail.product.id,
-          productName: detail.product.name,
-          baseUnitName: detail.product.baseUnitName,
-          stockQty: detail.variant.stockQty,
-          units: detail.units,
-          unitId: unit.id,
-          conversionFactor: unit.conversionFactor,
-          quantity: dl.quantity,
-          unitPrice: priceRes.price,
-          costPrice: unit.costPrice,
-        });
-      }
-      setCartLines(lines);
-      setDiscountMode(draft.discountMode || 'percentage');
-      setDiscountInput(draft.discountInput || 0);
-      setStage(lines.length > 0 || resumedCustomer ? 'item-search' : 'customer');
+      await restoreSnapshot(JSON.parse(raw));
     } catch {
       localStorage.removeItem(draftKey(stationCode));
       startSale();
     }
+  }
+
+  // ---------------- held bills ----------------
+
+  function saveHeld(list) {
+    try {
+      localStorage.setItem(heldKey(stationCode), JSON.stringify(list));
+    } catch {
+      // localStorage unavailable — the hold just won't persist.
+    }
+    setHeldBills(list);
+  }
+
+  // Parks the current cart under a temporary name. Returns false when there is nothing to hold.
+  function holdCurrentSale() {
+    if (editingSale || (cartLines.length === 0 && !customer)) return false;
+    const list = readHeld(stationCode);
+    const n = list.reduce((m, h) => Math.max(m, h.number || 0), 0) + 1;
+    saveHeld([
+      ...list,
+      {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        number: n,
+        name: `Hold ${n} · ${customer ? customer.name : glossary.walkIn}`,
+        createdAt: new Date().toISOString(),
+        customerId: customer?.id || null,
+        lines: cartLines.map((l) => ({ variantId: l.variantId, unitId: l.unitId, quantity: l.quantity, focQuantity: l.focQuantity || 0 })),
+        discountMode,
+        discountInput,
+      },
+    ]);
+    return true;
+  }
+
+  function holdAndClear() {
+    if (!holdCurrentSale()) return;
+    clearDraft();
+    clearSaleState();
+    setStage('idle');
+  }
+
+  async function recallHeld(id) {
+    const target = readHeld(stationCode).find((h) => h.id === id);
+    if (!target) return;
+    // Whatever is on screen goes on hold first, so nothing is lost.
+    holdCurrentSale();
+    saveHeld(readHeld(stationCode).filter((h) => h.id !== id));
+    setShowRecall(false);
+    clearDraft();
+    await restoreSnapshot(target);
+  }
+
+  function discardHeld(id) {
+    saveHeld(readHeld(stationCode).filter((h) => h.id !== id));
+  }
+
+  // ---------------- recent bills: edit ----------------
+
+  // Loads a saved bill back into the sale. Nothing changes in the database until the cashier saves.
+  async function editBill(saleId) {
+    const res = await window.api.sales.getForEdit({ saleId, userId: user.id });
+    if (!res.success) {
+      toast.error(res.reason);
+      return;
+    }
+    // Park whatever is on screen first (never lose a half-built sale).
+    holdCurrentSale();
+    setShowRecent(false);
+    clearDraft();
+    clearSaleState();
+
+    const { sale } = res;
+    // The bill's own stock is given back when saving, so it counts as available while editing.
+    const givenBack = {};
+    for (const l of res.lines) {
+      givenBack[l.product_variant_id] = (givenBack[l.product_variant_id] || 0) + (l.quantity + l.foc_quantity) * l.conversion_factor;
+    }
+
+    const lines = [];
+    for (const l of res.lines) {
+      const detail = await window.api.sales.getVariantForCart({ variantId: l.product_variant_id });
+      if (!detail) continue;
+      lines.push({
+        key: `${l.product_variant_id}-${l.product_unit_id}-${l.id}`,
+        variantId: l.product_variant_id,
+        variantName: l.variant_name,
+        productId: l.product_id,
+        productName: l.product_name,
+        baseUnitName: l.base_unit_name,
+        stockQty: detail.variant.stockQty + givenBack[l.product_variant_id],
+        units: detail.units,
+        unitId: l.product_unit_id,
+        conversionFactor: l.conversion_factor,
+        quantity: l.quantity,
+        focQuantity: l.foc_quantity || 0,
+        unitPrice: l.unit_price,
+        costPrice: detail.units.find((u) => u.id === l.product_unit_id)?.costPrice ?? 0,
+      });
+    }
+
+    const owedBySale = sale.total_amount - sale.paid_amount;
+    let balanceBefore = null;
+    if (res.customer) {
+      const ledger = await window.api.customers.getLedger({ id: res.customer.id });
+      // The ledger already includes this bill; take its effect out to get the balance before it.
+      balanceBefore = (ledger.success ? ledger.balance : 0) - owedBySale;
+      const full = await window.api.customers.getById({ id: res.customer.id });
+      skipRepriceRef.current = true;
+      setCustomer(full || res.customer);
+    }
+    const letterheads = await window.api.letterheads.list();
+    setLetterheadId(sale.letterhead_id || resolveDefaultLetterheadId(letterheads) || null);
+    setCustomerBalanceBeforeSale(balanceBefore);
+    setCartLines(lines);
+    setDiscountMode('amount');
+    setDiscountInput(sale.discount_amount || 0);
+    setAmountTendered(String(sale.paid_amount));
+    setPaymentMethod(res.paymentMethod || 'cash');
+    setEditingSale({ id: sale.id, invoiceNo: sale.invoice_no, customerId: sale.customer_id, owedBySale });
+    setStage('item-search');
   }
 
   function discardDraftAndStart() {
@@ -494,7 +669,10 @@ export default function Sale() {
     // Snapshot the customer's balance before this sale — the "Show
     // Outstanding Balance" toggle's smart default (payment stage) needs it.
     const ledger = await window.api.customers.getLedger({ id: c.id });
-    setCustomerBalanceBeforeSale(ledger.success ? ledger.balance : 0);
+    let balance = ledger.success ? ledger.balance : 0;
+    // Editing: if it is the bill's own customer, their balance already includes this bill.
+    if (editingSale && editingSale.customerId === c.id) balance -= editingSale.owedBySale;
+    setCustomerBalanceBeforeSale(balance);
   }
 
   // Walk-in has no assigned_letterhead_id of its own, but the shop's default
@@ -542,6 +720,7 @@ export default function Sale() {
       costPrice: unit.costPrice,
     });
     setQtyValue('1');
+    setFocValue('');
     setSearchQuery('');
     setSearchResults([]);
     setStage('qty');
@@ -572,6 +751,7 @@ export default function Sale() {
             costPrice: unit.costPrice,
           });
           setQtyValue('1');
+          setFocValue('');
           setSearchQuery('');
           setSearchResults([]);
           setStage('qty');
@@ -591,7 +771,11 @@ export default function Sale() {
     setCartLines((lines) => {
       const idx = lines.findIndex((l) => l.variantId === item.variantId && l.unitId === item.unitId);
       if (idx >= 0) {
-        return lines.map((l, i) => (i === idx ? { ...l, quantity: round2((Number(l.quantity) || 0) + item.quantity) } : l));
+        return lines.map((l, i) =>
+          i === idx
+            ? { ...l, quantity: round2((Number(l.quantity) || 0) + item.quantity), focQuantity: round2((Number(l.focQuantity) || 0) + (item.focQuantity || 0)) }
+            : l
+        );
       }
       return [...lines, { key: `${item.variantId}-${item.unitId}-${Date.now()}`, ...item }];
     });
@@ -599,9 +783,10 @@ export default function Sale() {
 
   function confirmQty() {
     if (!pendingItem || qtyNumber <= 0 || qtyStockError) return;
-    addOrMergeCartLine({ ...pendingItem, quantity: qtyNumber });
+    addOrMergeCartLine({ ...pendingItem, quantity: qtyNumber, focQuantity: focNumber });
     setPendingItem(null);
     setQtyValue('1');
+    setFocValue('');
     setSearchQuery('');
     setSearchResults([]);
     setStage('item-search');
@@ -610,6 +795,7 @@ export default function Sale() {
   function cancelPendingItem() {
     setPendingItem(null);
     setQtyValue('1');
+    setFocValue('');
     setSearchQuery('');
     setSearchResults([]);
     setStage('item-search');
@@ -632,18 +818,21 @@ export default function Sale() {
     if (!line) return;
     setEditingLineIndex(cartHighlight);
     setEditingQtyValue(String(line.quantity));
+    setEditingFocValue(line.focQuantity ? String(line.focQuantity) : '');
   }
 
   function confirmEditCartLine() {
     if (editingLineIndex === null || editingQtyNumber <= 0 || editingQtyStockError) return;
-    setCartLines((lines) => lines.map((l, i) => (i === editingLineIndex ? { ...l, quantity: editingQtyNumber } : l)));
+    setCartLines((lines) => lines.map((l, i) => (i === editingLineIndex ? { ...l, quantity: editingQtyNumber, focQuantity: editingFocNumber } : l)));
     setEditingLineIndex(null);
     setEditingQtyValue('');
+    setEditingFocValue('');
   }
 
   function cancelEditCartLine() {
     setEditingLineIndex(null);
     setEditingQtyValue('');
+    setEditingFocValue('');
   }
 
   function removeCartLineAt(index) {
@@ -733,6 +922,7 @@ export default function Sale() {
         productVariantId: l.variantId,
         productUnitId: l.unitId,
         quantity: Number(l.quantity) || 0,
+        focQuantity: Number(l.focQuantity) || 0,
         unitPrice: Number(l.unitPrice) || 0,
         discountAmount: 0,
         lineTotal: round2((Number(l.quantity) || 0) * (Number(l.unitPrice) || 0)),
@@ -742,7 +932,9 @@ export default function Sale() {
       paymentMethod,
     };
 
-    const res = await window.api.sales.create(payload);
+    const res = editingSale
+      ? await window.api.sales.update({ ...payload, saleId: editingSale.id })
+      : await window.api.sales.create(payload);
     setCompleting(false);
 
     if (!res.success) {
@@ -820,6 +1012,18 @@ export default function Sale() {
   // ---------------- central keyboard handler ----------------
 
   function handleKeyDown(e) {
+    // The Today's bills and Held bills panels run their own keys while open.
+    if (showRecent || showRecall) return;
+
+    if (e.key === 'F2' || e.key === 'F3' || e.key === 'F4') {
+      if (showCancelConfirm || stage === 'confirm') return;
+      e.preventDefault();
+      if (e.key === 'F2') setShowRecent(true);
+      else if (e.key === 'F3') setShowRecall(true);
+      else if (stage !== 'idle') holdAndClear();
+      return;
+    }
+
     if (showCancelConfirm) {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -942,7 +1146,12 @@ export default function Sale() {
     }
 
     if (stage === 'qty') {
-      if (e.key === 'Enter') {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const next = document.activeElement === focInputRef.current ? qtyInputRef : focInputRef;
+        next.current?.focus();
+        next.current?.select();
+      } else if (e.key === 'Enter') {
         e.preventDefault();
         confirmQty();
       } else if (e.key === 'Escape') {
@@ -954,7 +1163,12 @@ export default function Sale() {
 
     if (stage === 'cart-edit') {
       if (editingLineIndex !== null) {
-        if (e.key === 'Enter') {
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          const next = document.activeElement === editFocInputRef.current ? editQtyInputRef : editFocInputRef;
+          next.current?.focus();
+          next.current?.select();
+        } else if (e.key === 'Enter') {
           e.preventDefault();
           confirmEditCartLine();
         } else if (e.key === 'Escape') {
@@ -1171,9 +1385,12 @@ export default function Sale() {
         return pendingItem ? (
           <QtyPanel
             inputRef={qtyInputRef}
+            focInputRef={focInputRef}
             item={pendingItem}
             value={qtyValue}
             onChange={setQtyValue}
+            focValue={focValue}
+            onFocChange={setFocValue}
             lineTotal={qtyNumber * (Number(pendingItem.unitPrice) || 0)}
             stockError={qtyStockError}
           />
@@ -1222,7 +1439,16 @@ export default function Sale() {
 
   return (
     <div style={styles.container}>
-      <StepStrip stage={stage} showCancel={inSale} onCancel={requestCancelSale} />
+      <StepStrip
+        stage={stage}
+        showCancel={inSale}
+        onCancel={requestCancelSale}
+        heldCount={heldBills.length}
+        canHold={inSale && !editingSale}
+        onRecent={() => setShowRecent(true)}
+        onRecall={() => setShowRecall(true)}
+        onHold={holdAndClear}
+      />
 
       <div style={styles.middle}>
         {inSale ? (
@@ -1240,6 +1466,9 @@ export default function Sale() {
                 editingValue={editingQtyValue}
                 onEditingChange={setEditingQtyValue}
                 editInputRef={editQtyInputRef}
+                editingFocValue={editingFocValue}
+                onEditingFocChange={setEditingFocValue}
+                editFocInputRef={editFocInputRef}
                 editingError={editingQtyStockError}
                 isAdmin={isAdmin}
                 canRemove={stage === 'item-search' || stage === 'cart-edit'}
@@ -1260,6 +1489,9 @@ export default function Sale() {
               amountReceived={tenderedNumber}
               changeDue={changeDue}
               balanceDue={balanceDue}
+              previousBalance={previousBalance}
+              newBalance={newBalance}
+              editingInvoiceNo={editingSale?.invoiceNo}
             />
           </>
         ) : (
@@ -1286,6 +1518,19 @@ export default function Sale() {
         />
       )}
       <KeyHints hints={hints} />
+
+      {showRecent && (
+        <RecentBillsPanel
+          userId={user.id}
+          onClose={() => setShowRecent(false)}
+          onEdit={editBill}
+          onVoided={(invoiceNo) => {
+            toast.success(`Bill ${invoiceNo} voided`);
+            window.dispatchEvent(new CustomEvent(SALE_COMPLETED_EVENT));
+          }}
+        />
+      )}
+      {showRecall && <HeldBillsPanel held={heldBills} onRecall={recallHeld} onDiscard={discardHeld} onClose={() => setShowRecall(false)} />}
 
       {showCancelConfirm && <CancelSaleDialog onKeep={dismissCancelConfirm} onConfirm={confirmCancelSale} />}
 

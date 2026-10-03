@@ -4,7 +4,7 @@ import { formatCount, formatCurrency } from '../../../utils/format';
 import { TextInput } from '../../../components/ui';
 import { InlineMessage, Money, NUMERIC_INPUT, PanelTitle, c, packSizeName, typeName } from './common';
 
-export default function QtyPanel({ inputRef, item, value, onChange, lineTotal, stockError }) {
+export default function QtyPanel({ inputRef, focInputRef, item, value, onChange, focValue, onFocChange, lineTotal, stockError }) {
   const pack = packSizeName(item);
   const inStock = item.stockQty / item.conversionFactor;
   const summary = [item.productName, typeName(item.variantName), pack].filter(Boolean).join(' · ');
@@ -29,7 +29,19 @@ export default function QtyPanel({ inputRef, item, value, onChange, lineTotal, s
             style={{ ...NUMERIC_INPUT, width: '160px', display: 'block', marginTop: '4px' }}
           />
         </label>
-        <div style={{ textAlign: 'right' }} aria-live="polite">
+        <label style={{ ...theme.type.subhead, color: c.labelSecondary }}>
+          Free (FOC) <span style={{ ...theme.type.caption, color: c.labelTertiary }}>Tab</span>
+          <TextInput
+            ref={focInputRef}
+            type="number"
+            min="0"
+            value={focValue}
+            onChange={(e) => onFocChange(e.target.value)}
+            aria-label="Free of cost quantity"
+            style={{ ...NUMERIC_INPUT, width: '120px', display: 'block', marginTop: '4px' }}
+          />
+        </label>
+        <div style={{ textAlign: 'right', marginLeft: 'auto' }} aria-live="polite">
           <div style={{ ...theme.type.subhead, color: c.labelSecondary }}>Line total</div>
           <Money value={formatCurrency(lineTotal)} style={{ ...theme.type.title1, color: c.label }} />
         </div>
