@@ -3,7 +3,7 @@ import theme from '../config/theme';
 import appIcons from '../config/appIcons';
 import glossary from '../config/glossary';
 import { APP_NAME } from '../config/appInfo';
-import { NAV_GROUPS, getSectionForRoute, sectionEntryRoute, visibleSections } from '../config/navConfig';
+import { getSectionForRoute, sectionEntryRoute, visibleSections } from '../config/navConfig';
 import { useAuth } from '../context/AuthContext';
 import { Button, IconTile } from '../components/ui';
 import useInteraction from '../components/kit/useInteraction';
@@ -20,9 +20,6 @@ export default function Sidebar({ activeRoute, onNavigate, user, onLogout }) {
   const activeKey = getSectionForRoute(activeRoute)?.section.key;
   const canSell = hasPermission('make_sale');
 
-  const ungrouped = sections.filter((s) => !s.group);
-  const groups = NAV_GROUPS.map((name) => [name, sections.filter((s) => s.group === name)]).filter(([, list]) => list.length);
-
   function item(s) {
     return (
       <NavItem
@@ -38,21 +35,21 @@ export default function Sidebar({ activeRoute, onNavigate, user, onLogout }) {
     <aside style={styles.container}>
       <div style={styles.top}>
         <Brand name={APP_NAME} />
-        {canSell && (
-          <Button icon={appIcons.sell.icon} fullWidth onClick={() => onNavigate('/pos')} style={{ marginTop: theme.spacing.md }}>
-            {glossary.newSale}
-          </Button>
-        )}
       </div>
 
       <nav aria-label="Main" style={styles.nav}>
-        {ungrouped.map(item)}
-        {groups.map(([name, list]) => (
-          <div key={name}>
-            <div style={styles.groupHeader}>{name}</div>
-            {list.map(item)}
-          </div>
-        ))}
+        {canSell && (
+          <Button
+            icon={appIcons.sell.icon}
+            size="lg"
+            fullWidth
+            onClick={() => onNavigate('/pos')}
+            style={{ marginBottom: theme.spacing.md, boxShadow: theme.shadow.card }}
+          >
+            {glossary.newSale}
+          </Button>
+        )}
+        {sections.map(item)}
       </nav>
 
       <div style={styles.footer}>
@@ -98,13 +95,6 @@ const styles = {
   },
   top: { padding: '18px 14px 12px' },
   nav: { flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '4px 10px 12px' },
-  groupHeader: {
-    ...theme.type.footnote,
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-    color: c.labelSecondary,
-    padding: '16px 8px 6px',
-  },
   item: {
     width: '100%',
     height: '36px',

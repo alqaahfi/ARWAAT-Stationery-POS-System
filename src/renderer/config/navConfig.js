@@ -13,6 +13,8 @@
 // permission (admin implicitly has every permission).
 //
 // New Sale (/pos) isn't a section — it's the button at the top of the sidebar.
+// Receive Payment (/payments/record) isn't a sidebar item — it's a page of Customers,
+// opened from a customer's profile.
 
 import glossary from './glossary';
 
@@ -26,19 +28,47 @@ function section(def) {
 
 const navConfig = [
   section({ key: 'dashboard', label: g.home, icon: 'home', group: null, route: '/dashboard' }),
-
+  section({
+    key: 'customers',
+    label: g.customers,
+    icon: 'customers',
+    group: null,
+    route: '/customers',
+    adminOnly: true,
+    tabs: [
+      { key: 'customers-all', label: g.allCustomers, route: '/customers' },
+      { key: 'customers-percentage-rules', label: g.specialMargins, route: '/customers/percentage-rules' },
+    ],
+    pages: [
+      { key: 'customers-receive-payment', label: g.receivePayment, route: '/payments/record', needsParams: true },
+      { key: 'customers-new', label: g.addCustomer, route: '/customers/new' },
+      { key: 'customers-edit', label: g.customer, route: '/customers/edit', needsParams: true },
+    ],
+  }),
+  section({
+    key: 'suppliers',
+    label: g.suppliers,
+    icon: 'suppliers',
+    group: null,
+    route: '/suppliers',
+    adminOnly: true,
+    tabs: [{ key: 'suppliers-all', label: g.suppliers, route: '/suppliers' }],
+    pages: [
+      { key: 'suppliers-new', label: g.addSupplier, route: '/suppliers/new' },
+      { key: 'suppliers-edit', label: g.supplier, route: '/suppliers/edit', needsParams: true },
+    ],
+  }),
   section({
     key: 'products',
     label: g.products,
     icon: 'products',
-    group: g.navShop,
+    group: null,
     route: '/products',
     tabs: [
       { key: 'products-all', label: g.allProducts, route: '/products', permissionKey: 'view_products' },
       { key: 'products-low-stock', label: g.runningLow, route: '/products/low-stock', permissionKey: 'view_products' },
       { key: 'products-dead-stock', label: g.notSelling, route: '/products/dead-stock' },
       { key: 'products-categories', label: g.categories, route: '/products/categories' },
-      { key: 'products-purchases', label: g.purchases, route: '/products/purchases' },
       { key: 'products-adjustments', label: g.fixStockCount, route: '/products/stock-adjustments' },
       { key: 'products-movements', label: g.stockHistory, route: '/products/stock-movements' },
     ],
@@ -49,60 +79,30 @@ const navConfig = [
     ],
   }),
   section({
-    key: 'customers',
-    label: g.customers,
-    icon: 'customers',
-    group: g.navShop,
-    route: '/customers',
-    adminOnly: true,
-    tabs: [
-      { key: 'customers-all', label: g.allCustomers, route: '/customers' },
-      { key: 'customers-percentage-rules', label: g.specialMargins, route: '/customers/percentage-rules' },
-    ],
-    pages: [
-      { key: 'customers-new', label: g.addCustomer, route: '/customers/new' },
-      { key: 'customers-edit', label: g.customer, route: '/customers/edit', needsParams: true },
-    ],
-  }),
-  section({
-    key: 'suppliers',
-    label: g.suppliers,
-    icon: 'suppliers',
-    group: g.navShop,
-    route: '/suppliers',
-    adminOnly: true,
-    tabs: [{ key: 'suppliers-all', label: g.suppliers, route: '/suppliers' }],
-    pages: [
-      { key: 'suppliers-new', label: g.addSupplier, route: '/suppliers/new' },
-      { key: 'suppliers-edit', label: g.supplier, route: '/suppliers/edit', needsParams: true },
-    ],
-  }),
-  section({
     key: 'sales',
-    label: g.sales,
+    label: g.sale,
     icon: 'sales',
-    group: g.navShop,
+    group: null,
     route: '/sales',
     tabs: [
       { key: 'sales-history', label: g.sales, route: '/sales', permissionKey: 'view_sales_history' },
       { key: 'sales-returns', label: g.returns, route: '/sales/returns' },
     ],
   }),
-
   section({
-    key: 'record-payment',
-    label: g.receivePayment,
-    icon: 'receivePayment',
-    group: g.navMoney,
-    route: '/payments/record',
-    permissionKey: 'record_payment',
-    tabs: [{ key: 'record-payment', label: g.receivePayment, route: '/payments/record', permissionKey: 'record_payment' }],
+    key: 'purchase',
+    label: g.purchase,
+    icon: 'purchases',
+    group: null,
+    route: '/products/purchases',
+    adminOnly: true,
+    tabs: [{ key: 'purchase-new', label: g.purchases, route: '/products/purchases' }],
   }),
   section({
     key: 'ledgers',
-    label: g.accounts,
+    label: g.ledgers,
     icon: 'accounts',
-    group: g.navMoney,
+    group: null,
     route: '/ledgers',
     adminOnly: true,
     tabs: [
@@ -119,7 +119,7 @@ const navConfig = [
     key: 'expenses',
     label: g.expenses,
     icon: 'expenses',
-    group: g.navMoney,
+    group: null,
     route: '/expenses',
     permissionKey: 'manage_expenses',
     tabs: [{ key: 'expenses-all', label: g.expenses, route: '/expenses', permissionKey: 'manage_expenses' }],
@@ -132,7 +132,7 @@ const navConfig = [
     key: 'reports',
     label: g.reports,
     icon: 'reports',
-    group: g.navMoney,
+    group: null,
     route: '/reports',
     permissionKey: 'view_reports',
     tabs: [
@@ -146,12 +146,11 @@ const navConfig = [
       { key: 'reports-expenses', label: g.expenses, route: '/reports/expenses' },
     ],
   }),
-
   section({
     key: 'cashiers',
     label: g.cashiers,
     icon: 'cashiers',
-    group: g.navManage,
+    group: null,
     route: '/cashiers',
     adminOnly: true,
     tabs: [
@@ -168,7 +167,7 @@ const navConfig = [
     key: 'settings',
     label: g.settings,
     icon: 'settings',
-    group: g.navManage,
+    group: null,
     route: '/settings/preferences',
     adminOnly: true,
     tabs: [
@@ -185,8 +184,8 @@ const navConfig = [
 
 export default navConfig;
 
-// Sidebar group order (sections with group: null render above the first header).
-export const NAV_GROUPS = [g.navShop, g.navMoney, g.navManage];
+// Sidebar group headers. Empty: the sidebar is one flat list in the order of navConfig.
+export const NAV_GROUPS = [];
 
 // Flat lookup: route -> display title. A section's own tabs map to the
 // section name; forms/detail pages map to their own label.

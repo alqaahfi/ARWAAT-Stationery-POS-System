@@ -199,7 +199,7 @@ export default function AdminDashboard() {
         return <Returns key={`${nav.params.saleId || ''}-${nav.params.returnId || ''}`} params={nav.params} onNavigate={navigate} />;
 
       case '/payments/record':
-        return <RecordPayment params={nav.params} />;
+        return <RecordPayment params={nav.params} onNavigate={navigate} />;
 
       case '/expenses':
         return <ExpenseList onNavigate={navigate} />;

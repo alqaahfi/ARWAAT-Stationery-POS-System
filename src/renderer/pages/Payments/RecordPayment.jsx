@@ -12,7 +12,8 @@ import { Intro, NoAccess, PaymentSuccess, SelectedCustomerCard, column } from '.
 // take a payment: name, type, phone, current balance, all from the
 // restricted customers:search-minimal handler so cashiers never see more.
 // params { id, name } (from a customer profile) starts at the payment step.
-export default function RecordPayment({ params }) {
+// When onNavigate is given (Admin), a saved payment returns to that customer's profile.
+export default function RecordPayment({ params, onNavigate }) {
   const { user, hasPermission } = useAuth();
   const canRecord = hasPermission('record_payment');
   const toast = useToast();
@@ -100,6 +101,12 @@ export default function RecordPayment({ params }) {
         const reason = res.reason || 'Could not record payment.';
         setError(reason);
         toast.error(reason);
+        return;
+      }
+
+      if (onNavigate && params?.id) {
+        toast.success('Payment recorded.');
+        onNavigate('/customers/edit', { id: params.id, name: params.name });
         return;
       }
 

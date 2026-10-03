@@ -6,7 +6,6 @@ import { NavRow } from './Panel';
 
 const ACTIONS = [
   { label: glossary.newSale, route: '/pos', ...appIcons.sell },
-  { label: glossary.receivePayment, route: '/payments/record', ...appIcons.receivePayment },
   { label: glossary.addProduct, route: '/products/new', ...appIcons.products },
   { label: glossary.addCustomer, route: '/customers/new', ...appIcons.customers },
 ];
