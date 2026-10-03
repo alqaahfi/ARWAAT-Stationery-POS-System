@@ -49,7 +49,7 @@ export function customerColumns({ onToggleActive }) {
     {
       key: 'name',
       label: glossary.customer,
-      render: (r) => <PartyNameCell name={r.name} sub={r.phone} inactive={!r.is_active} />,
+      render: (r) => <PartyNameCell name={r.name} sub={[r.phone, r.mobile].filter(Boolean).join(' · ') || undefined} inactive={!r.is_active} />,
     },
     { key: 'type', label: 'Type', width: '120px', render: (r) => <TypeBadge type={r.customer_type} /> },
     {

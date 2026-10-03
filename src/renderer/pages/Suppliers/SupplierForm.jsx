@@ -5,8 +5,22 @@ import { Button, Card, EmptyState, useToast } from '../../components/ui';
 import { StickyActions } from '../Products/form/StickyActions';
 import { RecentActivityCard } from '../Parties/RecentActivityCard';
 import { StartingBalanceField } from '../Parties/StartingBalanceField';
-import { FormSkeleton, RestrictedNotice, pageColumn, pageWrap } from '../Parties/PartyParts';
-import { SupplierBasicsCard, SupplierHeader, SupplierMoreOptions } from './parts/SupplierFormParts';
+import { FormSkeleton, RestrictedNotice, fixedCol, fixedFill, fixedGrid, fixedPage } from '../Parties/PartyParts';
+import {
+  SupplierAddressCard,
+  SupplierBasicsCard,
+  SupplierContactCard,
+  SupplierHeader,
+  SupplierHistoryCard,
+  SupplierMoreOptions,
+  SupplierNotesCard,
+} from './parts/SupplierFormParts';
+
+function todayLocal() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 export default function SupplierForm({ supplierId, onDone, onCancel, onNavigate }) {
   const { user } = useAuth();
@@ -16,6 +30,9 @@ export default function SupplierForm({ supplierId, onDone, onCancel, onNavigate 
   const [name, setName] = useState('');
   const [contactPerson, setContactPerson] = useState('');
   const [phone, setPhone] = useState('');
+  const [mobile, setMobile] = useState('');
+  const [email, setEmail] = useState('');
+  const [joiningDate, setJoiningDate] = useState(isEdit ? '' : todayLocal());
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
   const [openingBalance, setOpeningBalance] = useState(0);
@@ -53,11 +70,21 @@ export default function SupplierForm({ supplierId, onDone, onCancel, onNavigate 
         setName(s.name);
         setContactPerson(s.contact_person || '');
         setPhone(s.phone || '');
+        setMobile(s.mobile || '');
+        setEmail(s.email || '');
+        setJoiningDate(s.joining_date || '');
         setAddress(s.address || '');
         setNotes(s.notes || '');
         setOpeningBalance(s.opening_balance);
         setIsActive(!!s.is_active);
-        setSaved({ name: s.name, contactPerson: s.contact_person, phone: s.phone, address: s.address, isActive: !!s.is_active });
+        setSaved({
+          name: s.name,
+          contactPerson: s.contact_person,
+          phone: s.phone,
+          mobile: s.mobile,
+          address: s.address,
+          isActive: !!s.is_active,
+        });
         setLoaded(true);
         loadLedger();
       })
@@ -92,6 +119,9 @@ export default function SupplierForm({ supplierId, onDone, onCancel, onNavigate 
         name: name.trim(),
         contactPerson: contactPerson.trim() || null,
         phone: phone.trim() || null,
+        mobile: mobile.trim() || null,
+        email: email.trim() || null,
+        joiningDate: joiningDate || null,
         address: address.trim() || null,
         notes: notes.trim() || null,
       };
@@ -146,40 +176,46 @@ export default function SupplierForm({ supplierId, onDone, onCancel, onNavigate 
   const newPurchase = onNavigate ? () => onNavigate('/products/purchases') : undefined;
 
   return (
-    <div style={pageWrap}>
-      <div style={pageColumn}>
-        {isEdit && saved && (
-          <>
-            <SupplierHeader supplier={saved} balance={ledger.data?.balance} onPay={openAccount} onNewPurchase={newPurchase} />
-            <RecentActivityCard
-              rows={ledger.data?.transactions}
-              loading={ledger.loading}
-              error={ledger.error}
-              onRetry={loadLedger}
-              onSeeAll={openAccount}
-            />
-          </>
-        )}
+    <div style={fixedPage}>
+      {isEdit && saved && <SupplierHeader supplier={saved} balance={ledger.data?.balance} onPay={openAccount} onNewPurchase={newPurchase} />}
 
-        <SupplierBasicsCard
-          name={name}
-          onName={(v) => {
-            setName(v);
-            if (v.trim()) setNameError('');
-          }}
-          nameError={nameError}
-          autoFocus={!isEdit}
-          contactPerson={contactPerson}
-          onContactPerson={setContactPerson}
-          phone={phone}
-          onPhone={setPhone}
-          address={address}
-          onAddress={setAddress}
-        />
+      <div style={fixedGrid}>
+        <div style={fixedCol}>
+          <SupplierBasicsCard
+            name={name}
+            onName={(v) => {
+              setName(v);
+              if (v.trim()) setNameError('');
+            }}
+            nameError={nameError}
+            autoFocus={!isEdit}
+            contactPerson={contactPerson}
+            onContactPerson={setContactPerson}
+          />
+          <SupplierContactCard phone={phone} onPhone={setPhone} mobile={mobile} onMobile={setMobile} email={email} onEmail={setEmail} />
+        </div>
 
-        <StartingBalanceField party="supplier" isEdit={isEdit} value={openingBalance} onChange={setOpeningBalance} id="supplier-opening-balance" />
+        <div style={fixedCol}>
+          <SupplierAddressCard address={address} onAddress={setAddress} />
+          <SupplierHistoryCard joiningDate={joiningDate} onJoiningDate={setJoiningDate} />
+          <StartingBalanceField party="supplier" isEdit={isEdit} value={openingBalance} onChange={setOpeningBalance} id="supplier-opening-balance" />
+        </div>
 
-        <SupplierMoreOptions isEdit={isEdit} notes={notes} onNotes={setNotes} isActive={isActive} onIsActive={setIsActive} />
+        <div style={{ ...fixedCol, height: '100%' }}>
+          <SupplierNotesCard notes={notes} onNotes={setNotes} />
+          <SupplierMoreOptions isEdit={isEdit} isActive={isActive} onIsActive={setIsActive} />
+          {isEdit && saved && (
+            <div style={fixedFill}>
+              <RecentActivityCard
+                rows={ledger.data?.transactions}
+                loading={ledger.loading}
+                error={ledger.error}
+                onRetry={loadLedger}
+                onSeeAll={openAccount}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       <StickyActions onCancel={onCancel} onSave={handleSave} saving={saving} saveLabel={isEdit ? 'Save changes' : 'Save supplier'} />

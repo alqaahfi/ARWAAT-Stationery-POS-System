@@ -10,16 +10,16 @@ const { getAdjustmentRows } = require('../ledger/adjustmentRows');
 function list({ search } = {}) {
   const db = getDb();
   let sql = `
-    SELECT id, name, contact_person, phone, address, notes, opening_balance, is_active, created_at
+    SELECT id, name, contact_person, phone, mobile, address, notes, opening_balance, is_active, created_at
     FROM suppliers
     WHERE 1 = 1
   `;
   const params = [];
 
   if (search && search.trim()) {
-    sql += ' AND (name LIKE ? OR phone LIKE ?)';
+    sql += ' AND (name LIKE ? OR phone LIKE ? OR mobile LIKE ?)';
     const like = `%${search.trim()}%`;
-    params.push(like, like);
+    params.push(like, like, like);
   }
   sql += ' ORDER BY name';
 
@@ -33,24 +33,40 @@ function getById(id) {
   const db = getDb();
   return db
     .prepare(
-      `SELECT id, name, contact_person, phone, address, notes, opening_balance, is_active
+      `SELECT id, name, contact_person, phone, mobile, email, joining_date, address, notes, opening_balance, is_active
        FROM suppliers WHERE id = ?`
     )
     .get(id);
 }
 
+function todayLocal() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 function create(payload) {
   const db = getDb();
-  const { name, contactPerson, phone, address, notes, openingBalance } = payload;
+  const { name, contactPerson, phone, mobile, email, joiningDate, address, notes, openingBalance } = payload;
 
   if (!name || !name.trim()) return { success: false, reason: 'Supplier name is required.' };
 
   const result = db
     .prepare(
-      `INSERT INTO suppliers (name, contact_person, phone, address, notes, opening_balance)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO suppliers (name, contact_person, phone, mobile, email, joining_date, address, notes, opening_balance)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(name.trim(), contactPerson || null, phone || null, address || null, notes || null, Number(openingBalance) || 0);
+    .run(
+      name.trim(),
+      contactPerson || null,
+      phone || null,
+      mobile || null,
+      email || null,
+      joiningDate || todayLocal(),
+      address || null,
+      notes || null,
+      Number(openingBalance) || 0
+    );
 
   return { success: true, id: result.lastInsertRowid };
 }
@@ -59,14 +75,24 @@ function create(payload) {
 // Customer Form (adjust via a payment/purchase instead).
 function update(payload) {
   const db = getDb();
-  const { id, name, contactPerson, phone, address, notes } = payload;
+  const { id, name, contactPerson, phone, mobile, email, joiningDate, address, notes } = payload;
 
   if (!id) return { success: false, reason: 'Missing supplier id.' };
   if (!name || !name.trim()) return { success: false, reason: 'Supplier name is required.' };
 
   db.prepare(
-    `UPDATE suppliers SET name = ?, contact_person = ?, phone = ?, address = ?, notes = ? WHERE id = ?`
-  ).run(name.trim(), contactPerson || null, phone || null, address || null, notes || null, id);
+    `UPDATE suppliers SET name = ?, contact_person = ?, phone = ?, mobile = ?, email = ?, joining_date = ?, address = ?, notes = ? WHERE id = ?`
+  ).run(
+    name.trim(),
+    contactPerson || null,
+    phone || null,
+    mobile || null,
+    email || null,
+    joiningDate || null,
+    address || null,
+    notes || null,
+    id
+  );
 
   return { success: true };
 }
@@ -85,10 +111,10 @@ function searchMinimal({ search }) {
   const rows = db
     .prepare(
       `SELECT id, name, phone FROM suppliers
-       WHERE is_active = 1 AND (name LIKE ? OR phone LIKE ?)
+       WHERE is_active = 1 AND (name LIKE ? OR phone LIKE ? OR mobile LIKE ?)
        ORDER BY name LIMIT 20`
     )
-    .all(like, like);
+    .all(like, like, like);
 
   return rows.map((r) => ({ ...r, balance_owed: getSupplierBalance(db, r.id) }));
 }
@@ -143,6 +169,9 @@ function getLedger(supplierId) {
       name: supplier.name,
       contact_person: supplier.contact_person,
       phone: supplier.phone,
+      mobile: supplier.mobile,
+      email: supplier.email,
+      joining_date: supplier.joining_date,
       address: supplier.address,
       opening_balance: supplier.opening_balance,
       created_at: supplier.created_at,

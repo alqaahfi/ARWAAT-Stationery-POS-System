@@ -5,8 +5,23 @@ import { Button, Card, EmptyState, useToast } from '../../components/ui';
 import { StickyActions } from '../Products/form/StickyActions';
 import { RecentActivityCard } from '../Parties/RecentActivityCard';
 import { StartingBalanceField } from '../Parties/StartingBalanceField';
-import { FormSkeleton, RestrictedNotice, pageColumn, pageWrap } from '../Parties/PartyParts';
-import { BasicsCard, CustomerHeader, CustomerMoreOptions, PricingCard } from './parts/CustomerFormParts';
+import { FormSkeleton, RestrictedNotice, fixedCol, fixedFill, fixedGrid, fixedPage } from '../Parties/PartyParts';
+import {
+  AddressCard,
+  BasicsCard,
+  ContactCard,
+  CreditCard,
+  CustomerHeader,
+  CustomerMoreOptions,
+  NotesCard,
+  PricingCard,
+} from './parts/CustomerFormParts';
+
+function todayLocal() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 export default function CustomerForm({ customerId, onDone, onCancel, onNavigate }) {
   const { user } = useAuth();
@@ -19,7 +34,12 @@ export default function CustomerForm({ customerId, onDone, onCancel, onNavigate 
   const [tier, setTier] = useState('');
   const [assignedLetterheadId, setAssignedLetterheadId] = useState('');
   const [phone, setPhone] = useState('');
+  const [mobile, setMobile] = useState('');
+  const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
+  const [creditLimit, setCreditLimit] = useState(0);
+  const [joiningDate, setJoiningDate] = useState(isEdit ? '' : todayLocal());
+  const [notes, setNotes] = useState('');
   const [openingBalance, setOpeningBalance] = useState(0);
   const [isActive, setIsActive] = useState(true);
   const [nameError, setNameError] = useState('');
@@ -67,10 +87,23 @@ export default function CustomerForm({ customerId, onDone, onCancel, onNavigate 
         setTier(c.tier || '');
         setAssignedLetterheadId(c.assigned_letterhead_id || '');
         setPhone(c.phone || '');
+        setMobile(c.mobile || '');
+        setEmail(c.email || '');
         setAddress(c.address || '');
+        setCreditLimit(c.credit_limit || 0);
+        setJoiningDate(c.joining_date || '');
+        setNotes(c.notes || '');
         setOpeningBalance(c.opening_balance);
         setIsActive(!!c.is_active);
-        setSaved({ name: c.name, customerType: c.customer_type, tier: c.tier, phone: c.phone, address: c.address, isActive: !!c.is_active });
+        setSaved({
+          name: c.name,
+          customerType: c.customer_type,
+          tier: c.tier,
+          phone: c.phone,
+          mobile: c.mobile,
+          address: c.address,
+          isActive: !!c.is_active,
+        });
         setLoaded(true);
         loadLedger();
       })
@@ -107,7 +140,12 @@ export default function CustomerForm({ customerId, onDone, onCancel, onNavigate 
         tier: tier || null,
         assignedLetterheadId: assignedLetterheadId ? Number(assignedLetterheadId) : null,
         phone: phone.trim() || null,
+        mobile: mobile.trim() || null,
+        email: email.trim() || null,
         address: address.trim() || null,
+        creditLimit: Math.max(0, Number(creditLimit) || 0),
+        joiningDate: joiningDate || null,
+        notes: notes.trim() || null,
       };
 
       const res = isEdit
@@ -161,49 +199,56 @@ export default function CustomerForm({ customerId, onDone, onCancel, onNavigate 
   const receivePayment = onNavigate ? () => onNavigate('/payments/record', { id: customerId, name: saved?.name }) : undefined;
 
   return (
-    <div style={pageWrap}>
-      <div style={pageColumn}>
-        {isEdit && saved && (
-          <>
-            <CustomerHeader customer={saved} balance={ledger.data?.balance} onOpenAccount={openAccount} onReceivePayment={receivePayment} />
-            <RecentActivityCard
-              rows={ledger.data?.transactions}
-              loading={ledger.loading}
-              error={ledger.error}
-              onRetry={loadLedger}
-              onSeeAll={openAccount}
-            />
-          </>
-        )}
+    <div style={fixedPage}>
+      {isEdit && saved && (
+        <CustomerHeader customer={saved} balance={ledger.data?.balance} onOpenAccount={openAccount} onReceivePayment={receivePayment} />
+      )}
 
-        <BasicsCard
-          name={name}
-          onName={(v) => {
-            setName(v);
-            if (v.trim()) setNameError('');
-          }}
-          nameError={nameError}
-          autoFocus={!isEdit}
-          customerType={customerType}
-          onCustomerType={setCustomerType}
-          phone={phone}
-          onPhone={setPhone}
-          address={address}
-          onAddress={setAddress}
-        />
+      <div style={fixedGrid}>
+        <div style={fixedCol}>
+          <BasicsCard
+            name={name}
+            onName={(v) => {
+              setName(v);
+              if (v.trim()) setNameError('');
+            }}
+            nameError={nameError}
+            autoFocus={!isEdit}
+            customerType={customerType}
+            onCustomerType={setCustomerType}
+          />
+          <ContactCard phone={phone} onPhone={setPhone} mobile={mobile} onMobile={setMobile} email={email} onEmail={setEmail} />
+          <AddressCard address={address} onAddress={setAddress} />
+        </div>
 
-        <PricingCard
-          tier={tier}
-          onTier={setTier}
-          customerType={customerType}
-          letterheads={letterheads}
-          letterheadId={assignedLetterheadId}
-          onLetterheadId={setAssignedLetterheadId}
-        />
+        <div style={fixedCol}>
+          <PricingCard
+            tier={tier}
+            onTier={setTier}
+            customerType={customerType}
+            letterheads={letterheads}
+            letterheadId={assignedLetterheadId}
+            onLetterheadId={setAssignedLetterheadId}
+          />
+          <CreditCard creditLimit={creditLimit} onCreditLimit={setCreditLimit} joiningDate={joiningDate} onJoiningDate={setJoiningDate} />
+          <StartingBalanceField party="customer" isEdit={isEdit} value={openingBalance} onChange={setOpeningBalance} id="customer-opening-balance" />
+        </div>
 
-        <StartingBalanceField party="customer" isEdit={isEdit} value={openingBalance} onChange={setOpeningBalance} id="customer-opening-balance" />
-
-        {isEdit && <CustomerMoreOptions isActive={isActive} onIsActive={setIsActive} />}
+        <div style={{ ...fixedCol, height: '100%' }}>
+          <NotesCard notes={notes} onNotes={setNotes} />
+          {isEdit && <CustomerMoreOptions isActive={isActive} onIsActive={setIsActive} />}
+          {isEdit && saved && (
+            <div style={fixedFill}>
+              <RecentActivityCard
+                rows={ledger.data?.transactions}
+                loading={ledger.loading}
+                error={ledger.error}
+                onRetry={loadLedger}
+                onSeeAll={openAccount}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       <StickyActions onCancel={onCancel} onSave={handleSave} saving={saving} saveLabel={isEdit ? 'Save changes' : 'Save customer'} />

@@ -57,10 +57,12 @@ const SYNC_TABLES = {
   },
   customers: {
     kind: 'upsert',
+    // mobile, email, credit_limit, joining_date, notes sync like any other column.
     fks: { assigned_letterhead_id: { table: 'letterheads', nullable: true } },
   },
   suppliers: {
     kind: 'upsert',
+    // mobile, email, joining_date sync like any other column.
     fks: {},
   },
   users: {

@@ -19,16 +19,16 @@ function list({ search, tier, customerType } = {}) {
   const db = getDb();
   let sql = `
     SELECT c.id, c.name, c.customer_type, c.tier,
-           c.assigned_letterhead_id, c.phone, c.address, c.opening_balance, c.is_active
+           c.assigned_letterhead_id, c.phone, c.mobile, c.address, c.opening_balance, c.is_active
     FROM customers c
     WHERE 1 = 1
   `;
   const params = [];
 
   if (search && search.trim()) {
-    sql += ' AND (c.name LIKE ? OR c.phone LIKE ?)';
+    sql += ' AND (c.name LIKE ? OR c.phone LIKE ? OR c.mobile LIKE ?)';
     const like = `%${search.trim()}%`;
-    params.push(like, like);
+    params.push(like, like, like);
   }
   if (tier === 'NONE') {
     sql += ' AND c.tier IS NULL';
@@ -52,15 +52,28 @@ function getById(id) {
   const db = getDb();
   return db
     .prepare(
-      `SELECT id, name, customer_type, tier, assigned_letterhead_id, phone, address, opening_balance, is_active
+      `SELECT id, name, customer_type, tier, assigned_letterhead_id, phone, mobile, email, address,
+              opening_balance, credit_limit, joining_date, notes, is_active
        FROM customers WHERE id = ?`
     )
     .get(id);
 }
 
+function todayLocal() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function toCreditLimit(v) {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 function create(payload) {
   const db = getDb();
-  const { name, customerType, tier, assignedLetterheadId, phone, address, openingBalance } = payload;
+  const { name, customerType, tier, assignedLetterheadId, phone, mobile, email, address, openingBalance, creditLimit, joiningDate, notes } =
+    payload;
 
   if (!name || !name.trim()) return { success: false, reason: 'Customer name is required.' };
   if (!['retail', 'wholesale'].includes(customerType)) return { success: false, reason: 'Customer type must be retail or wholesale.' };
@@ -68,8 +81,8 @@ function create(payload) {
 
   const result = db
     .prepare(
-      `INSERT INTO customers (name, customer_type, tier, assigned_letterhead_id, phone, address, opening_balance)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO customers (name, customer_type, tier, assigned_letterhead_id, phone, mobile, email, address, opening_balance, credit_limit, joining_date, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       name.trim(),
@@ -77,8 +90,13 @@ function create(payload) {
       tier || null,
       assignedLetterheadId || null,
       phone || null,
+      mobile || null,
+      email || null,
       address || null,
-      Number(openingBalance) || 0
+      Number(openingBalance) || 0,
+      toCreditLimit(creditLimit),
+      joiningDate || todayLocal(),
+      notes || null
     );
 
   return { success: true, id: result.lastInsertRowid };
@@ -88,7 +106,7 @@ function create(payload) {
 // read-only and points the admin at Record Payment / the ledger instead.
 function update(payload) {
   const db = getDb();
-  const { id, name, customerType, tier, assignedLetterheadId, phone, address } = payload;
+  const { id, name, customerType, tier, assignedLetterheadId, phone, mobile, email, address, creditLimit, joiningDate, notes } = payload;
 
   if (!id) return { success: false, reason: 'Missing customer id.' };
   if (!name || !name.trim()) return { success: false, reason: 'Customer name is required.' };
@@ -97,9 +115,23 @@ function update(payload) {
 
   db.prepare(
     `UPDATE customers
-     SET name = ?, customer_type = ?, tier = ?, assigned_letterhead_id = ?, phone = ?, address = ?
+     SET name = ?, customer_type = ?, tier = ?, assigned_letterhead_id = ?, phone = ?, mobile = ?, email = ?, address = ?,
+         credit_limit = ?, joining_date = ?, notes = ?
      WHERE id = ?`
-  ).run(name.trim(), customerType, tier || null, assignedLetterheadId || null, phone || null, address || null, id);
+  ).run(
+    name.trim(),
+    customerType,
+    tier || null,
+    assignedLetterheadId || null,
+    phone || null,
+    mobile || null,
+    email || null,
+    address || null,
+    toCreditLimit(creditLimit),
+    joiningDate || null,
+    notes || null,
+    id
+  );
 
   return { success: true };
 }
@@ -120,11 +152,11 @@ function searchMinimal({ search }) {
   const like = `%${search.trim()}%`;
   const rows = db
     .prepare(
-      `SELECT id, name, customer_type, phone FROM customers
-       WHERE is_active = 1 AND (name LIKE ? OR phone LIKE ?)
+      `SELECT id, name, customer_type, phone, mobile FROM customers
+       WHERE is_active = 1 AND (name LIKE ? OR phone LIKE ? OR mobile LIKE ?)
        ORDER BY name LIMIT 20`
     )
-    .all(like, like);
+    .all(like, like, like);
 
   return rows.map((r) => ({ ...r, balance_owed: getCustomerBalance(db, r.id) }));
 }
@@ -185,8 +217,13 @@ function getLedger(customerId) {
       customer_type: customer.customer_type,
       tier: customer.tier,
       phone: customer.phone,
+      mobile: customer.mobile,
+      email: customer.email,
       address: customer.address,
       opening_balance: customer.opening_balance,
+      credit_limit: customer.credit_limit,
+      joining_date: customer.joining_date,
+      notes: customer.notes,
       created_at: customer.created_at,
     },
     transactions: withBalance,

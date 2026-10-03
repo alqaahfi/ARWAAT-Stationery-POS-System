@@ -29,7 +29,7 @@ const LATER = {
 // and corrections, so here it is just shown.
 export function StartingBalanceField({ party = 'customer', isEdit, value, onChange, id }) {
   return (
-    <SectionCard title={glossary.startingBalance}>
+    <SectionCard dense title={glossary.startingBalance}>
       {isEdit ? (
         <div>
           <div style={{ ...theme.type.headline, ...theme.font.numeric, color: c.label }}>{formatCurrency(value)}</div>

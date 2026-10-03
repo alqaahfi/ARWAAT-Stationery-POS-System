@@ -31,11 +31,11 @@ function search(query) {
     .prepare(
       `SELECT id, name, phone, customer_type
        FROM customers
-       WHERE is_active = 1 AND (name LIKE ? OR phone LIKE ?)
+       WHERE is_active = 1 AND (name LIKE ? OR phone LIKE ? OR mobile LIKE ?)
        ORDER BY name
        LIMIT ${RESULTS_PER_TYPE}`
     )
-    .all(like, like);
+    .all(like, like, like);
   const customerBalances = getBalancesForCustomers(db, customerRows.map((r) => r.id));
   const customers = customerRows.map((r) => ({ ...r, balance_owed: customerBalances[r.id] ?? 0 }));
 
@@ -43,11 +43,11 @@ function search(query) {
     .prepare(
       `SELECT id, name, phone, contact_person
        FROM suppliers
-       WHERE is_active = 1 AND (name LIKE ? OR phone LIKE ?)
+       WHERE is_active = 1 AND (name LIKE ? OR phone LIKE ? OR mobile LIKE ?)
        ORDER BY name
        LIMIT ${RESULTS_PER_TYPE}`
     )
-    .all(like, like);
+    .all(like, like, like);
   const supplierBalances = getBalancesForSuppliers(db, supplierRows.map((r) => r.id));
   const suppliers = supplierRows.map((r) => ({ ...r, balance_owed: supplierBalances[r.id] ?? 0 }));
 

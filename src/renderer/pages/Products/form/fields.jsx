@@ -65,12 +65,12 @@ export function CheckedInput({ checking, scanner = false, style, onKeyDown, ...r
 }
 
 // White card with a title and optional one-line intro.
-export function SectionCard({ title, intro, children, style }) {
+export function SectionCard({ title, intro, children, style, dense }) {
   return (
-    <section style={{ backgroundColor: c.surface, border: `1px solid ${c.separator}`, borderRadius: theme.radius.lg, padding: theme.spacing.md, ...style }}>
+    <section style={{ backgroundColor: c.surface, border: `1px solid ${c.separator}`, borderRadius: theme.radius.lg, padding: dense ? theme.spacing.smd : theme.spacing.md, ...style }}>
       {title && <h2 style={{ ...theme.type.headline, color: c.label, margin: 0 }}>{title}</h2>}
       {intro && <p style={{ ...theme.type.subhead, color: c.labelSecondary, margin: '4px 0 0' }}>{intro}</p>}
-      <div style={{ marginTop: title || intro ? theme.spacing.md : 0 }}>{children}</div>
+      <div style={{ marginTop: title || intro ? (dense ? theme.spacing.sm : theme.spacing.md) : 0 }}>{children}</div>
     </section>
   );
 }

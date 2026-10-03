@@ -26,7 +26,8 @@ export function PartyHeader({ name, badges, contact, balance, party, actions }) 
   );
 }
 
-// "0300 1234567 · Main Bazaar" — skips whatever is empty.
+// "0300 1234567 · 0321 7654321 · Main Bazaar" — phone, mobile, address or any
+// other parts, skipping whatever is empty.
 export function contactLine(...parts) {
   return parts.filter((p) => p && String(p).trim()).join(' · ');
 }

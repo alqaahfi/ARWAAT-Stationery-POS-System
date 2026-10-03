@@ -28,7 +28,7 @@ export function supplierColumns({ onToggleActive }) {
     {
       key: 'name',
       label: glossary.supplier,
-      render: (r) => <PartyNameCell name={r.name} sub={r.contact_person} inactive={!r.is_active} />,
+      render: (r) => <PartyNameCell name={r.name} sub={[r.phone, r.mobile].filter(Boolean).join(' · ') || r.contact_person} inactive={!r.is_active} />,
     },
     {
       key: 'phone',

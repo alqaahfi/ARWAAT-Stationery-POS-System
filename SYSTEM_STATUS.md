@@ -89,14 +89,14 @@ All timestamps written with `datetime('now')` are **UTC text**; user-entered cal
 
 **Catalog / stock**
 - `categories(name UNIQUE, parent_id, uuid)` — one level parent/child; hard delete (blocked while products use it).
-- `suppliers(name, contact_person, phone, address, notes, opening_balance, is_active, origin_station, uuid)`.
+- `suppliers(name, contact_person, phone, mobile, email, joining_date 'YYYY-MM-DD' (defaults to today on create), address, notes, opening_balance, is_active, origin_station, uuid)`. mobile/email/joining_date added in migration **028**; they sync via the generic column copy.
 - `products(name, sku UNIQUE, company_name, category_id, supplier_id, base_unit_name, min_stock_alert, dead_stock_days, pricing_type 'fixed'|'percentage', default_percentage, is_agency_item, notes, is_active, origin_station, uuid)`.
 - `product_variants` ("Types": `product_id, variant_name` default 'Standard', `stock_qty` in base units, `barcode` unique-if-set, `last_purchased_at, last_sold_at, is_active, uuid`). Every product has ≥1 variant; stock lives on variants.
 - `product_units` ("Pack sizes": `unit_name, conversion_factor` to base unit, `retail_price, wholesale_price, cost_price` — all **per this unit**, `is_default_sale_unit, is_active, net_rate_c1..c5` (NULL = no override), `uuid`).
 - `stock_movements(product_variant_id, movement_type 'purchase'|'sale'|'return_in'|'return_out'|'adjustment', quantity ± base units, reference_type 'sale'|'purchase'|'return'|NULL, reference_id, note, created_by, created_at, uuid)`.
 
 **Customers / pricing**
-- `customers(name, customer_type 'retail'|'wholesale', tier 'C1'..'C5'|NULL, assigned_letterhead_id, phone, address, opening_balance (+ = owes the shop), is_active, origin_station, uuid)`.
+- `customers(name, customer_type 'retail'|'wholesale', tier 'C1'..'C5'|NULL, assigned_letterhead_id, phone, mobile, email, address, opening_balance (+ = owes the shop), credit_limit REAL default 0 (stored only, **not enforced** in sales), joining_date 'YYYY-MM-DD' (defaults to today on create), notes, is_active, origin_station, uuid)`. Last four extra columns + mobile/email added in migration **027**; they sync via the generic column copy.
 - `percentage_pricing_rules(product_id, customer_id XOR customer_tier, percentage, uuid)` — "Special Margins".
 - `letterheads(name, image_path (unused), pdf_template_path, content_margin_top_mm=40, content_margin_bottom_mm=25, is_default, uuid)`; PDFs copied into `userData/letterheads/`.
 
@@ -208,7 +208,7 @@ Rounded to 2 dp. `productId` is taken from the unit row, never the caller. Speci
 - **Stock History** (`stock:get-movements`): read-only, capped at 500 rows.
 
 ### 6.5 Customers & Suppliers — `pages/Customers/`, `pages/Suppliers/`, shared `pages/Parties/`
-Admin-only. Customers: retail/wholesale, Price Level (tier C1–C5 or none; shown as "Price Level 1–5" via `utils/priceLevel.js`), letterhead (wholesale), phone/address, starting balance (set at creation only — edit form shows it read-only), active flag, recent activity card. **Special Margins** page (`/customers/percentage-rules`): per-customer or per-tier % rules on eligible products, add/delete. Suppliers: name, contact, phone, address, notes, starting balance (creation only), active flag. Lists show derived balances (BalanceChip). No active/inactive "Show" filter on either list (see §8).
+Admin-only. Customers: retail/wholesale, Price Level (tier C1–C5 or none; shown as "Price Level 1–5" via `utils/priceLevel.js`), letterhead (wholesale), phone + mobile + email, address, credit limit (stored only, not enforced) + joined date, notes (form is SectionCards: Basics, Contact, Address, Pricing, Credit and History, Starting Balance, Notes, More options; list search, global search and Receive Payment search match phone or mobile; list/header show phone · mobile), starting balance (set at creation only — edit form shows it read-only), active flag, recent activity card. **Special Margins** page (`/customers/percentage-rules`): per-customer or per-tier % rules on eligible products, add/delete. Suppliers: name, contact person, phone + mobile + email, address, joined date, notes, starting balance (creation only), active flag (form is SectionCards: Basics, Contact, Address, History, Starting Balance, Notes, More options; list search, global search and purchase supplier search match phone or mobile; list sub-text and profile header show phone · mobile). Lists show derived balances (BalanceChip). No active/inactive "Show" filter on either list (see §8).
 
 ### 6.6 Sales History — `pages/Sales/SalesHistory.jsx` (+ `parts/`)
 `sales:list` / `sales:get-detail` (`ipc/salesHistory.ipc.js`): Admin sees all; a cashier needs `view_sales_history` and is locked to their own sales server-side. Filters: local-day date range (`date(created_at,'localtime')`), payment status, sale type, cashier (admin), search; max 200 rows. Each sale carries returned amount and return status (none/partial/full). Detail sheet shows lines, payment, current customer balance, reprint (receipt/A4), and (Admin) "Return items".

@@ -167,7 +167,7 @@ export default function CustomerLedger({ customerId }) {
             </>
           )
         }
-        contact={customer && contactLine(customer.phone, customer.address)}
+        contact={customer && contactLine(customer.phone, customer.mobile, customer.address)}
         onPay={openPayment}
         onChooseAnother={() => setSelectedId(null)}
       />

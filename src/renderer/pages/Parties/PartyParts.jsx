@@ -122,4 +122,20 @@ export const pageColumn = {
   paddingBottom: theme.spacing.xxl,
 };
 
+// Fixed one-screen form: fills the content region, never scrolls. The grid
+// clips (not the wrapper) so StickyActions can still bleed to the edges.
+export const fixedPage = { height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', gap: theme.spacing.smd };
+export const fixedGrid = {
+  flex: 1,
+  minHeight: 0,
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gap: theme.spacing.smd,
+  alignItems: 'start',
+  overflow: 'hidden',
+};
+export const fixedCol = { display: 'flex', flexDirection: 'column', gap: theme.spacing.smd, minWidth: 0, minHeight: 0 };
+// Holds a card that must shrink to the space left in its column.
+export const fixedFill = { flex: 1, minHeight: 0, overflow: 'hidden' };
+
 export const listToolbar = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: theme.spacing.sm };
