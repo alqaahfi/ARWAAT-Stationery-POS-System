@@ -8,7 +8,7 @@ const { logActivity } = require('../activity/activityLog');
 
 const SEARCH_COLUMNS = `
   pv.id AS variantId, pv.variant_name AS variantName, pv.stock_qty AS stockQty, pv.barcode,
-  p.id AS productId, p.name AS productName, p.sku, p.base_unit_name AS baseUnitName
+  p.id AS productId, p.name AS productName, p.sku, p.base_unit_name AS baseUnitName, p.min_stock_alert AS minStockAlert
 `;
 
 function searchProducts(query) {
@@ -82,6 +82,7 @@ function searchProductsGrouped(query) {
         productName: r.productName,
         sku: r.sku,
         baseUnitName: r.baseUnitName,
+        minStockAlert: r.minStockAlert,
         types: [],
         units: unitsByProduct[r.productId] || [],
       });

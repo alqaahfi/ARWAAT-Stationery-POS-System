@@ -133,9 +133,10 @@ const navConfig = [
     label: g.reports,
     icon: 'reports',
     group: g.navMoney,
-    route: '/reports/sales',
+    route: '/reports',
     permissionKey: 'view_reports',
     tabs: [
+      { key: 'reports-all', label: g.allReports, route: '/reports', adminOnly: true },
       { key: 'reports-sales', label: g.sales, route: '/reports/sales', permissionKey: 'view_reports' },
       { key: 'reports-profit-loss', label: g.profitLoss, route: '/reports/profit-loss' },
       { key: 'reports-stock', label: g.stock, route: '/reports/stock' },

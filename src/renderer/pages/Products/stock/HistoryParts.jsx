@@ -70,6 +70,7 @@ function timeOf(iso) {
 function details(r) {
   if (r.reference_type === 'purchase') return r.purchase_reference_no ? `Purchase ${r.purchase_reference_no}` : `Purchase #${r.reference_id}`;
   if (r.reference_type === 'sale') return r.sale_invoice_no ? `Invoice ${r.sale_invoice_no}` : `Sale #${r.reference_id}`;
+  if (r.reference_type === 'return') return r.return_no ? `Return ${r.return_no}` : r.note || `Return #${r.reference_id}`;
   if (r.reference_type === 'initial_stock') return r.note || 'Starting stock';
   if (r.reference_type === 'adjustment') return r.note || 'Fixed by hand';
   return r.note || '—';

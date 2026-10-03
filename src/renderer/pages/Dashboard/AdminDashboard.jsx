@@ -31,6 +31,8 @@ import AdvancesAndCredits from '../Ledgers/AdvancesAndCredits';
 import AgingReport from '../Ledgers/AgingReport';
 import LedgerAdjustments from '../Ledgers/Adjustments';
 import RecordPayment from '../Payments/RecordPayment';
+import SalesHistory from '../Sales/SalesHistory';
+import Returns from '../Sales/Returns';
 import ExpenseList from '../Expenses/ExpenseList';
 import ExpenseForm from '../Expenses/ExpenseForm';
 import CashierList from '../Users/CashierList';
@@ -44,6 +46,7 @@ import CustomerStatements from '../Reports/CustomerStatements';
 import SupplierStatements from '../Reports/SupplierStatements';
 import CashierPerformance from '../Reports/CashierPerformance';
 import ExpenseReport from '../Reports/ExpenseReport';
+import ReportsHome from '../Reports/ReportsHome';
 import Letterheads from '../Settings/Letterheads';
 import SyncAndPcs from '../Settings/SyncAndPcs';
 import ReceiptContent from '../Settings/ReceiptContent';
@@ -190,8 +193,13 @@ export default function AdminDashboard() {
       case '/ledgers/adjustments':
         return <LedgerAdjustments />;
 
+      case '/sales':
+        return <SalesHistory onNavigate={navigate} saleId={nav.params.saleId} />;
+      case '/sales/returns':
+        return <Returns key={`${nav.params.saleId || ''}-${nav.params.returnId || ''}`} params={nav.params} onNavigate={navigate} />;
+
       case '/payments/record':
-        return <RecordPayment />;
+        return <RecordPayment params={nav.params} />;
 
       case '/expenses':
         return <ExpenseList onNavigate={navigate} />;
@@ -213,6 +221,8 @@ export default function AdminDashboard() {
       case '/cashiers/sessions/detail':
         return <SessionDetail sessionId={nav.params.id} onNavigate={navigate} />;
 
+      case '/reports':
+        return <ReportsHome onNavigate={navigate} />;
       case '/reports/sales':
         return <SalesReport initialDate={nav.params.date} />;
       case '/reports/profit-loss':
@@ -222,7 +232,7 @@ export default function AdminDashboard() {
       case '/reports/customers':
         return <CustomerStatements onNavigate={navigate} />;
       case '/reports/suppliers':
-        return <SupplierStatements />;
+        return <SupplierStatements onNavigate={navigate} />;
       case '/reports/cashiers':
         return <CashierPerformance />;
       case '/reports/expenses':

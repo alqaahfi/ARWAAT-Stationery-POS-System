@@ -1,110 +1,113 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import theme from '../../config/theme';
-import { Card, PageHeader, Tr, tableStyles } from '../../components/ui';
+import glossary from '../../config/glossary';
+import appIcons from '../../config/appIcons';
+import { Card } from '../../components/ui';
 import { formatCurrency } from '../../utils/format';
+import StatTile from '../Dashboard/parts/StatTile';
+import { LoadError, RestrictedNotice } from '../Parties/PartyParts';
+import { PageIntro, ledgerPage } from './parts/LedgerParts';
+import { SeeOverdueButton, TopPartiesCard, cardGrid, statGrid } from './parts/OverviewParts';
+import { openAccount } from './parts/ledgerUtils';
 
-// Route: /ledgers. The module's landing page — a quick pulse check, distinct
-// from the full Reports module (Customer/Supplier Statements there stay
-// high-level balance summaries; this module is the day-to-day workspace).
+// Route: /ledgers. The Accounts landing page — who owes the shop, who the
+// shop owes, and where to go next.
 export default function Overview({ onNavigate }) {
   const { user } = useAuth();
   const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     if (user.role !== 'admin') return;
-    window.api.ledgers.getOverview().then(setData);
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.role]);
 
-  if (user.role !== 'admin') {
-    return (
-      <Card style={{ padding: '48px', textAlign: 'center' }}>
-        <h3 style={{ margin: 0, color: theme.colors.textPrimary }}>This section is restricted to Admin accounts</h3>
-      </Card>
-    );
+  async function load() {
+    setLoading(true);
+    setError(false);
+    try {
+      setData(await window.api.ledgers.getOverview());
+    } catch {
+      setError(true);
+    }
+    setLoading(false);
   }
 
-  if (!data) return <Card>Loading…</Card>;
+  if (user.role !== 'admin') return <RestrictedNotice />;
+
+  const money = (key) => formatCurrency(Number(data?.[key]) || 0);
+  const hasSupplierAdvance = data && data.totalPrepaidToSuppliers !== undefined;
 
   return (
-    <div>
-      <PageHeader title="Ledgers Overview" />
+    <div style={ledgerPage}>
+      <PageIntro>Who owes you, who you owe, and who needs a reminder.</PageIntro>
 
-      <div style={styles.statGrid}>
-        <StatTile label="Total Receivable" value={data.totalReceivable} tone="danger" />
-        <StatTile label="Total Payable" value={data.totalPayable} tone="danger" />
-        <StatTile label="Total Advances Held" value={data.totalAdvancesHeld} tone="info" />
-        <StatTile label="Total Prepaid to Suppliers" value={data.totalPrepaidToSuppliers} tone="info" />
-      </div>
+      {error ? (
+        <Card>
+          <LoadError message="The account totals couldn't be loaded." onRetry={load} />
+        </Card>
+      ) : (
+        <>
+          <div style={statGrid}>
+            <StatTile
+              {...appIcons.receivePayment}
+              label={glossary.customersOweYou}
+              value={money('totalReceivable')}
+              footnote={glossary.customerAccounts}
+              loading={loading}
+              onClick={() => onNavigate('/ledgers/customers')}
+            />
+            <StatTile
+              {...appIcons.paySupplier}
+              label={glossary.youOweSuppliers}
+              value={money('totalPayable')}
+              footnote={glossary.supplierAccounts}
+              loading={loading}
+              onClick={() => onNavigate('/ledgers/suppliers')}
+            />
+            <StatTile
+              {...appIcons.paidInAdvance}
+              label={glossary.paidInAdvance}
+              value={money('totalAdvancesHeld')}
+              footnote="Held for customers"
+              loading={loading}
+              onClick={() => onNavigate('/ledgers/advances')}
+            />
+            {(loading || hasSupplierAdvance) && (
+              <StatTile
+                {...appIcons.suppliers}
+                label={glossary.paidAheadToSuppliers}
+                value={money('totalPrepaidToSuppliers')}
+                footnote="Already paid to suppliers"
+                loading={loading}
+                onClick={() => onNavigate('/ledgers/advances')}
+              />
+            )}
+          </div>
 
-      <div style={styles.attentionGrid}>
-        <NeedsAttentionList
-          title="Top Outstanding Customers"
-          rows={data.topCustomers}
-          emptyText="No customers currently owe a balance."
-          onRowClick={(row) => onNavigate('/ledgers/customers', { id: row.id, name: row.name })}
-        />
-        <NeedsAttentionList
-          title="Top Outstanding Suppliers"
-          rows={data.topSuppliers}
-          emptyText="No balances currently owed to suppliers."
-          onRowClick={(row) => onNavigate('/ledgers/suppliers', { id: row.id, name: row.name })}
-        />
-      </div>
+          <div style={cardGrid}>
+            <TopPartiesCard
+              title="Customers who owe the most"
+              party="customer"
+              rows={data?.topCustomers}
+              loading={loading}
+              emptyText="Nobody owes you anything right now"
+              onOpen={(row) => openAccount(onNavigate, 'customer', row.id, row.name)}
+              footer={<SeeOverdueButton onClick={() => onNavigate('/ledgers/aging')} />}
+            />
+            <TopPartiesCard
+              title="Suppliers you owe the most"
+              party="supplier"
+              rows={data?.topSuppliers}
+              loading={loading}
+              emptyText="You don't owe any supplier right now"
+              onOpen={(row) => openAccount(onNavigate, 'supplier', row.id, row.name)}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }
-
-// Advances/prepaid amounts use `info` (a calm, non-alarming color) — they're
-// money the shop is holding, not a debt, so they shouldn't read as "red".
-function StatTile({ label, value, tone }) {
-  const color = tone === 'danger' ? theme.colors.danger : theme.colors.info;
-  return (
-    <Card style={styles.tile}>
-      <div style={styles.tileLabel}>{label}</div>
-      <div style={{ ...styles.tileValue, color }}>{formatCurrency(value)}</div>
-    </Card>
-  );
-}
-
-function NeedsAttentionList({ title, rows, emptyText, onRowClick }) {
-  return (
-    <Card style={{ padding: 0 }}>
-      <div style={styles.listHeader}>{title}</div>
-      <div style={tableStyles.scroll}>
-        <table style={tableStyles.table}>
-          <tbody>
-            {rows.map((row) => (
-              <Tr key={row.id} onClick={() => onRowClick(row)}>
-                <td style={tableStyles.td}>{row.name}</td>
-                <td style={{ ...tableStyles.td, textAlign: 'right', color: theme.colors.danger, fontWeight: theme.font.weightMedium }}>
-                  {formatCurrency(row.balance)}
-                </td>
-              </Tr>
-            ))}
-            {rows.length === 0 && (
-              <tr>
-                <td style={tableStyles.emptyState}>{emptyText}</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </Card>
-  );
-}
-
-const styles = {
-  statGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: theme.spacing.md, marginBottom: theme.spacing.lg },
-  tile: { padding: '18px' },
-  tileLabel: { color: theme.colors.textSecondary, fontSize: theme.font.sizeXs, textTransform: 'uppercase', letterSpacing: '0.03em' },
-  tileValue: { fontSize: theme.font.sizeXl, fontWeight: theme.font.weightSemibold, marginTop: '6px' },
-  attentionGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: theme.spacing.md },
-  listHeader: {
-    padding: '12px 14px',
-    fontWeight: theme.font.weightSemibold,
-    color: theme.colors.textPrimary,
-    fontSize: theme.font.sizeSm,
-    borderBottom: `1px solid ${theme.colors.border}`,
-  },
-};

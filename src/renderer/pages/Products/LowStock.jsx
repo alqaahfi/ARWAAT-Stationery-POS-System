@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { CircleCheck } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 import theme from '../../config/theme';
 import glossary from '../../config/glossary';
 import { Badge, EmptyState } from '../../components/ui';
@@ -30,6 +31,7 @@ const columns = [
 ];
 
 export default function LowStock({ onNavigate }) {
+  const { user } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -61,7 +63,7 @@ export default function LowStock({ onNavigate }) {
         error={error}
         onRetry={load}
         footnote={rows.length > 0 && `${formatCount(rows.length)} items · ${formatCount(outCount)} out of stock`}
-        onRowClick={(r) => onNavigate('/products/edit', { id: r.id })}
+        onRowClick={user.role === 'admin' ? (r) => onNavigate('/products/edit', { id: r.id }) : undefined}
         emptyState={<EmptyState icon={CircleCheck} color="green" title="Nothing is running low" message="All your items are above their warning level." />}
       />
     </div>

@@ -1,48 +1,110 @@
-import React from 'react';
-import { Lock } from 'lucide-react';
+import React, { useState } from 'react';
+import { ChevronLeft, Menu as MenuIcon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import AdminDashboard from './AdminDashboard';
-import Sale from '../POS/Sale';
+import { isPosSaleInProgress } from '../POS/Sale';
+import CashierRoutes, { CASHIER_MENU, cashierRouteTitle } from './CashierRoutes';
 import theme from '../../config/theme';
+import glossary from '../../config/glossary';
 import { APP_NAME } from '../../config/appInfo';
-import { Card, EmptyState } from '../../components/ui';
+import { Button, Menu, MenuItem, Popover } from '../../components/ui';
 import { Brand, SyncChip, UserChip } from '../../layout/ShellParts';
 
 export default function Dashboard() {
-  const { user, logout, hasPermission } = useAuth();
-
+  const { user } = useAuth();
   if (user.role === 'admin') return <AdminDashboard />;
+  return <CashierLayout />;
+}
 
-  // A cashier gets nothing but the POS screen — no sidebar, no other pages,
-  // no tabs to switch between.
-  const canSell = hasPermission('make_sale');
+// POS-first layout: no sidebar or tabs. New Sale is home; a Menu in the
+// header reaches whatever other pages this cashier's permissions allow.
+function CashierLayout() {
+  const { user, logout, hasPermission } = useAuth();
+  const [nav, setNav] = useState({ route: '/pos', params: {} });
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Same leave-mid-sale guard as AdminDashboard's navigate().
+  function navigate(route, params = {}) {
+    if (nav.route === '/pos' && route !== '/pos' && isPosSaleInProgress()) {
+      const proceed = window.confirm("You have an unfinished sale — leave anyway? It'll be saved as a draft.");
+      if (!proceed) return;
+    }
+    setNav({ route, params });
+  }
+
+  const menuItems = CASHIER_MENU.filter((m) => hasPermission(m.permissionKey));
+  const showMenu = menuItems.some((m) => m.route !== '/pos');
+  const onPos = nav.route === '/pos';
 
   return (
     <div style={styles.container}>
       <header style={styles.header}>
-        <Brand name={APP_NAME} />
+        <div style={styles.left}>
+          {onPos ? (
+            <Brand name={APP_NAME} />
+          ) : (
+            <>
+              <Button variant="plain" size="sm" icon={ChevronLeft} onClick={() => navigate('/pos')} style={{ paddingLeft: '4px' }}>
+                {glossary.newSale}
+              </Button>
+              <h1 style={styles.title}>{cashierRouteTitle(nav.route)}</h1>
+            </>
+          )}
+        </div>
         <div style={styles.right}>
+          {showMenu && (
+            <Popover
+              open={menuOpen}
+              onClose={() => setMenuOpen(false)}
+              width={240}
+              anchor={
+                <Button
+                  variant="secondary"
+                  icon={MenuIcon}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  onClick={() => setMenuOpen((o) => !o)}
+                >
+                  {glossary.menu}
+                </Button>
+              }
+            >
+              {(close) => (
+                <Menu label={glossary.menu}>
+                  {menuItems.map((m) => (
+                    <MenuItem
+                      key={m.route}
+                      icon={m.icon}
+                      color={m.color}
+                      label={m.label}
+                      aria-current={nav.route === m.route ? 'page' : undefined}
+                      onClick={() => {
+                        close(false);
+                        navigate(m.route);
+                      }}
+                    />
+                  ))}
+                </Menu>
+              )}
+            </Popover>
+          )}
           <SyncChip />
           <div style={styles.divider} />
           <UserChip user={user} onLogout={logout} style={{ width: '200px' }} />
         </div>
       </header>
 
-      <main style={canSell ? styles.posContent : styles.content}>
-        {canSell ? (
-          <Sale />
-        ) : (
-          <Card padding="0">
-            <EmptyState
-              icon={Lock}
-              color="gray"
-              title="You can't make sales yet"
-              message={'Ask your admin to turn on "Make Sales" for your account.'}
-              style={{ padding: '56px 24px' }}
-            />
-          </Card>
-        )}
-      </main>
+      {onPos ? (
+        <main style={styles.posContent}>
+          <CashierRoutes route={nav.route} params={nav.params} onNavigate={navigate} />
+        </main>
+      ) : (
+        <main style={styles.content}>
+          <div style={styles.page}>
+            <CashierRoutes route={nav.route} params={nav.params} onNavigate={navigate} />
+          </div>
+        </main>
+      )}
     </div>
   );
 }
@@ -64,9 +126,12 @@ const styles = {
     borderBottom: `1px solid ${c.separator}`,
     flexShrink: 0,
   },
+  left: { flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: theme.spacing.sm },
+  title: { ...theme.type.title2, color: c.label, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
   right: { display: 'flex', alignItems: 'center', gap: theme.spacing.smd, flexShrink: 0 },
   divider: { width: '1px', height: '24px', backgroundColor: c.separator },
-  content: { flex: 1, minHeight: 0, padding: '16px 24px', overflowY: 'auto' },
+  content: { flex: 1, minHeight: 0, padding: theme.spacing.lg, overflowY: 'auto' },
+  page: { maxWidth: '1200px', margin: '0 auto' },
   // New Sale fills the region itself; only its own lists scroll.
   posContent: { flex: 1, minHeight: 0, padding: theme.spacing.md, overflow: 'hidden', display: 'flex', flexDirection: 'column' },
 };

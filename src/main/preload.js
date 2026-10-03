@@ -177,6 +177,15 @@ contextBridge.exposeInMainWorld('api', {
     create: (data) => ipcRenderer.invoke('sales:create', data),
     getSaleDetail: (data) => ipcRenderer.invoke('sales:get-sale-detail', data),
     getReceiptData: (data) => ipcRenderer.invoke('sales:get-receipt-data', data),
+    list: (data) => ipcRenderer.invoke('sales:list', data),
+    getDetail: (data) => ipcRenderer.invoke('sales:get-detail', data),
+  },
+
+  returns: {
+    list: (data) => ipcRenderer.invoke('returns:list', data),
+    getDetail: (data) => ipcRenderer.invoke('returns:get-detail', data),
+    getReturnable: (data) => ipcRenderer.invoke('returns:get-returnable', data),
+    create: (data) => ipcRenderer.invoke('returns:create', data),
   },
 
   printing: {

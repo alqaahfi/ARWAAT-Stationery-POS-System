@@ -1,17 +1,27 @@
 const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
 const ProductModel = require('../db/models/Product');
+const { getBalancesForCustomers } = require('../ledger/balanceEngine');
 
 // Aggregate numbers for the admin Overview page. Kept as one round trip so the
 // dashboard renders with a single call instead of one IPC per stat tile.
 function getSummary() {
   const db = getDb();
 
+  // "Today" is the shop's local calendar day; returns made today come off
+  // today's sales (same rule as the Sales Report).
   const todaySales = db
     .prepare(
       `SELECT COUNT(*) AS count, COALESCE(SUM(total_amount), 0) AS total
        FROM sales
-       WHERE date(created_at) = date('now')`
+       WHERE date(created_at, 'localtime') = date('now', 'localtime')`
+    )
+    .get();
+  const todayReturns = db
+    .prepare(
+      `SELECT COUNT(*) AS count, COALESCE(SUM(total_amount), 0) AS total
+       FROM sale_returns
+       WHERE date(created_at, 'localtime') = date('now', 'localtime')`
     )
     .get();
 
@@ -28,15 +38,17 @@ function getSummary() {
     .prepare(`SELECT COUNT(*) AS count FROM customers WHERE is_active = 1`)
     .get().count;
 
-  const outstandingReceivables = db
-    .prepare(`SELECT COALESCE(SUM(balance_due), 0) AS total FROM sales WHERE payment_status != 'paid'`)
-    .get().total;
+  // Same figure as the Accounts overview's total receivable: every customer's
+  // positive balance from the balance engine.
+  const customerIds = db.prepare('SELECT id FROM customers').all().map((r) => r.id);
+  const balances = getBalancesForCustomers(db, customerIds);
+  const outstandingReceivables = Object.values(balances).reduce((sum, b) => sum + (b > 0 ? b : 0), 0);
 
   const monthExpenses = db
     .prepare(
       `SELECT COALESCE(SUM(amount), 0) AS total
        FROM expenses
-       WHERE strftime('%Y-%m', expense_date) = strftime('%Y-%m', 'now')`
+       WHERE strftime('%Y-%m', expense_date) = strftime('%Y-%m', 'now', 'localtime')`
     )
     .get().total;
 
@@ -53,8 +65,11 @@ function getSummary() {
     .all();
 
   return {
-    todaySalesTotal: todaySales.total,
+    todaySalesTotal: todaySales.total - todayReturns.total,
     todaySalesCount: todaySales.count,
+    todayGrossSales: todaySales.total,
+    todayReturns: todayReturns.total,
+    todayReturnsCount: todayReturns.count,
     totalProducts,
     lowStockCount,
     deadStockCount,
@@ -73,22 +88,36 @@ function getRevenueTrend(days) {
   const db = getDb();
   const n = [7, 30, 90].includes(Number(days)) ? Number(days) : 30;
 
-  const rows = db
+  // Net per LOCAL day: sales minus returns made that day.
+  const sinceArg = `-${n - 1} days`;
+  const salesRows = db
     .prepare(
-      `SELECT date(created_at) AS day, COALESCE(SUM(total_amount), 0) AS revenue
+      `SELECT date(created_at, 'localtime') AS day, COALESCE(SUM(total_amount), 0) AS total
        FROM sales
-       WHERE date(created_at) >= date('now', ?)
+       WHERE date(created_at, 'localtime') >= date('now', 'localtime', ?)
        GROUP BY day`
     )
-    .all(`-${n - 1} days`);
+    .all(sinceArg);
+  const returnRows = db
+    .prepare(
+      `SELECT date(created_at, 'localtime') AS day, COALESCE(SUM(total_amount), 0) AS total
+       FROM sale_returns
+       WHERE date(created_at, 'localtime') >= date('now', 'localtime', ?)
+       GROUP BY day`
+    )
+    .all(sinceArg);
 
-  const byDay = Object.fromEntries(rows.map((r) => [r.day, r.revenue]));
+  const salesByDay = Object.fromEntries(salesRows.map((r) => [r.day, r.total]));
+  const returnsByDay = Object.fromEntries(returnRows.map((r) => [r.day, r.total]));
+  const pad = (v) => String(v).padStart(2, '0');
   const result = [];
   for (let i = n - 1; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const key = d.toISOString().slice(0, 10);
-    result.push({ date: key, revenue: byDay[key] || 0 });
+    const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const gross = salesByDay[key] || 0;
+    const returns = returnsByDay[key] || 0;
+    result.push({ date: key, revenue: gross - returns, gross, returns });
   }
   return result;
 }

@@ -29,7 +29,7 @@ export function Label({ children, htmlFor, style }) {
 export function FieldError({ children, id }) {
   if (!children) return null;
   return (
-    <div id={id} style={{ display: 'flex', alignItems: 'center', gap: '4px', color: c.redText, ...theme.type.footnote, marginTop: '6px' }}>
+    <div id={id} role="alert" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: c.redText, ...theme.type.footnote, marginTop: '6px' }}>
       <Icon icon={CircleAlert} size={14} />
       <span>{children}</span>
     </div>

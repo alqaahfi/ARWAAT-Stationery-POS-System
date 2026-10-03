@@ -1,47 +1,56 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import theme from '../../config/theme';
-import { Card, PageHeader, Label, TextInput, Select, TextArea, Button, Banner } from '../../components/ui';
+import glossary from '../../config/glossary';
+import { Button, Card, useConfirm, useToast } from '../../components/ui';
 import { formatCurrency } from '../../utils/format';
+import PartyPicker from '../Ledgers/parts/PartyPicker';
+import PaymentFormFields from './parts/PaymentFormFields';
+import { Intro, NoAccess, PaymentSuccess, SelectedCustomerCard, column } from './parts/ReceivePaymentParts';
 
 // Deliberately minimal — this is NOT the full ledger. Only enough context to
-// take a payment: name, type, current balance. No transaction history here.
-export default function RecordPayment() {
+// take a payment: name, type, phone, current balance, all from the
+// restricted customers:search-minimal handler so cashiers never see more.
+// params { id, name } (from a customer profile) starts at the payment step.
+export default function RecordPayment({ params }) {
   const { user, hasPermission } = useAuth();
   const canRecord = hasPermission('record_payment');
+  const toast = useToast();
+  const confirm = useConfirm();
 
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelected] = useState(() => (params?.id ? { id: params.id, name: params.name || 'Customer' } : null));
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [confirmation, setConfirmation] = useState(null);
-  const debounceRef = useRef(null);
+  const [done, setDone] = useState(null); // { name, amount, newBalance, estimated }
+  const savingRef = useRef(false);
+  const selectedIdRef = useRef(selected?.id);
+  selectedIdRef.current = selected?.id;
 
-  function handleQueryChange(value) {
-    setQuery(value);
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => runSearch(value), 250);
-  }
-
-  async function runSearch(value) {
-    if (!value.trim()) {
-      setResults([]);
-      return;
-    }
-    const rows = await window.api.customers.searchMinimal({ search: value.trim() });
-    setResults(rows);
-  }
+  // Preselected customer: fetch the balance through the same minimal search,
+  // matching on id. If it can't be found the payment still works, just
+  // without the balance preview.
+  useEffect(() => {
+    if (!canRecord || !params?.id || !params?.name) return;
+    let cancelled = false;
+    window.api.customers
+      .searchMinimal({ search: params.name })
+      .then((rows) => {
+        const match = (rows || []).find((r) => String(r.id) === String(params.id));
+        if (!cancelled && match && String(selectedIdRef.current) === String(match.id)) setSelected(match);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [canRecord, params?.id, params?.name]);
 
   function selectCustomer(c) {
     setSelected(c);
-    setResults([]);
-    setQuery('');
     setError('');
-    setConfirmation(null);
+    setDone(null);
   }
 
   function resetForNext() {
@@ -50,180 +59,127 @@ export default function RecordPayment() {
     setPaymentMethod('cash');
     setNote('');
     setError('');
+    setDone(null);
+  }
+
+  function changeCustomer() {
+    if (savingRef.current) return;
+    setSelected(null);
+    setError('');
   }
 
   async function handleSave() {
+    if (savingRef.current) return;
     setError('');
     const amt = Number(amount);
     if (!amt || amt <= 0) return setError('Enter an amount greater than zero.');
 
-    if (selected.balance_owed > 0 && amt > selected.balance_owed + 0.01) {
-      const proceed = window.confirm(
-        `This payment (${formatCurrency(amt)}) is more than the current balance owed (${formatCurrency(selected.balance_owed)}). Record it as an overpayment?`
-      );
+    const owed = Number(selected.balance_owed);
+    if (owed > 0 && amt > owed + 0.01) {
+      const proceed = await confirm({
+        title: 'This is more than they owe',
+        message: `They'll be shown as having paid ${formatCurrency(amt - owed)} in advance. Record it anyway?`,
+        confirmLabel: glossary.recordPayment,
+        cancelLabel: 'Go back',
+      });
       if (!proceed) return;
     }
 
+    savingRef.current = true;
     setSaving(true);
-    const res = await window.api.payments.createStandalone({
-      customerId: selected.id,
-      amount: amt,
-      paymentMethod,
-      note: note.trim() || null,
-      receivedBy: user.id,
-    });
-    setSaving(false);
+    try {
+      const res = await window.api.payments.createStandalone({
+        customerId: selected.id,
+        amount: amt,
+        paymentMethod,
+        note: note.trim() || null,
+        receivedBy: user.id,
+      });
 
-    if (!res.success) {
-      setError(res.reason || 'Could not record payment.');
-      return;
+      if (!res.success) {
+        const reason = res.reason || 'Could not record payment.';
+        setError(reason);
+        toast.error(reason);
+        return;
+      }
+
+      const hasOld = selected.balance_owed !== undefined && selected.balance_owed !== null;
+      const known = res.newBalance !== undefined && res.newBalance !== null;
+      setDone({
+        name: selected.name,
+        amount: amt,
+        newBalance: known ? res.newBalance : hasOld ? owed - amt : null,
+        estimated: !known,
+      });
+    } catch {
+      setError('Could not record payment. Please try again.');
+      toast.error('Could not record payment. Please try again.');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
-
-    setConfirmation({ name: selected.name, amount: amt, newBalance: res.newBalance });
-    resetForNext();
   }
 
-  if (!canRecord) {
+  if (!canRecord) return <NoAccess />;
+
+  if (done) {
     return (
-      <Card style={{ padding: '40px' }}>
-        <h3 style={{ margin: 0, color: theme.colors.textPrimary }}>You don't have access to this page</h3>
-        <p style={{ color: theme.colors.textSecondary }}>Ask your admin to grant you the "record payment" permission.</p>
-      </Card>
+      <div style={column}>
+        <PaymentSuccess {...done} onNext={resetForNext} />
+      </div>
+    );
+  }
+
+  if (!selected) {
+    return (
+      <div style={column}>
+        <Intro />
+        <PartyPicker
+          party="customer"
+          onPick={selectCustomer}
+          showType
+          idleTitle="Who is paying?"
+          idleMessage="Type part of the customer's name or phone number."
+        />
+      </div>
     );
   }
 
   return (
-    <div>
-      <PageHeader title="Record Payment" />
-
-      {confirmation && (
-        <div style={styles.confirmationBanner}>
-          Recorded {formatCurrency(confirmation.amount)} from {confirmation.name}. New balance:{' '}
-          {formatCurrency(confirmation.newBalance)}
-          <button style={styles.dismissBtn} onClick={() => setConfirmation(null)}>
-            ✕
-          </button>
-        </div>
-      )}
-
-      <Card style={{ maxWidth: '480px' }}>
-        {!selected && (
-          <>
-            <Label>Search Customer (name or phone)</Label>
-            <TextInput autoFocus value={query} onChange={(e) => handleQueryChange(e.target.value)} placeholder="Start typing…" />
-            <div style={styles.results}>
-              {results.map((c) => (
-                <div
-                  key={c.id}
-                  style={styles.resultRow}
-                  onClick={() => selectCustomer(c)}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                >
-                  <div>
-                    <div style={{ color: theme.colors.textPrimary }}>{c.name}</div>
-                    <div style={{ color: theme.colors.textSecondary, fontSize: theme.font.sizeXs, textTransform: 'capitalize' }}>
-                      {c.customer_type}
-                      {c.phone ? ` · ${c.phone}` : ''}
-                    </div>
-                  </div>
-                  <div style={{ color: c.balance_owed > 0 ? theme.colors.danger : theme.colors.success, fontWeight: theme.font.weightMedium }}>
-                    {formatCurrency(c.balance_owed)}
-                  </div>
-                </div>
-              ))}
-              {query.trim() && results.length === 0 && (
-                <div style={{ color: theme.colors.textSecondary, fontSize: theme.font.sizeSm, padding: '8px' }}>No matches.</div>
-              )}
-            </div>
-          </>
-        )}
-
-        {selected && (
-          <>
-            <div style={styles.selectedCard}>
-              <div>
-                <div style={styles.selectedName}>{selected.name}</div>
-                <div style={{ color: theme.colors.textSecondary, fontSize: theme.font.sizeXs, textTransform: 'capitalize' }}>
-                  {selected.customer_type}
-                </div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ color: theme.colors.textSecondary, fontSize: theme.font.sizeXs }}>Balance Owed</div>
-                <div
-                  style={{
-                    fontSize: theme.font.sizeLg,
-                    fontWeight: theme.font.weightSemibold,
-                    color: selected.balance_owed > 0 ? theme.colors.danger : theme.colors.success,
-                  }}
-                >
-                  {formatCurrency(selected.balance_owed)}
-                </div>
-              </div>
-            </div>
-
-            <Label>Amount</Label>
-            <TextInput type="number" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
-
-            <Label>Payment Method</Label>
-            <Select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-              <option value="cash">Cash</option>
-              <option value="bank">Bank</option>
-              <option value="other">Other</option>
-            </Select>
-
-            <Label>Note (optional)</Label>
-            <TextArea value={note} onChange={(e) => setNote(e.target.value)} />
-
-            <Banner>{error}</Banner>
-
-            <div style={{ display: 'flex', gap: theme.spacing.sm, marginTop: theme.spacing.lg }}>
-              <Button onClick={handleSave} disabled={saving}>
-                {saving ? 'Saving…' : 'Record Payment'}
-              </Button>
-              <Button variant="ghost" onClick={resetForNext}>
-                Cancel
-              </Button>
-            </div>
-          </>
-        )}
+    <div
+      style={column}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && !e.defaultPrevented) {
+          e.preventDefault();
+          changeCustomer();
+        }
+      }}
+    >
+      <Intro />
+      <SelectedCustomerCard customer={selected} onChange={changeCustomer} disabled={saving} />
+      <Card title="Payment">
+        <form
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSave();
+          }}
+        >
+          <PaymentFormFields
+            amount={amount}
+            onAmountChange={setAmount}
+            method={paymentMethod}
+            onMethodChange={setPaymentMethod}
+            note={note}
+            onNoteChange={setNote}
+            error={error}
+            balance={selected.balance_owed}
+          />
+          <Button type="submit" size="lg" fullWidth loading={saving} style={{ marginTop: theme.spacing.lg }}>
+            {glossary.recordPayment}
+          </Button>
+        </form>
       </Card>
     </div>
   );
 }
-
-const styles = {
-  results: { marginTop: theme.spacing.sm, maxHeight: '260px', overflowY: 'auto' },
-  resultRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '10px 8px',
-    borderRadius: theme.radius.md,
-    cursor: 'pointer',
-    borderBottom: `1px solid ${theme.colors.border}`,
-    transition: 'background-color 0.15s ease',
-  },
-  selectedCard: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingBottom: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-    borderBottom: `1px solid ${theme.colors.border}`,
-  },
-  selectedName: { fontSize: theme.font.sizeMd, fontWeight: theme.font.weightSemibold, color: theme.colors.textPrimary },
-  confirmationBanner: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: theme.colors.successBackground,
-    color: theme.colors.success,
-    border: `1px solid ${theme.colors.success}`,
-    padding: '10px 16px',
-    borderRadius: theme.radius.md,
-    marginBottom: theme.spacing.md,
-    fontSize: theme.font.sizeSm,
-  },
-  dismissBtn: { background: 'none', border: 'none', cursor: 'pointer', fontSize: theme.font.sizeBase, color: theme.colors.success },
-};

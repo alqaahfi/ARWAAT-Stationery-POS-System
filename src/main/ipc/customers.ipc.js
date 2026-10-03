@@ -1,6 +1,8 @@
 const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
 const { getCustomerBalance, getBalancesForCustomers } = require('../ledger/balanceEngine');
+const { getAdjustmentRows } = require('../ledger/adjustmentRows');
+const { getReturnRows } = require('../ledger/returnRows');
 
 // Fixed 5-tier structure — not admin-configurable. Validated here rather than
 // with a DB-level CHECK, consistent with how SKU/username uniqueness is
@@ -140,6 +142,8 @@ function getLedger(customerId) {
       "SELECT id, amount, payment_method, note, created_at FROM payments WHERE party_type = 'customer' AND party_id = ? ORDER BY created_at"
     )
     .all(customerId);
+  const adjustments = getAdjustmentRows(db, 'customer', customerId);
+  const returns = getReturnRows(db, customerId);
 
   // Merge and sort chronologically. Ties (same timestamp) put sales first —
   // arbitrary but stable, and irrelevant in practice since timestamps are
@@ -163,6 +167,8 @@ function getLedger(customerId) {
       credit: p.amount,
       sortKey: `${p.created_at}_1_${p.id}`,
     })),
+    ...adjustments,
+    ...returns,
   ].sort((a, b) => (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0));
 
   let running = customer.opening_balance;
@@ -184,7 +190,9 @@ function getLedger(customerId) {
       created_at: customer.created_at,
     },
     transactions: withBalance,
-    balance: running,
+    // Headline balance comes from the balance engine so this page and every
+    // list agree; the running total above (corrections and returns included) ends on it.
+    balance: getCustomerBalance(db, customerId),
   };
 }
 
@@ -224,14 +232,23 @@ function createPercentageRule({ productId, targetType, customerId, customerTier,
   if (percentage === undefined || percentage === null || Number.isNaN(Number(percentage))) {
     return { success: false, reason: 'Enter a valid percentage.' };
   }
+  if (Number(percentage) <= 0) return { success: false, reason: 'Margin must be greater than 0%' };
+
+  const duplicateReason = 'A margin already exists for this item and this customer/level';
 
   if (targetType === 'customer') {
     if (!customerId) return { success: false, reason: 'Select a customer.' };
+    if (db.prepare('SELECT 1 FROM percentage_pricing_rules WHERE product_id = ? AND customer_id = ?').get(productId, customerId)) {
+      return { success: false, reason: duplicateReason };
+    }
     db.prepare(
       'INSERT INTO percentage_pricing_rules (product_id, customer_id, customer_tier, percentage) VALUES (?, ?, NULL, ?)'
     ).run(productId, customerId, Number(percentage));
   } else if (targetType === 'tier') {
     if (!isValidTier(customerTier) || !customerTier) return { success: false, reason: 'Select a tier.' };
+    if (db.prepare('SELECT 1 FROM percentage_pricing_rules WHERE product_id = ? AND customer_tier = ?').get(productId, customerTier)) {
+      return { success: false, reason: duplicateReason };
+    }
     db.prepare(
       'INSERT INTO percentage_pricing_rules (product_id, customer_id, customer_tier, percentage) VALUES (?, NULL, ?, ?)'
     ).run(productId, customerTier, Number(percentage));

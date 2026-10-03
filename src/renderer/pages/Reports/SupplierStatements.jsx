@@ -1,46 +1,45 @@
-import React, { useEffect, useState } from 'react';
-import theme from '../../config/theme';
-import { Card, PageHeader, Checkbox } from '../../components/ui';
-import ReportSummaryCards from './components/ReportSummaryCards';
-import ReportTable from './components/ReportTable';
+import React, { useCallback, useState } from 'react';
+import { Checkbox } from '../../components/ui';
 import ExportButtons from './components/ExportButtons';
+import ReportShell from './parts/ReportShell';
+import { useReportData } from './parts/reportUtils';
+import { StatementSummary, StatementTable } from './parts/StatementParts';
 
 // Suppliers have no category concept in the schema (unlike customers), so
 // this report's only filter is the balance toggle — same table/summary shape
-// as Customer Statements otherwise. Balances are now fully accurate: the
-// Suppliers module's `purchases` table closed the gap that used to leave
-// this report reflecting payments only.
-export default function SupplierStatements() {
+// as Customer Statements otherwise.
+export default function SupplierStatements({ onNavigate }) {
   const [onlyWithBalance, setOnlyWithBalance] = useState(false);
-  const [data, setData] = useState(null);
 
   const filters = { onlyWithBalance };
 
-  useEffect(() => {
-    window.api.reports.getSupplierStatements({ filters }).then(setData);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onlyWithBalance]);
+  const { data, loading, error, retry } = useReportData(() => window.api.reports.getSupplierStatements({ filters }), [onlyWithBalance]);
 
-  if (!data) return <Card>Loading…</Card>;
+  const openAccount = useCallback((row) => onNavigate?.('/ledgers/suppliers', { id: row.id, name: row.name }), [onNavigate]);
 
   return (
-    <div>
-      <PageHeader
-        title="Supplier Statements"
-        actions={
-          <ExportButtons rows={data.rows} columns={data.columns} reportType="suppliers" filters={filters} suggestedName="supplier-statements.csv" />
-        }
-      />
-
-      <Card style={{ marginTop: theme.spacing.md, marginBottom: theme.spacing.md }}>
-        <Checkbox label="Only show suppliers with a balance owed" checked={onlyWithBalance} onChange={(e) => setOnlyWithBalance(e.target.checked)} />
-      </Card>
-
-      <ReportSummaryCards items={data.summary} />
-
-      <Card style={{ padding: 0, marginTop: theme.spacing.md }}>
-        <ReportTable columns={data.columns} rows={data.rows} />
-      </Card>
-    </div>
+    <ReportShell
+      intro="Who you owe money to."
+      filters={
+        <Checkbox
+          label="Only suppliers I owe"
+          checked={onlyWithBalance}
+          onChange={(e) => setOnlyWithBalance(e.target.checked)}
+          style={{ marginTop: 0, height: '36px' }}
+        />
+      }
+      exportAction={
+        <ExportButtons rows={data?.rows || []} columns={data?.columns || []} reportType="suppliers" filters={filters} suggestedName="supplier-statements.csv" />
+      }
+      loading={loading}
+      error={error}
+      onRetry={retry}
+      isEmpty={!!data && data.rows.length === 0}
+      emptyHint={onlyWithBalance ? "You don't owe any supplier right now." : 'No suppliers yet.'}
+      summary={data && <StatementSummary data={data} party="supplier" />}
+      footnotes={['Balances include every purchase, payment and correction up to today.']}
+    >
+      {data && <StatementTable columns={data.columns} rows={data.rows} party="supplier" onRowClick={onNavigate ? openAccount : undefined} />}
+    </ReportShell>
   );
 }

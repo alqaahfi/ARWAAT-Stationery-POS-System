@@ -1,132 +1,192 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { SearchX } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import theme from '../../config/theme';
-import { Card, PageHeader, Button, Label, TextInput, Select, Banner } from '../../components/ui';
-import { RECURRENCE_OPTIONS } from '../../utils/expenseRecurrence';
+import glossary from '../../config/glossary';
+import { Button, Card, EmptyState, useConfirm, useToast } from '../../components/ui';
+import { FormSkeleton } from '../Parties/PartyParts';
+import { StickyActions } from '../Products/form/StickyActions';
+import { BasicsCard, LockedRepeatsCard, RepeatsCard, pageColumn, pageWrap } from './parts/ExpenseFormParts';
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-const RECURRENCE_PERIOD_NOUN = { daily: 'day', weekly: 'week', monthly: 'month', annually: 'year' };
+function focusField(id) {
+  requestAnimationFrame(() => {
+    const el = document.getElementById(id);
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el?.focus({ preventScroll: true });
+  });
+}
 
 // Route: /expenses/new (no expenseId) and /expenses/edit (expenseId from the
-// All Expenses list's Edit action) — same form either way. Recurrence can
-// only be chosen when creating: an existing occurrence's date/amount/payee
-// can be corrected, but its recurring series is fixed once started (stop it
-// from the All Expenses list instead of changing it here).
+// Expenses list) — same form either way. Recurrence can only be chosen when
+// creating: an existing occurrence's date/amount/payee can be corrected, but
+// its recurring series is fixed once started (it can only be stopped).
 export default function ExpenseForm({ expenseId, onDone, onCancel }) {
   const { user } = useAuth();
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [payee, setPayee] = useState('');
   const [expenseDate, setExpenseDate] = useState(todayIso());
   const [recurrence, setRecurrence] = useState('one_time');
-  const [existingRecurrenceLabel, setExistingRecurrenceLabel] = useState('');
-  const [error, setError] = useState('');
+  const [recurringId, setRecurringId] = useState(null);
+  const [stopped, setStopped] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(!!expenseId);
+  const [notFound, setNotFound] = useState(false);
+  const savingRef = useRef(false);
 
   useEffect(() => {
     if (!expenseId) return;
-    window.api.expenses.getById({ id: expenseId }).then((row) => {
-      if (row) {
+    window.api.expenses
+      .getById({ id: expenseId })
+      .then((row) => {
+        if (!row) {
+          setNotFound(true);
+          return;
+        }
         setDescription(row.description);
         setAmount(String(row.amount));
         setPayee(row.payee || '');
         setExpenseDate((row.expense_date || '').slice(0, 10) || todayIso());
         setRecurrence(row.recurrence || 'one_time');
-        const opt = RECURRENCE_OPTIONS.find((o) => o.value === row.recurrence);
-        setExistingRecurrenceLabel(opt ? opt.label : 'One-time');
-      }
-      setLoading(false);
-    });
+        setRecurringId(row.recurring_expense_id || null);
+      })
+      .catch(() => setNotFound(true))
+      .finally(() => setLoading(false));
   }, [expenseId]);
 
-  async function handleSave() {
-    setError('');
-    if (!description.trim()) return setError('Description is required.');
+  function validate() {
+    const next = {};
     const amt = Number(amount);
-    if (!amt || amt <= 0) return setError('Enter an amount greater than zero.');
-
-    setSaving(true);
-    const payload = {
-      description: description.trim(),
-      amount: amt,
-      payee: payee.trim() || null,
-      expenseDate,
-    };
-    const res = expenseId
-      ? await window.api.expenses.update({ id: expenseId, ...payload })
-      : await window.api.expenses.create({ ...payload, recurrence, paidBy: user.id });
-    setSaving(false);
-
-    if (!res.success) {
-      setError(res.reason || 'Could not save expense.');
-      return;
-    }
-    onDone();
+    if (!amt || amt <= 0) next.amount = 'Enter an amount greater than zero.';
+    if (!description.trim()) next.description = 'Description is required.';
+    setErrors(next);
+    if (next.amount) focusField('expense-amount');
+    else if (next.description) focusField('expense-description');
+    return !next.amount && !next.description;
   }
 
-  if (loading) return <Card>Loading…</Card>;
+  async function handleSave() {
+    if (savingRef.current) return;
+    if (!validate()) {
+      toast.error('Please check the highlighted fields');
+      return;
+    }
+
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      const payload = {
+        description: description.trim(),
+        amount: Number(amount),
+        payee: payee.trim() || null,
+        expenseDate,
+      };
+      const res = expenseId
+        ? await window.api.expenses.update({ id: expenseId, ...payload })
+        : await window.api.expenses.create({ ...payload, recurrence, paidBy: user.id });
+
+      if (!res.success) {
+        const reason = res.reason || 'Could not save expense.';
+        if (/description/i.test(reason)) {
+          setErrors({ description: reason });
+          focusField('expense-description');
+        } else if (/amount/i.test(reason)) {
+          setErrors({ amount: reason });
+          focusField('expense-amount');
+        }
+        toast.error(reason);
+        return;
+      }
+      toast.success('Expense saved');
+      onDone();
+    } catch {
+      toast.error('Could not save expense. Please try again.');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  async function handleStopRepeating() {
+    const ok = await confirm({
+      title: 'Stop repeating this expense?',
+      message: 'Expenses already added will stay. No new ones will be added.',
+      confirmLabel: glossary.stopRepeating,
+      destructive: true,
+    });
+    if (!ok) return;
+    setStopping(true);
+    try {
+      const res = await window.api.expenses.stopRecurrence({ id: expenseId });
+      if (!res.success) {
+        toast.error(res.reason || 'Could not stop repeating.');
+        return;
+      }
+      setStopped(true);
+      toast.success('This expense no longer repeats');
+    } catch {
+      toast.error('Could not stop repeating.');
+    } finally {
+      setStopping(false);
+    }
+  }
+
+  if (loading) return <FormSkeleton />;
+
+  if (notFound) {
+    return (
+      <Card padding="0" style={{ maxWidth: '560px', margin: '0 auto' }}>
+        <EmptyState
+          icon={SearchX}
+          title="This expense couldn't be found"
+          message="It may have been deleted."
+          action={<Button onClick={onCancel}>Back to expenses</Button>}
+          style={{ padding: '48px 24px' }}
+        />
+      </Card>
+    );
+  }
+
+  const clearError = (key) => errors[key] && setErrors((e) => ({ ...e, [key]: undefined }));
 
   return (
-    <div>
-      <PageHeader title={expenseId ? 'Edit Expense' : 'Add Expense'} />
-
-      <Card style={{ maxWidth: '520px' }}>
-        <Label>Description</Label>
-        <TextInput
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="e.g. Electricity bill for August"
-          autoFocus
+    <div style={pageWrap}>
+      <div style={pageColumn}>
+        <BasicsCard
+          amount={amount}
+          onAmount={(v) => {
+            setAmount(v);
+            clearError('amount');
+          }}
+          amountError={errors.amount}
+          expenseDate={expenseDate}
+          onDate={setExpenseDate}
+          payee={payee}
+          onPayee={setPayee}
+          description={description}
+          onDescription={(v) => {
+            setDescription(v);
+            clearError('description');
+          }}
+          descriptionError={errors.description}
+          isEdit={!!expenseId}
+          repeating={!expenseId && recurrence !== 'one_time'}
         />
-
-        <Label>Payee (optional)</Label>
-        <TextInput value={payee} onChange={(e) => setPayee(e.target.value)} placeholder="e.g. K-Electric" />
-
-        <Label>Amount</Label>
-        <TextInput type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
-
-        <Label>{expenseId ? 'Date' : 'Date (first occurrence, if recurring)'}</Label>
-        <TextInput type="date" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} />
-
-        <Label>Recurrence</Label>
         {expenseId ? (
-          <TextInput value={existingRecurrenceLabel} disabled />
+          <LockedRepeatsCard recurrence={recurrence} canStop={!!recurringId} stopped={stopped} stopping={stopping} onStop={handleStopRepeating} />
         ) : (
-          <Select value={recurrence} onChange={(e) => setRecurrence(e.target.value)}>
-            {RECURRENCE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
+          <RepeatsCard recurrence={recurrence} onRecurrence={setRecurrence} />
         )}
-        {!expenseId && recurrence !== 'one_time' && (
-          <div style={styles.hint}>
-            An expense will be recorded automatically on this date, and again every {RECURRENCE_PERIOD_NOUN[recurrence]}{' '}
-            after it, until you stop the recurrence from the All Expenses list.
-          </div>
-        )}
-
-        <Banner>{error}</Banner>
-
-        <div style={{ display: 'flex', gap: theme.spacing.sm, marginTop: theme.spacing.lg }}>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save Expense'}
-          </Button>
-          <Button variant="ghost" onClick={onCancel}>
-            Cancel
-          </Button>
-        </div>
-      </Card>
+      </div>
+      <StickyActions onCancel={onCancel} onSave={handleSave} saving={saving} saveLabel={expenseId ? 'Save changes' : 'Save expense'} />
     </div>
   );
 }
-
-const styles = {
-  hint: { marginTop: '6px', fontSize: theme.font.sizeXs, color: theme.colors.textSecondary },
-};

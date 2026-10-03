@@ -1,22 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import theme from '../../config/theme';
-import { Card, PageHeader, Label, TextInput, Checkbox, Button, Banner, HelperText, tableStyles, Tr } from '../../components/ui';
-
-// Local filesystem paths need the file:// scheme (and a third slash on
-// Windows) to load as a src.
-function toFileUrl(p) {
-  if (!p) return null;
-  const normalized = p.replace(/\\/g, '/');
-  return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`;
-}
+import { Banner, useConfirm, useToast } from '../../components/ui';
+import { LoadError, RestrictedNotice } from '../Parties/PartyParts';
+import { PageIntro, settingsColumn } from './parts/SettingsParts';
+import {
+  LetterheadCard,
+  LetterheadFormModal,
+  LetterheadSkeletons,
+  NoLetterheads,
+  UploadButton,
+  letterheadGrid,
+} from './parts/LetterheadParts';
 
 const DEFAULT_MARGIN_TOP_MM = 40;
 const DEFAULT_MARGIN_BOTTOM_MM = 25;
 
-// One page: the letterhead list and the add/edit form live side by side —
-// no separate route for "Add Letterhead", no modal.
-//
+// "C:\...\letterheads\1712345678_Shop Header.pdf" -> "Shop Header"
+function nameFromPath(p = '') {
+  const base = p.split(/[\\/]/).pop() || '';
+  return base.replace(/^\d+_/, '').replace(/\.pdf$/i, '');
+}
+
 // A letterhead is a PDF page the admin designs and uploads themselves (their
 // own pre-printed A4 template, logo, borders, whatever they want) — every
 // A4 sale invoice is stamped onto a fresh copy of that exact page at print
@@ -25,49 +29,80 @@ const DEFAULT_MARGIN_BOTTOM_MM = 25;
 // whatever artwork already occupies those areas on the template.
 export default function Letterheads() {
   const { user } = useAuth();
+  const toast = useToast();
+  const confirm = useConfirm();
+
   const [letterheads, setLetterheads] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [editingId, setEditingId] = useState(null); // null | 'new' | <id>
-  const [name, setName] = useState('');
-  const [isDefault, setIsDefault] = useState(false);
-  const [marginTopMm, setMarginTopMm] = useState(DEFAULT_MARGIN_TOP_MM);
-  const [marginBottomMm, setMarginBottomMm] = useState(DEFAULT_MARGIN_BOTTOM_MM);
+  const [form, setForm] = useState(null);
   const [existingPdfPath, setExistingPdfPath] = useState(null);
   const [pickedPdfPath, setPickedPdfPath] = useState(null);
   const [picking, setPicking] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [listError, setListError] = useState('');
+  const [busyId, setBusyId] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoadFailed(false);
+    try {
+      const rows = await window.api.letterheads.list();
+      setLetterheads(rows || []);
+    } catch {
+      setLoadFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
-  async function load() {
-    const rows = await window.api.letterheads.list();
-    setLetterheads(rows);
+  async function pickPdf() {
+    setPicking(true);
+    try {
+      const res = await window.api.letterheads.pickPdf();
+      return res.canceled ? null : res.pdfTemplatePath;
+    } finally {
+      setPicking(false);
+    }
   }
 
-  function startNew() {
+  // Upload: pick the file first, then fill in the details.
+  async function handleUpload() {
+    setListError('');
+    let path;
+    try {
+      path = await pickPdf();
+    } catch {
+      setListError('Could not open that PDF. Please try again.');
+      return;
+    }
+    if (!path) return;
     setEditingId('new');
-    setName('');
-    // Pre-checked for the very first letterhead — nothing else it could
-    // mean, and the backend forces it true anyway; reflecting that here just
-    // keeps the checkbox honest instead of showing unchecked next to what
-    // will actually be saved as the default.
-    setIsDefault(letterheads.length === 0);
-    setMarginTopMm(DEFAULT_MARGIN_TOP_MM);
-    setMarginBottomMm(DEFAULT_MARGIN_BOTTOM_MM);
+    setForm({
+      name: nameFromPath(path),
+      // The very first letterhead is always the default (the backend forces it too).
+      isDefault: letterheads.length === 0,
+      marginTopMm: DEFAULT_MARGIN_TOP_MM,
+      marginBottomMm: DEFAULT_MARGIN_BOTTOM_MM,
+    });
     setExistingPdfPath(null);
-    setPickedPdfPath(null);
+    setPickedPdfPath(path);
     setError('');
   }
 
   function startEdit(row) {
     setEditingId(row.id);
-    setName(row.name);
-    setIsDefault(!!row.is_default);
-    setMarginTopMm(row.content_margin_top_mm ?? DEFAULT_MARGIN_TOP_MM);
-    setMarginBottomMm(row.content_margin_bottom_mm ?? DEFAULT_MARGIN_BOTTOM_MM);
+    setForm({
+      name: row.name,
+      isDefault: !!row.is_default,
+      marginTopMm: row.content_margin_top_mm ?? DEFAULT_MARGIN_TOP_MM,
+      marginBottomMm: row.content_margin_bottom_mm ?? DEFAULT_MARGIN_BOTTOM_MM,
+    });
     setExistingPdfPath(row.pdf_template_path);
     setPickedPdfPath(null);
     setError('');
@@ -75,184 +110,145 @@ export default function Letterheads() {
 
   function cancelEdit() {
     setEditingId(null);
+    setForm(null);
     setError('');
   }
 
-  async function handlePickPdf() {
-    setPicking(true);
-    const res = await window.api.letterheads.pickPdf();
-    setPicking(false);
-    if (res.canceled) return;
-    setPickedPdfPath(res.pdfTemplatePath);
+  async function handleChangePdf() {
+    try {
+      const path = await pickPdf();
+      if (path) setPickedPdfPath(path);
+    } catch {
+      setError('Could not open that PDF. Please try again.');
+    }
   }
 
   async function handleSave() {
     setError('');
-    if (!name.trim()) return setError('Name is required.');
+    if (!form.name.trim()) return setError('Name is required.');
 
     const payload = {
-      name: name.trim(),
+      name: form.name.trim(),
       pdfTemplatePath: pickedPdfPath,
-      contentMarginTopMm: Number(marginTopMm) || DEFAULT_MARGIN_TOP_MM,
-      contentMarginBottomMm: Number(marginBottomMm) || DEFAULT_MARGIN_BOTTOM_MM,
-      isDefault,
+      contentMarginTopMm: Number(form.marginTopMm) || DEFAULT_MARGIN_TOP_MM,
+      contentMarginBottomMm: Number(form.marginBottomMm) || DEFAULT_MARGIN_BOTTOM_MM,
+      isDefault: form.isDefault,
     };
 
     setSaving(true);
-    const res =
-      editingId === 'new'
-        ? await window.api.letterheads.create(payload)
-        : await window.api.letterheads.update({ id: editingId, ...payload });
-    setSaving(false);
-
-    if (!res.success) {
-      setError(res.reason || 'Could not save letterhead.');
-      return;
+    try {
+      const res =
+        editingId === 'new'
+          ? await window.api.letterheads.create(payload)
+          : await window.api.letterheads.update({ id: editingId, ...payload });
+      if (!res.success) {
+        setError(res.reason || 'Could not save letterhead.');
+        return;
+      }
+      toast.success('Letterhead saved');
+      cancelEdit();
+      load();
+    } catch {
+      setError('Could not save letterhead. Please try again.');
+    } finally {
+      setSaving(false);
     }
-    cancelEdit();
-    load();
+  }
+
+  // Same update call the edit sheet makes, with is_default switched on.
+  async function handleSetDefault(l) {
+    setListError('');
+    setBusyId(l.id);
+    try {
+      const res = await window.api.letterheads.update({
+        id: l.id,
+        name: l.name,
+        pdfTemplatePath: null,
+        contentMarginTopMm: l.content_margin_top_mm ?? DEFAULT_MARGIN_TOP_MM,
+        contentMarginBottomMm: l.content_margin_bottom_mm ?? DEFAULT_MARGIN_BOTTOM_MM,
+        isDefault: true,
+      });
+      if (!res.success) setListError(res.reason || 'Could not change the default letterhead.');
+      else toast.success(`${l.name} is now the default`);
+      load();
+    } catch {
+      setListError('Could not change the default letterhead.');
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function handleDelete(l) {
     setListError('');
-    const confirmed = window.confirm(`Delete "${l.name}"? This cannot be undone.`);
-    if (!confirmed) return;
+    const ok = await confirm({
+      title: 'Delete this letterhead?',
+      message: 'Invoices using it will fall back to the shop default.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!ok) return;
 
-    const res = await window.api.letterheads.delete({ id: l.id });
-    if (!res.success) {
-      setListError(res.reason || 'Could not delete letterhead.');
-      return;
+    setBusyId(l.id);
+    try {
+      const res = await window.api.letterheads.delete({ id: l.id });
+      if (!res.success) {
+        setListError(res.reason || 'Could not delete letterhead.');
+        return;
+      }
+      toast.success('Letterhead deleted');
+      if (editingId === l.id) cancelEdit();
+      load();
+    } catch {
+      setListError('Could not delete letterhead.');
+    } finally {
+      setBusyId(null);
     }
-    if (editingId === l.id) cancelEdit();
-    load();
   }
 
-  const previewPath = pickedPdfPath || existingPdfPath;
+  // Hard role gate — all hooks above run unconditionally every render.
+  if (user.role !== 'admin') return <RestrictedNotice />;
 
-  // Hard role gate, same as the rest of Settings — all hooks above run
-  // unconditionally every render; this check only decides the returned JSX.
-  if (user.role !== 'admin') {
-    return (
-      <Card style={{ padding: '48px', textAlign: 'center' }}>
-        <h3 style={{ margin: 0, color: theme.colors.textPrimary }}>This section is restricted to Admin accounts</h3>
-      </Card>
+  let list;
+  if (loading) list = <LetterheadSkeletons />;
+  else if (loadFailed) list = <LoadError message="Letterheads couldn't be loaded." onRetry={load} />;
+  else if (!letterheads.length) list = <NoLetterheads />;
+  else
+    list = (
+      <div style={letterheadGrid}>
+        {letterheads.map((l) => (
+          <LetterheadCard
+            key={l.id}
+            letterhead={l}
+            busy={busyId === l.id}
+            onEdit={() => startEdit(l)}
+            onSetDefault={() => handleSetDefault(l)}
+            onDelete={() => handleDelete(l)}
+          />
+        ))}
+      </div>
     );
-  }
 
   return (
-    <div>
-      <PageHeader title="Letterheads" actions={editingId === null && <Button onClick={startNew}>+ Add Letterhead</Button>} />
+    <div style={{ ...settingsColumn, maxWidth: '960px' }}>
+      <PageIntro>PDF pages your A4 invoices are printed on — your own logo, address and borders.</PageIntro>
+      <UploadButton onClick={handleUpload} busy={picking && editingId === null} />
+      <Banner style={{ marginTop: 0 }}>{listError}</Banner>
+      {list}
 
-      {editingId !== null && (
-        <Card style={{ marginBottom: theme.spacing.lg, maxWidth: '640px' }}>
-          <h4 style={{ margin: 0, color: theme.colors.textPrimary }}>{editingId === 'new' ? 'Add Letterhead' : 'Edit Letterhead'}</h4>
-
-          <Label>Name</Label>
-          <TextInput value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-
-          <Label>PDF Template (A4 page)</Label>
-          <div>
-            <Button variant="secondary" onClick={handlePickPdf} disabled={picking}>
-              {picking ? 'Choosing…' : previewPath ? 'Choose a Different PDF' : 'Choose PDF File'}
-            </Button>
-            <HelperText>Every A4 invoice is stamped onto a fresh copy of this exact page at print time.</HelperText>
-          </div>
-          {previewPath && (
-            <embed src={toFileUrl(previewPath)} type="application/pdf" style={styles.pdfPreview} />
-          )}
-
-          <div style={styles.marginRow}>
-            <div style={{ flex: 1 }}>
-              <Label>Content Top Margin (mm)</Label>
-              <TextInput type="number" min="0" value={marginTopMm} onChange={(e) => setMarginTopMm(e.target.value)} />
-              <HelperText>How far down the invoice content starts — clear whatever artwork sits at the top.</HelperText>
-            </div>
-            <div style={{ flex: 1 }}>
-              <Label>Content Bottom Margin (mm)</Label>
-              <TextInput type="number" min="0" value={marginBottomMm} onChange={(e) => setMarginBottomMm(e.target.value)} />
-              <HelperText>How much space to leave clear at the bottom of the page.</HelperText>
-            </div>
-          </div>
-
-          <Checkbox label="Set as default" checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />
-
-          <Banner>{error}</Banner>
-
-          <div style={{ display: 'flex', gap: theme.spacing.sm, marginTop: theme.spacing.lg }}>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving…' : 'Save'}
-            </Button>
-            <Button variant="ghost" onClick={cancelEdit}>
-              Cancel
-            </Button>
-          </div>
-        </Card>
+      {editingId !== null && form && (
+        <LetterheadFormModal
+          isNew={editingId === 'new'}
+          form={form}
+          onField={(key, value) => setForm((f) => ({ ...f, [key]: value }))}
+          previewPath={pickedPdfPath || existingPdfPath}
+          onPickPdf={handleChangePdf}
+          picking={picking}
+          error={error}
+          saving={saving}
+          onSave={handleSave}
+          onClose={cancelEdit}
+        />
       )}
-
-      <Banner>{listError}</Banner>
-
-      <Card style={{ padding: 0 }}>
-        <div style={tableStyles.scroll}>
-          <table style={tableStyles.table}>
-            <thead>
-              <tr>
-                <th style={tableStyles.th}>Name</th>
-                <th style={tableStyles.th}>Margins (top / bottom)</th>
-                <th style={tableStyles.th}></th>
-                <th style={tableStyles.th}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {letterheads.map((l) => (
-                <Tr key={l.id}>
-                  <td style={tableStyles.td}>{l.name}</td>
-                  <td style={{ ...tableStyles.td, color: theme.colors.textSecondary }}>
-                    {l.content_margin_top_mm}mm / {l.content_margin_bottom_mm}mm
-                  </td>
-                  <td style={tableStyles.td}>{!!l.is_default && <span style={styles.defaultBadge}>Default</span>}</td>
-                  <td style={tableStyles.td}>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <Button variant="ghost" style={{ padding: '5px 10px', fontSize: theme.font.sizeXs }} onClick={() => startEdit(l)}>
-                        Edit
-                      </Button>
-                      <Button variant="danger" style={{ padding: '5px 10px', fontSize: theme.font.sizeXs }} onClick={() => handleDelete(l)}>
-                        Delete
-                      </Button>
-                    </div>
-                  </td>
-                </Tr>
-              ))}
-              {letterheads.length === 0 && (
-                <tr>
-                  <td colSpan={4} style={tableStyles.emptyState}>
-                    No letterheads yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
     </div>
   );
 }
-
-const styles = {
-  pdfPreview: {
-    display: 'block',
-    width: '100%',
-    height: '360px',
-    marginTop: theme.spacing.sm,
-    border: `1px solid ${theme.colors.border}`,
-    borderRadius: theme.radius.sm,
-  },
-  marginRow: { display: 'flex', gap: theme.spacing.md },
-  defaultBadge: {
-    display: 'inline-block',
-    padding: '2px 8px',
-    borderRadius: theme.radius.sm,
-    backgroundColor: theme.colors.successBackground,
-    color: theme.colors.success,
-    fontSize: theme.font.sizeXs,
-  },
-};

@@ -1,6 +1,7 @@
 const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
 const { getSupplierBalance, getBalancesForSuppliers } = require('../ledger/balanceEngine');
+const { getAdjustmentRows } = require('../ledger/adjustmentRows');
 
 // list() intentionally shows both active and inactive suppliers (with an
 // Active toggle in the UI), same as the Customers module — no is_active
@@ -105,6 +106,7 @@ function getLedger(supplierId) {
       "SELECT id, amount, payment_method, note, created_at FROM payments WHERE party_type = 'supplier' AND party_id = ? ORDER BY created_at"
     )
     .all(supplierId);
+  const adjustments = getAdjustmentRows(db, 'supplier', supplierId);
 
   const transactions = [
     ...purchases.map((p) => ({
@@ -125,6 +127,7 @@ function getLedger(supplierId) {
       credit: p.amount,
       sortKey: `${p.created_at}_1_${p.id}`,
     })),
+    ...adjustments,
   ].sort((a, b) => (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0));
 
   let running = supplier.opening_balance;
@@ -145,7 +148,9 @@ function getLedger(supplierId) {
       created_at: supplier.created_at,
     },
     transactions: withBalance,
-    balance: running,
+    // Headline balance comes from the balance engine so this page and every
+    // list agree; the running total above (corrections included) ends on it.
+    balance: getSupplierBalance(db, supplierId),
   };
 }
 

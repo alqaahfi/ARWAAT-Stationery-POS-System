@@ -1,79 +1,90 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import theme from '../../config/theme';
-import { Card, PageHeader, Label, TextInput, Button, Banner, HelperText } from '../../components/ui';
+import { useToast } from '../../components/ui';
+import { setCurrencySymbol } from '../../utils/format';
+import { StickyActions } from '../Products/form/StickyActions';
+import { LoadError, RestrictedNotice } from '../Parties/PartyParts';
+import { SettingsSkeleton, pageWrap, settingsColumn } from './parts/SettingsParts';
+import { PreferenceSections } from './parts/PreferencesParts';
+
+function fromSettings(s) {
+  return {
+    currencySymbol: s.currency_symbol || 'Rs.',
+    defaultLowStockAlert: String(s.default_low_stock_alert ?? ''),
+    defaultCashierDiscountCap: String(s.default_cashier_discount_cap ?? ''),
+  };
+}
 
 export default function Preferences() {
   const { user } = useAuth();
+  const toast = useToast();
 
-  const [currencySymbol, setCurrencySymbol] = useState('Rs.');
-  const [defaultLowStockAlert, setDefaultLowStockAlert] = useState('');
-  const [defaultCashierDiscountCap, setDefaultCashierDiscountCap] = useState('');
-  const [loaded, setLoaded] = useState(false);
+  const [values, setValues] = useState(null);
+  const [initial, setInitial] = useState(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState('');
 
-  useEffect(() => {
-    window.api.settings.getAll().then((s) => {
-      setCurrencySymbol(s.currency_symbol || 'Rs.');
-      setDefaultLowStockAlert(s.default_low_stock_alert ?? '');
-      setDefaultCashierDiscountCap(s.default_cashier_discount_cap ?? '');
-      setLoaded(true);
-    });
+  const load = useCallback(() => {
+    setLoadFailed(false);
+    window.api.settings
+      .getAll()
+      .then((s) => {
+        const v = fromSettings(s || {});
+        setValues(v);
+        setInitial(v);
+      })
+      .catch(() => setLoadFailed(true));
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  function handleChange(key, value) {
+    setValues((prev) => ({ ...prev, [key]: value }));
+  }
+
   async function handleSave() {
-    setError('');
-    setSaved(false);
     setSaving(true);
-    const res = await window.api.settings.setMany({
-      currency_symbol: currencySymbol.trim() || 'Rs.',
-      default_low_stock_alert: defaultLowStockAlert === '' ? '' : Number(defaultLowStockAlert) || 0,
-      default_cashier_discount_cap: defaultCashierDiscountCap === '' ? '' : Number(defaultCashierDiscountCap) || 0,
-    });
-    setSaving(false);
-
-    if (!res.success) {
-      setError(res.reason || 'Could not save preferences.');
-      return;
+    try {
+      const res = await window.api.settings.setMany({
+        currency_symbol: values.currencySymbol.trim() || 'Rs.',
+        default_low_stock_alert: values.defaultLowStockAlert === '' ? '' : Number(values.defaultLowStockAlert) || 0,
+        default_cashier_discount_cap: values.defaultCashierDiscountCap === '' ? '' : Number(values.defaultCashierDiscountCap) || 0,
+      });
+      if (!res.success) {
+        toast.error(res.reason || 'Could not save preferences.');
+        return;
+      }
+      setCurrencySymbol(values.currencySymbol);
+      setInitial(values);
+      toast.success('Preferences saved');
+    } catch {
+      toast.error('Could not save preferences. Please try again.');
+    } finally {
+      setSaving(false);
     }
-    setSaved(true);
   }
 
-  if (user.role !== 'admin') {
-    return (
-      <Card style={{ padding: '48px', textAlign: 'center' }}>
-        <h3 style={{ margin: 0, color: theme.colors.textPrimary }}>This section is restricted to Admin accounts</h3>
-      </Card>
-    );
-  }
+  if (user.role !== 'admin') return <RestrictedNotice />;
+  if (loadFailed) return <LoadError message="Preferences couldn't be loaded." onRetry={load} />;
+  if (!values) return <SettingsSkeleton />;
 
-  if (!loaded) return <Card>Loading…</Card>;
+  const dirty = JSON.stringify(values) !== JSON.stringify(initial);
 
   return (
-    <div>
-      <PageHeader title="App Preferences" />
-      <Card style={{ maxWidth: '480px' }}>
-        <Label>Currency Symbol</Label>
-        <TextInput value={currencySymbol} onChange={(e) => setCurrencySymbol(e.target.value)} style={{ maxWidth: '120px' }} />
-        <HelperText>Used throughout pricing displays, receipts, and invoices, e.g. "Rs." or "$".</HelperText>
-
-        <Label>Default Low Stock Alert</Label>
-        <TextInput type="number" value={defaultLowStockAlert} onChange={(e) => setDefaultLowStockAlert(e.target.value)} placeholder="0" />
-        <HelperText>Prefills the Min Stock Alert field when creating a new product. Doesn't change existing products.</HelperText>
-
-        <Label>Default Cashier Discount Cap (%)</Label>
-        <TextInput type="number" value={defaultCashierDiscountCap} onChange={(e) => setDefaultCashierDiscountCap(e.target.value)} placeholder="0" />
-        <HelperText>Used at checkout for any cashier who doesn't have an individual discount cap set on their own Cashiers &gt; Edit Cashier page.</HelperText>
-
-        <Banner>{error}</Banner>
-        {saved && !error && <div style={{ color: theme.colors.success, fontSize: theme.font.sizeSm, marginTop: theme.spacing.sm }}>Saved.</div>}
-
-        <Button onClick={handleSave} disabled={saving} style={{ marginTop: theme.spacing.lg }}>
-          {saving ? 'Saving…' : 'Save'}
-        </Button>
-      </Card>
+    <div style={pageWrap}>
+      <div style={settingsColumn}>
+        <PreferenceSections values={values} onChange={handleChange} />
+      </div>
+      <StickyActions
+        onCancel={() => setValues(initial)}
+        cancelLabel="Undo changes"
+        onSave={handleSave}
+        saving={saving}
+        saveLabel="Save preferences"
+        saveDisabled={!dirty}
+      />
     </div>
   );
 }

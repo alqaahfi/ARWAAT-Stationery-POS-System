@@ -5,9 +5,10 @@ import glossary from '../../config/glossary';
 import { Button, Card, EmptyState, Skeleton } from '../../components/ui';
 import { formatCurrency, formatDateOnly } from '../../utils/format';
 import { LoadError } from './PartyParts';
+import { returnNote } from '../Ledgers/parts/TransactionTimeline';
 
 const c = theme.colors;
-const TYPE_LABELS = { sale: 'Sale', payment: 'Payment', purchase: 'Purchase', adjustment: 'Correction', correction: 'Correction' };
+const TYPE_LABELS = { sale: 'Sale', payment: 'Payment', purchase: 'Purchase', adjustment: 'Correction', correction: 'Correction', return: 'Return' };
 
 function pretty(text) {
   const s = String(text || '').replace(/_/g, ' ').trim();
@@ -62,9 +63,25 @@ export function RecentActivityCard({ rows, loading, error, onRetry, onSeeAll }) 
   );
 }
 
+// Mirrors the account timeline: a correction shows its sign — an increase as
+// "+amount", a reduction as "−amount" in green — with the reason underneath.
+function amountText(row) {
+  if (row.type === 'adjustment') {
+    const reduces = (Number(row.credit) || 0) > 0;
+    return reduces
+      ? { text: `−${formatCurrency(row.credit)}`, color: c.greenText }
+      : { text: `+${formatCurrency(row.debit)}`, color: c.label };
+  }
+  if (row.type === 'payment') return { text: `− ${formatCurrency(row.credit)}`, color: c.greenText };
+  if (row.type === 'return') {
+    return (Number(row.credit) || 0) > 0 ? { text: `−${formatCurrency(row.credit)}`, color: c.greenText } : { text: '—', color: c.labelSecondary };
+  }
+  return { text: formatCurrency(row.debit || -row.credit), color: c.label };
+}
+
 const ActivityRow = memo(function ActivityRow({ row, first }) {
-  const isPayment = row.type === 'payment';
-  const amount = isPayment ? row.credit : row.debit || -row.credit;
+  const amount = amountText(row);
+  const note = row.type === 'adjustment' ? row.reason || row.note : row.type === 'return' ? returnNote(row) : row.note;
   return (
     <li
       style={{
@@ -81,13 +98,11 @@ const ActivityRow = memo(function ActivityRow({ row, first }) {
         <div style={{ ...theme.type.body, color: c.label, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{describe(row)}</div>
         <div style={{ ...theme.type.footnote, color: c.labelSecondary }}>
           {formatDateOnly(row.date)}
-          {row.note ? ` · ${row.note}` : ''}
+          {note ? ` · ${note}` : ''}
         </div>
       </div>
       <div style={{ textAlign: 'right', ...theme.font.numeric, whiteSpace: 'nowrap' }}>
-        <div style={{ ...theme.type.body, fontWeight: theme.font.weightMedium, color: isPayment ? c.greenText : c.label }}>
-          {isPayment ? `− ${formatCurrency(amount)}` : formatCurrency(amount)}
-        </div>
+        <div style={{ ...theme.type.body, fontWeight: theme.font.weightMedium, color: amount.color }}>{amount.text}</div>
         {row.runningBalance !== undefined && row.runningBalance !== null && (
           <div style={{ ...theme.type.footnote, color: c.labelSecondary }}>Balance {formatCurrency(row.runningBalance)}</div>
         )}

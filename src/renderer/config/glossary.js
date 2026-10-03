@@ -101,6 +101,15 @@ const glossary = {
   printers: 'Printers',
   backupRestore: 'Backup & Restore',
   license: 'License',
+  resetPassword: 'Reset Password',
+  stillSignedIn: 'Still signed in',
+  receiptPrinter: 'Receipt printer',
+  a4Printer: 'A4 printer',
+  computerId: 'Computer ID',
+  dangerZone: 'Danger Zone',
+  createBackup: 'Create a backup',
+  restoreBackup: 'Restore from a backup',
+  uploadLetterhead: 'Upload a letterhead (PDF)',
   signOut: 'Sign out',
   upToDate: 'Up to date',
   waitingToConnect: 'Waiting to connect',
@@ -110,6 +119,17 @@ const glossary = {
   supplierOwed: (amount) => `You owe ${amount}`,
   paidAdvance: (amount) => `Paid ${amount} in advance`,
   noBalance: 'No balance',
+
+  // Accounts
+  youOweSuppliers: 'You Owe Suppliers',
+  paidAheadToSuppliers: 'Paid Ahead to Suppliers',
+  addCorrection: 'Add Correction',
+  correction: 'Correction',
+  smallReceipt: 'Small receipt',
+  a4Receipt: 'A4 receipt',
+  noReceipt: 'No receipt',
+  customerPayment: 'Customer payment',
+  supplierPayment: 'Supplier payment',
 
   // Customers & Suppliers
   customer: 'Customer',
@@ -121,6 +141,60 @@ const glossary = {
   seeFullAccount: 'See full account',
   newPurchase: 'New Purchase',
   shopDefaultLetterhead: 'Shop default letterhead',
+
+  // Receive Payment & Expenses
+  recordPayment: 'Record payment',
+  nextCustomer: 'Next customer',
+  paidTo: 'Paid to',
+  justOnce: 'Just once',
+  stopRepeating: 'Stop repeating',
+  // Keyed by the stored recurrence values.
+  repeatEvery: { daily: 'Every day', weekly: 'Every week', monthly: 'Every month', annually: 'Every year' },
+  repeatPeriod: { daily: 'day', weekly: 'week', monthly: 'month', annually: 'year' },
+
+  // Sales History
+  salesHistory: 'Sales History',
+  paid: 'Paid',
+  notPaid: 'Not paid',
+  retail: 'Retail',
+  wholesale: 'Wholesale',
+  unpaidAtSale: 'Unpaid at time of sale',
+  a4Invoice: 'A4 invoice',
+  showDuesOnReceipt: 'Show outstanding balance on the receipt',
+  salesReport: 'Sales Report',
+  menu: 'Menu',
+
+  // Returns
+  returns: 'Returns',
+  returnItems: 'Return items',
+  newReturn: 'New Return',
+  addBackToStock: 'Add these items back to stock',
+  giveCashBack: 'Give cash back',
+  takeOffAccount: 'Take it off their account',
+  creditedToAccount: 'Credited to account',
+  returned: 'Returned',
+  partlyReturned: 'Partly returned',
+  // Keyed by the stored sale_returns.reason values.
+  returnReason: { wrong_item: 'Wrong item', faulty: 'Damaged or faulty', changed_mind: 'Changed their mind', other: 'Other' },
+
+  // Reports
+  allReports: 'All Reports',
+  reportsIntro: 'Pick a report. Each one answers a question about your shop.',
+  profitLossReport: 'Profit & Loss',
+  stockReport: 'Stock Report',
+  customerStatements: 'Customer Statements',
+  supplierStatements: 'Supplier Statements',
+  cashierPerformance: 'Cashier Performance',
+  expenseReport: 'Expense Report',
+  reportQuestion: {
+    sales: 'How much did I sell, and to whom?',
+    profitLoss: 'How much did I actually earn?',
+    stock: "What's on my shelves, and what is it worth?",
+    customers: 'Who owes me money?',
+    suppliers: 'Who do I owe money to?',
+    cashiers: 'How did each cashier do?',
+    expenses: 'Where did my money go?',
+  },
 };
 
 // Old wording -> new wording, for review in the Design Gallery.
@@ -161,6 +235,9 @@ export const glossaryChanges = [
   ['Walk-in', glossary.walkIn],
   ['Recurring Expense', `${glossary.repeats} (daily / weekly / monthly / yearly)`],
   ['Receipt Content', glossary.receiptHeaderFooter],
+  ['Payee', glossary.paidTo],
+  ['One-time', glossary.justOnce],
+  ['Stop Recurrence', glossary.stopRepeating],
 ];
 
 export default glossary;

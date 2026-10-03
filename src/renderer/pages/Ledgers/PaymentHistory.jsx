@@ -1,24 +1,28 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import theme from '../../config/theme';
-import { Card, PageHeader, Button, TextInput, Select, tableStyles, Tr } from '../../components/ui';
-import PrintChoice from '../../components/PrintChoice';
-import { formatCurrencyExact, formatDateTime } from '../../utils/format';
+import { Card, DataTable, useToast } from '../../components/ui';
+import { LoadError, RestrictedNotice } from '../Parties/PartyParts';
+import { PageIntro, TableCard, ledgerPage } from './parts/LedgerParts';
+import { PaymentsEmpty, PaymentsToolbar, paymentColumns } from './parts/PaymentsParts';
+import { openAccount } from './parts/ledgerUtils';
 
-// Route: /ledgers/payments. A unified log across both customer and supplier
-// payments — genuinely new, neither Customer Ledger nor Supplier Ledger shows
-// a combined view.
+// Route: /ledgers/payments. One log across customer and supplier payments,
+// with filters and receipt reprints.
 export default function PaymentHistory({ onNavigate }) {
   const { user } = useAuth();
+  const toast = useToast();
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [partyType, setPartyType] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [method, setMethod] = useState('');
   const [search, setSearch] = useState('');
-  const [reprintingId, setReprintingId] = useState(null);
+  const [menuId, setMenuId] = useState(null);
+  const debounceRef = useRef(null);
+  const requestRef = useRef(0);
 
   useEffect(() => {
     if (user.role !== 'admin') return;
@@ -26,17 +30,26 @@ export default function PaymentHistory({ onNavigate }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.role, partyType, dateFrom, dateTo, method]);
 
+  useEffect(() => () => clearTimeout(debounceRef.current), []);
+
   async function load(searchOverride) {
+    const req = ++requestRef.current;
     setLoading(true);
-    const data = await window.api.ledgers.getPaymentHistory({
-      partyType: partyType || null,
-      dateFrom: dateFrom || null,
-      dateTo: dateTo || null,
-      method: method || null,
-      search: (searchOverride !== undefined ? searchOverride : search) || null,
-    });
-    setRows(data);
-    setLoading(false);
+    setError(false);
+    try {
+      const data = await window.api.ledgers.getPaymentHistory({
+        partyType: partyType || null,
+        dateFrom: dateFrom || null,
+        dateTo: dateTo || null,
+        method: method || null,
+        search: (searchOverride !== undefined ? searchOverride : search) || null,
+      });
+      if (req !== requestRef.current) return;
+      setRows(data || []);
+    } catch {
+      if (req === requestRef.current) setError(true);
+    }
+    if (req === requestRef.current) setLoading(false);
   }
 
   function handleSearchChange(value) {
@@ -45,130 +58,72 @@ export default function PaymentHistory({ onNavigate }) {
     debounceRef.current = setTimeout(() => load(value), 250);
   }
 
-  function goToLedger(row) {
-    if (row.party_type === 'customer') onNavigate('/ledgers/customers', { id: row.party_id, name: row.party_name });
-    else onNavigate('/ledgers/suppliers', { id: row.party_id, name: row.party_name });
+  function clearFilters() {
+    clearTimeout(debounceRef.current);
+    setSearch('');
+    setPartyType('');
+    setMethod('');
+    setDateFrom('');
+    setDateTo('');
+    // Only the search box doesn't trigger a reload by itself.
+    if (!partyType && !method && !dateFrom && !dateTo) load('');
   }
 
-  if (user.role !== 'admin') {
-    return (
-      <Card style={{ padding: '48px', textAlign: 'center' }}>
-        <h3 style={{ margin: 0, color: theme.colors.textPrimary }}>This section is restricted to Admin accounts</h3>
-      </Card>
-    );
+  async function reprint(paymentId, format) {
+    try {
+      const res = await window.api.printing.printPaymentReceipt({ paymentId, format });
+      if (!res?.success && !res?.canceled) toast.error(res?.reason || "The receipt couldn't be printed.");
+    } catch {
+      toast.error("The receipt couldn't be printed.");
+    }
   }
+
+  const hasRecordedBy = rows.some((r) => r.recorded_by_name);
+  const rowIndex = useMemo(() => new Map(rows.map((r, i) => [r.id, i])), [rows]);
+  const columns = useMemo(
+    () => paymentColumns({ hasRecordedBy, menuId, onMenu: setMenuId, onPrint: reprint, rowIndex }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hasRecordedBy, menuId, rowIndex]
+  );
+
+  if (user.role !== 'admin') return <RestrictedNotice />;
+
+  const filtered = !!(search.trim() || partyType || method || dateFrom || dateTo);
 
   return (
-    <div>
-      <PageHeader title="Payment History" />
+    <div style={ledgerPage}>
+      <PageIntro>Every payment received from customers or paid to suppliers.</PageIntro>
 
-      <Card style={{ marginBottom: theme.spacing.md }}>
-        <div style={styles.filterRow}>
-          <TextInput
-            placeholder="Search party name…"
-            value={search}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            style={{ flex: 1, minWidth: '180px' }}
+      <PaymentsToolbar
+        search={search}
+        onSearch={handleSearchChange}
+        partyType={partyType}
+        onPartyType={setPartyType}
+        method={method}
+        onMethod={setMethod}
+        dateFrom={dateFrom}
+        onDateFrom={setDateFrom}
+        dateTo={dateTo}
+        onDateTo={setDateTo}
+      />
+
+      {error ? (
+        <Card>
+          <LoadError message="The payments couldn't be loaded." onRetry={() => load()} />
+        </Card>
+      ) : (
+        <TableCard>
+          <DataTable
+            columns={columns}
+            rows={rows}
+            loading={loading && !rows.length}
+            onRowClick={(r) => openAccount(onNavigate, r.party_type, r.party_id, r.party_name)}
+            emptyState={<PaymentsEmpty filtered={filtered} onClear={clearFilters} />}
+            // Room for the reprint menu below the first rows of a short list.
+            style={rows.length > 0 && rows.length < 4 ? { minHeight: '240px' } : undefined}
           />
-          <Select value={partyType} onChange={(e) => setPartyType(e.target.value)} style={{ width: '160px' }}>
-            <option value="">All Parties</option>
-            <option value="customer">Customer</option>
-            <option value="supplier">Supplier</option>
-          </Select>
-          <Select value={method} onChange={(e) => setMethod(e.target.value)} style={{ width: '150px' }}>
-            <option value="">All Methods</option>
-            <option value="cash">Cash</option>
-            <option value="bank">Bank</option>
-            <option value="other">Other</option>
-          </Select>
-          <TextInput type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={{ width: '160px' }} />
-          <TextInput type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ width: '160px' }} />
-        </div>
-      </Card>
-
-      <Card style={{ padding: 0 }}>
-        <div style={tableStyles.scroll}>
-          <table style={tableStyles.table}>
-            <thead>
-              <tr>
-                <th style={tableStyles.th}>Date</th>
-                <th style={tableStyles.th}>Party</th>
-                <th style={tableStyles.th}>Type</th>
-                <th style={{ ...tableStyles.th, textAlign: 'right' }}>Amount</th>
-                <th style={tableStyles.th}>Method</th>
-                <th style={tableStyles.th}>Linked Sale</th>
-                <th style={tableStyles.th}>Recorded By</th>
-                <th style={tableStyles.th}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <Tr key={r.id}>
-                  <td style={tableStyles.td} onClick={() => goToLedger(r)}>
-                    {formatDateTime(r.created_at)}
-                  </td>
-                  <td style={tableStyles.td} onClick={() => goToLedger(r)}>
-                    {r.party_name || '—'}
-                  </td>
-                  <td style={tableStyles.td} onClick={() => goToLedger(r)}>
-                    <span style={r.party_type === 'customer' ? styles.badgeCustomer : styles.badgeSupplier}>{r.party_type}</span>
-                  </td>
-                  <td style={{ ...tableStyles.td, textAlign: 'right', fontWeight: theme.font.weightMedium }} onClick={() => goToLedger(r)}>
-                    {formatCurrencyExact(r.amount)}
-                  </td>
-                  <td style={{ ...tableStyles.td, textTransform: 'capitalize' }} onClick={() => goToLedger(r)}>
-                    {r.payment_method}
-                  </td>
-                  <td style={tableStyles.td} onClick={() => goToLedger(r)}>
-                    {r.sale_invoice_no || 'Standalone'}
-                  </td>
-                  <td style={tableStyles.td} onClick={() => goToLedger(r)}>
-                    {r.recorded_by_name || '—'}
-                  </td>
-                  <td style={tableStyles.td} onClick={(e) => e.stopPropagation()}>
-                    {reprintingId === r.id ? (
-                      <PrintChoice paymentId={r.id} inline onDone={() => setReprintingId(null)} />
-                    ) : (
-                      <Button variant="ghost" style={{ padding: '5px 10px', fontSize: theme.font.sizeXs }} onClick={() => setReprintingId(r.id)}>
-                        Reprint Receipt
-                      </Button>
-                    )}
-                  </td>
-                </Tr>
-              ))}
-              {!loading && rows.length === 0 && (
-                <tr>
-                  <td colSpan={8} style={tableStyles.emptyState}>
-                    No payments found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+        </TableCard>
+      )}
     </div>
   );
 }
-
-const styles = {
-  filterRow: { display: 'flex', gap: theme.spacing.sm, flexWrap: 'wrap' },
-  badgeCustomer: {
-    display: 'inline-block',
-    padding: '2px 8px',
-    borderRadius: theme.radius.sm,
-    backgroundColor: theme.colors.infoBackground,
-    color: theme.colors.info,
-    fontSize: theme.font.sizeXs,
-    textTransform: 'capitalize',
-  },
-  badgeSupplier: {
-    display: 'inline-block',
-    padding: '2px 8px',
-    borderRadius: theme.radius.sm,
-    backgroundColor: theme.colors.warningBackground,
-    color: theme.colors.warning,
-    fontSize: theme.font.sizeXs,
-    textTransform: 'capitalize',
-  },
-};

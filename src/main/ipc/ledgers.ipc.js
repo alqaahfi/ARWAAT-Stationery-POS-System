@@ -103,7 +103,10 @@ function getLastActivityDate(db, partyType, partyId) {
     .prepare('SELECT MAX(created_at) AS d FROM ledger_adjustments WHERE party_type = ? AND party_id = ?')
     .get(partyType, partyId);
 
-  const dates = [otherRow.d, paymentRow.d, adjustmentRow.d].filter(Boolean);
+  const returnRow =
+    partyType === 'customer' ? db.prepare('SELECT MAX(created_at) AS d FROM sale_returns WHERE customer_id = ?').get(partyId) : { d: null };
+
+  const dates = [otherRow.d, paymentRow.d, adjustmentRow.d, returnRow.d].filter(Boolean);
   return dates.length ? dates.sort().slice(-1)[0] : null;
 }
 

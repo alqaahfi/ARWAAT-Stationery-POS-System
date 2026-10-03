@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, HandCoins } from 'lucide-react';
 import glossary from '../../../config/glossary';
 import { Badge, Button, Disclosure, Field, SegmentedControl, Select, TextInput, Textarea } from '../../../components/ui';
 import { PRICE_LEVELS, priceLevelLabel } from '../../../utils/priceLevel';
@@ -13,7 +13,7 @@ const TYPE_OPTIONS = [
   { value: 'wholesale', label: 'Wholesale' },
 ];
 
-export function CustomerHeader({ customer, balance, onOpenAccount }) {
+export function CustomerHeader({ customer, balance, onOpenAccount, onReceivePayment }) {
   return (
     <PartyHeader
       name={customer.name}
@@ -28,9 +28,14 @@ export function CustomerHeader({ customer, balance, onOpenAccount }) {
         </>
       }
       actions={
-        <Button icon={BookOpen} onClick={onOpenAccount}>
-          {glossary.openAccount}
-        </Button>
+        <>
+          <Button variant="plain" icon={BookOpen} onClick={onOpenAccount}>
+            {glossary.openAccount}
+          </Button>
+          <Button icon={HandCoins} onClick={onReceivePayment}>
+            {glossary.receivePayment}
+          </Button>
+        </>
       }
     />
   );

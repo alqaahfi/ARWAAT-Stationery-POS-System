@@ -1,6 +1,8 @@
 // Neither a customer's nor a supplier's running balance is ever stored
 // directly — both are always derived from opening_balance + their side of
-// the ledger - their payments + any manual ledger_adjustments. Customer and
+// the ledger - their payments + any manual ledger_adjustments. Customers
+// additionally net out returns: each return's total reduces what they owe,
+// and any cash handed back for it adds back (money out of the shop). Customer and
 // supplier balances are the same pattern (only the "other side" table
 // differs — sales vs. purchases), so both live together here rather than in
 // a customers-only file.
@@ -28,6 +30,24 @@ function getAdjustmentTotalsMap(db, partyType, partyIds) {
   return Object.fromEntries(rows.map((r) => [r.party_id, r.total]));
 }
 
+// Returns' net effect on a customer's balance: cash refunds − returns total
+// (≤ 0). Only returns tied to a named customer ever count.
+function getReturnsNet(db, customerId) {
+  return db
+    .prepare('SELECT COALESCE(SUM(cash_refund_amount - total_amount), 0) AS net FROM sale_returns WHERE customer_id = ?')
+    .get(customerId).net;
+}
+
+function getReturnsNetMap(db, customerIds, placeholders) {
+  const rows = db
+    .prepare(
+      `SELECT customer_id, COALESCE(SUM(cash_refund_amount - total_amount), 0) AS net FROM sale_returns
+       WHERE customer_id IN (${placeholders}) GROUP BY customer_id`
+    )
+    .all(...customerIds);
+  return Object.fromEntries(rows.map((r) => [r.customer_id, r.net]));
+}
+
 function getCustomerBalance(db, customerId) {
   const customer = db.prepare('SELECT opening_balance FROM customers WHERE id = ?').get(customerId);
   if (!customer) return 0;
@@ -40,7 +60,9 @@ function getCustomerBalance(db, customerId) {
     .get(customerId).total;
   const adjustmentsTotal = getAdjustmentsTotal(db, 'customer', customerId);
 
-  return customer.opening_balance + salesTotal - paymentsTotal + adjustmentsTotal;
+  const returnsNet = getReturnsNet(db, customerId);
+
+  return customer.opening_balance + salesTotal + returnsNet - paymentsTotal + adjustmentsTotal;
 }
 
 // Batch version for list views — one aggregate query per table (grouped by
@@ -65,10 +87,12 @@ function getBalancesForCustomers(db, customerIds) {
   const salesMap = Object.fromEntries(salesRows.map((r) => [r.customer_id, r.total]));
   const paymentMap = Object.fromEntries(paymentRows.map((r) => [r.party_id, r.total]));
   const adjustmentMap = getAdjustmentTotalsMap(db, 'customer', customerIds);
+  const returnsMap = getReturnsNetMap(db, customerIds, placeholders);
 
   const result = {};
   for (const c of openings) {
-    result[c.id] = c.opening_balance + (salesMap[c.id] || 0) - (paymentMap[c.id] || 0) + (adjustmentMap[c.id] || 0);
+    result[c.id] =
+      c.opening_balance + (salesMap[c.id] || 0) + (returnsMap[c.id] || 0) - (paymentMap[c.id] || 0) + (adjustmentMap[c.id] || 0);
   }
   return result;
 }

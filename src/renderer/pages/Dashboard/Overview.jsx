@@ -65,6 +65,7 @@ export default function Overview({ onNavigate }) {
   const loading = !summary;
   const s = summary || {};
   const salesCount = Number(s.todaySalesCount) || 0;
+  const returnedToday = Number(s.todayReturns) || 0;
   const lowCount = Number(s.lowStockCount) || 0;
 
   const tiles = [
@@ -72,7 +73,9 @@ export default function Overview({ onNavigate }) {
       label: glossary.salesToday,
       ...appIcons.sell,
       value: formatCurrency(s.todaySalesTotal),
-      footnote: salesCount ? `${formatCount(salesCount)} ${salesCount === 1 ? 'sale' : 'sales'}` : 'No sales yet today',
+      footnote:
+        (salesCount ? `${formatCount(salesCount)} ${salesCount === 1 ? 'sale' : 'sales'}` : 'No sales yet today') +
+        (returnedToday > 0 ? ` · ${formatCurrency(returnedToday)} returned` : ''),
       route: '/reports/sales',
     },
     {
@@ -126,7 +129,7 @@ export default function Overview({ onNavigate }) {
       <div style={{ ...styles.columns, gridTemplateColumns: narrow ? 'minmax(0, 1fr)' : 'minmax(0, 2fr) minmax(0, 1fr)' }}>
         <div style={styles.column}>
           <RevenueChartCard onNavigate={onNavigate} />
-          {!summaryError && <RecentSalesCard sales={s.recentSales} loading={loading} />}
+          {!summaryError && <RecentSalesCard sales={s.recentSales} loading={loading} onNavigate={onNavigate} />}
         </div>
         <div style={styles.column}>
           <NeedsAttentionCard onNavigate={onNavigate} />

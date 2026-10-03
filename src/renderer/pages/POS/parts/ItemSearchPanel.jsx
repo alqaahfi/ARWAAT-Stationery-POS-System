@@ -6,7 +6,8 @@ import { BigSearchInput, InlineMessage, PanelTitle, c, keepFocus } from './commo
 
 const LIST_ID = 'pos-item-list';
 const optId = (i) => `pos-item-opt-${i}`;
-const LOW_STOCK = 5;
+// Used only when a product has no warn-below value of its own.
+const DEFAULT_LOW_STOCK = 5;
 
 export default function ItemSearchPanel({
   inputRef,
@@ -87,7 +88,7 @@ const ResultRow = memo(function ResultRow({ group, idx, highlighted, activeSelec
           <div style={{ ...theme.type.headline, color: c.label }}>{group.productName}</div>
           {code && <div style={{ ...theme.type.footnote, color: c.labelSecondary }}>{code}</div>}
         </div>
-        <StockNote qty={type?.stockQty} unit={group.baseUnitName} />
+        <StockNote qty={type?.stockQty} unit={group.baseUnitName} limit={group.minStockAlert} />
       </div>
 
       <div style={styles.groups}>
@@ -127,14 +128,15 @@ const ResultRow = memo(function ResultRow({ group, idx, highlighted, activeSelec
   );
 });
 
-function StockNote({ qty, unit }) {
+function StockNote({ qty, unit, limit }) {
   const n = Number(qty) || 0;
+  const lowAt = Number(limit) > 0 ? Number(limit) : DEFAULT_LOW_STOCK;
   let color = c.labelSecondary;
   let text = `${formatCount(n)} ${unit || ''} in stock`;
   if (n <= 0) {
     color = c.redText;
     text = 'Out of stock';
-  } else if (n <= LOW_STOCK) {
+  } else if (n <= lowAt) {
     color = c.orangeText;
     text = `Only ${formatCount(n)} left`;
   }

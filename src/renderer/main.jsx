@@ -6,6 +6,7 @@ import PrintReport from './pages/Print/PrintReport.jsx';
 import PrintReceipt from './pages/Print/PrintReceipt.jsx';
 import PrintPaymentReceipt from './pages/Print/PrintPaymentReceipt.jsx';
 import PrintInvoice from './pages/Print/PrintInvoice.jsx';
+import { loadCurrencySymbol } from './utils/format';
 import { GlobalStyles, ToastProvider, ConfirmProvider } from './components/ui';
 
 // A hidden/standalone BrowserWindow used for PDF export, payment-receipt
@@ -37,7 +38,9 @@ function PrintRoot() {
   return <PrintReport reportType={params.get('reportType')} filters={JSON.parse(params.get('filters') || '{}')} />;
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(
+async function start() {
+  if (!isPrintMode) await loadCurrencySymbol();
+  ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <GlobalStyles />
     <ToastProvider>
@@ -45,3 +48,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     </ToastProvider>
   </React.StrictMode>
 );
+}
+
+start();

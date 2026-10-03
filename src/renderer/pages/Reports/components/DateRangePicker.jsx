@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useEffect, useId, useState } from 'react';
+import { Calendar, Check, ChevronDown } from 'lucide-react';
 import theme from '../../../config/theme';
+import { Button, Icon, Label, Menu, MenuDivider, MenuItem, Popover, TextInput } from '../../../components/ui';
 
 const PRESETS = [
   { key: 'today', label: 'Today' },
@@ -61,76 +63,143 @@ export function getDefaultRange() {
   return { preset: 'this_month', ...computeRange('this_month') };
 }
 
+function parseIso(iso) {
+  const [y, m, d] = String(iso || '').split('-').map(Number);
+  return y ? new Date(y, (m || 1) - 1, d || 1) : null;
+}
+
+// "1 Sep – 28 Sep" (years added only when they differ from this year / each other).
+export function formatRangeText(dateFrom, dateTo) {
+  const a = parseIso(dateFrom);
+  const b = parseIso(dateTo);
+  if (!a || !b) return 'Pick dates';
+  const thisYear = new Date().getFullYear();
+  const needYear = a.getFullYear() !== b.getFullYear() || b.getFullYear() !== thisYear;
+  const fmt = (d) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', ...(needYear ? { year: 'numeric' } : null) });
+  return dateFrom === dateTo ? fmt(a) : `${fmt(a)} – ${fmt(b)}`;
+}
+
 // Controlled — takes { preset, dateFrom, dateTo } and calls onChange with the
-// same shape. Doesn't fetch or own any report data itself.
+// same shape. Doesn't fetch or own any report data itself. Renders a compact
+// button ("This Month · 1 Sep – 28 Sep") that opens the presets + Custom.
 export default function DateRangePicker({ value, onChange }) {
-  function selectPreset(key) {
-    if (key === 'custom') {
-      onChange({ preset: 'custom', dateFrom: value.dateFrom, dateTo: value.dateTo });
-      return;
+  const [open, setOpen] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
+  const idBase = useId();
+  const [draft, setDraft] = useState({ dateFrom: value.dateFrom, dateTo: value.dateTo });
+
+  useEffect(() => {
+    if (open) {
+      setDraft({ dateFrom: value.dateFrom, dateTo: value.dateTo });
+      setCustomOpen(value.preset === 'custom');
     }
+  }, [open, value.preset, value.dateFrom, value.dateTo]);
+
+  const current = PRESETS.find((p) => p.key === value.preset);
+  const rangeText = formatRangeText(value.dateFrom, value.dateTo);
+  const buttonText = value.preset && value.preset !== 'custom' && current ? `${current.label} · ${rangeText}` : rangeText;
+
+  function selectPreset(key, close) {
     onChange({ preset: key, ...computeRange(key) });
+    close();
+  }
+
+  const draftValid = draft.dateFrom && draft.dateTo && draft.dateFrom <= draft.dateTo;
+
+  function applyCustom(close) {
+    if (!draftValid) return;
+    onChange({ preset: 'custom', dateFrom: draft.dateFrom, dateTo: draft.dateTo });
+    close();
   }
 
   return (
-    <div>
-      <div style={styles.presetRow}>
-        {PRESETS.map((p) => (
-          <button
-            key={p.key}
-            style={{ ...styles.presetBtn, ...(value.preset === p.key ? styles.presetBtnActive : {}) }}
-            onClick={() => selectPreset(p.key)}
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
-
-      {value.preset === 'custom' && (
-        <div style={styles.customRow}>
-          <input
-            type="date"
-            value={value.dateFrom}
-            onChange={(e) => onChange({ ...value, dateFrom: e.target.value })}
-            style={styles.dateInput}
-          />
-          <span style={{ color: theme.colors.textSecondary, fontSize: theme.font.sizeSm }}>to</span>
-          <input
-            type="date"
-            value={value.dateTo}
-            onChange={(e) => onChange({ ...value, dateTo: e.target.value })}
-            style={styles.dateInput}
-          />
-        </div>
+    <Popover
+      open={open}
+      onClose={() => setOpen(false)}
+      align="start"
+      width={280}
+      anchor={
+        <Button
+          variant="secondary"
+          icon={Calendar}
+          iconRight={ChevronDown}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label={`Date range: ${buttonText}`}
+          onClick={() => setOpen((o) => !o)}
+        >
+          {buttonText}
+        </Button>
+      }
+    >
+      {(close) => (
+        <>
+          <Menu label="Date range" autoFocus={!customOpen}>
+            {PRESETS.filter((p) => p.key !== 'custom').map((p) => (
+              <MenuItem
+                key={p.key}
+                label={p.label}
+                value={formatRangeText(computeRange(p.key).dateFrom, computeRange(p.key).dateTo)}
+                badge={value.preset === p.key ? <Icon icon={Check} size={16} style={{ color: theme.colors.accent }} /> : null}
+                onClick={() => selectPreset(p.key, close)}
+              />
+            ))}
+            <MenuDivider />
+            <MenuItem
+              label="Custom Range"
+              badge={value.preset === 'custom' ? <Icon icon={Check} size={16} style={{ color: theme.colors.accent }} /> : null}
+              aria-expanded={customOpen}
+              onClick={() => setCustomOpen((v) => !v)}
+            />
+          </Menu>
+          {customOpen && (
+            <form
+              style={styles.custom}
+              onSubmit={(e) => {
+                e.preventDefault();
+                applyCustom(close);
+              }}
+            >
+              <div style={styles.customRow}>
+                <div style={{ flex: 1 }}>
+                  <Label htmlFor={`${idBase}-from`} style={styles.label}>
+                    From
+                  </Label>
+                  <TextInput
+                    id={`${idBase}-from`}
+                    type="date"
+                    autoFocus
+                    value={draft.dateFrom}
+                    max={draft.dateTo || undefined}
+                    onChange={(e) => setDraft((d) => ({ ...d, dateFrom: e.target.value }))}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <Label htmlFor={`${idBase}-to`} style={styles.label}>
+                    To
+                  </Label>
+                  <TextInput
+                    id={`${idBase}-to`}
+                    type="date"
+                    value={draft.dateTo}
+                    min={draft.dateFrom || undefined}
+                    onChange={(e) => setDraft((d) => ({ ...d, dateTo: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <Button type="submit" size="sm" fullWidth disabled={!draftValid} style={{ marginTop: theme.spacing.sm }}>
+                Apply
+              </Button>
+            </form>
+          )}
+        </>
       )}
-    </div>
+    </Popover>
   );
 }
 
 const styles = {
-  presetRow: { display: 'flex', flexWrap: 'wrap', gap: '6px' },
-  presetBtn: {
-    padding: '7px 12px',
-    borderRadius: theme.radius.md,
-    border: `1px solid ${theme.colors.border}`,
-    backgroundColor: theme.colors.cardBackground,
-    color: theme.colors.textSecondary,
-    fontSize: theme.font.sizeSm,
-    cursor: 'pointer',
-    fontFamily: theme.font.family,
-  },
-  presetBtnActive: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
-    color: theme.colors.primaryText,
-  },
-  customRow: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: theme.spacing.sm },
-  dateInput: {
-    padding: '7px 10px',
-    borderRadius: theme.radius.sm,
-    border: `1px solid ${theme.colors.border}`,
-    fontSize: theme.font.sizeSm,
-    fontFamily: theme.font.family,
-    color: theme.colors.textPrimary,
-  },
+  custom: { padding: '8px 8px 4px' },
+  customRow: { display: 'flex', flexDirection: 'column', gap: theme.spacing.sm },
+  label: { marginTop: 0, marginBottom: '4px' },
 };

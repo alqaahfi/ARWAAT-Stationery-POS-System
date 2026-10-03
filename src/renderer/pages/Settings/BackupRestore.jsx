@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import theme from '../../config/theme';
-import { Card, PageHeader, Button, Banner, Label, TextInput } from '../../components/ui';
+import { useConfirm, useToast } from '../../components/ui';
+import { RestrictedNotice } from '../Parties/PartyParts';
+import { settingsColumn } from './parts/SettingsParts';
+import { BackupCard, DangerZone, RestoreCard, RestoredCard } from './parts/BackupParts';
 
 export default function BackupRestore() {
   const { user } = useAuth();
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const [exporting, setExporting] = useState(false);
-  const [exportMessage, setExportMessage] = useState('');
+  const [savedPath, setSavedPath] = useState('');
   const [restoring, setRestoring] = useState(false);
   const [error, setError] = useState('');
   const [restoredAwaitingRestart, setRestoredAwaitingRestart] = useState(false);
@@ -18,133 +22,83 @@ export default function BackupRestore() {
 
   async function handleExport() {
     setExporting(true);
-    setExportMessage('');
-    const res = await window.api.backup.export();
-    setExporting(false);
-    if (res.canceled) return;
-    setExportMessage(res.success ? `Backup saved to ${res.filePath}` : res.reason || 'Could not export backup.');
+    try {
+      const res = await window.api.backup.export();
+      if (res.canceled) return;
+      if (res.success) {
+        setSavedPath(res.filePath);
+        toast.success('Backup saved');
+      } else {
+        toast.error(res.reason || 'Could not export backup.');
+      }
+    } catch {
+      toast.error('Could not export backup. Please try again.');
+    } finally {
+      setExporting(false);
+    }
   }
 
+  // Asks first, then the main process opens the file picker and swaps the
+  // database in one call.
   async function handleRestore() {
     setError('');
-    const confirmed = window.confirm(
-      'This will replace ALL current data with the backup file. This cannot be undone. Continue?'
-    );
-    if (!confirmed) return;
+    const ok = await confirm({
+      title: 'Restore this backup?',
+      message: 'This replaces everything on this computer with the backup. The app will restart.',
+      confirmLabel: 'Restore',
+      cancelLabel: 'Cancel',
+      destructive: true,
+    });
+    if (!ok) return;
 
     setRestoring(true);
-    const res = await window.api.backup.restore();
-    setRestoring(false);
-
-    if (res.canceled) return;
-    if (!res.success) {
-      setError(res.reason || 'Could not restore backup.');
-      return;
+    try {
+      const res = await window.api.backup.restore();
+      if (res.canceled) return;
+      if (!res.success) {
+        setError(res.reason || 'Could not restore backup.');
+        return;
+      }
+      setRestoredAwaitingRestart(true);
+    } catch {
+      setError('Could not restore backup. Please try again.');
+    } finally {
+      setRestoring(false);
     }
-    setRestoredAwaitingRestart(true);
-  }
-
-  function handleRestartNow() {
-    window.api.backup.relaunchApp();
   }
 
   async function handleFactoryReset() {
     if (resetConfirmText !== 'RESET') return;
     setResetError('');
     setResetting(true);
-    const res = await window.api.system.factoryReset();
-    if (!res.success) {
+    try {
+      const res = await window.api.system.factoryReset();
+      if (!res.success) {
+        setResetting(false);
+        setResetError(res.reason || 'Could not reset the app.');
+      }
+      // On success the main process relaunches the app itself — nothing more to do here.
+    } catch {
       setResetting(false);
-      setResetError(res.reason || 'Could not reset the app.');
-      return;
+      setResetError('Could not reset the app.');
     }
-    // On success the main process relaunches the app itself — nothing more to do here.
   }
 
-  if (user.role !== 'admin') {
-    return (
-      <Card style={{ padding: '48px', textAlign: 'center' }}>
-        <h3 style={{ margin: 0, color: theme.colors.textPrimary }}>This section is restricted to Admin accounts</h3>
-      </Card>
-    );
-  }
+  if (user.role !== 'admin') return <RestrictedNotice />;
 
-  if (restoredAwaitingRestart) {
-    return (
-      <div>
-        <PageHeader title="Backup & Restore" />
-        <Card style={{ maxWidth: '480px', textAlign: 'center', padding: '32px' }}>
-          <h3 style={{ margin: '0 0 8px', color: theme.colors.textPrimary }}>Backup restored</h3>
-          <p style={{ color: theme.colors.textSecondary }}>The app needs to restart to load the restored data.</p>
-          <Button onClick={handleRestartNow} style={{ marginTop: theme.spacing.md }}>
-            Restart Now
-          </Button>
-        </Card>
-      </div>
-    );
-  }
+  if (restoredAwaitingRestart) return <RestoredCard onRestart={() => window.api.backup.relaunchApp()} />;
 
   return (
-    <div>
-      <PageHeader title="Backup & Restore" />
-
-      <Card style={{ maxWidth: '480px', marginBottom: theme.spacing.lg }}>
-        <h4 style={{ margin: '0 0 8px', color: theme.colors.textPrimary }}>Export Backup</h4>
-        <p style={{ color: theme.colors.textSecondary, fontSize: theme.font.sizeSm }}>
-          Saves a copy of the current database file to a location you choose.
-        </p>
-        <Button onClick={handleExport} disabled={exporting}>
-          {exporting ? 'Exporting…' : 'Export Backup'}
-        </Button>
-        {exportMessage && <div style={{ marginTop: theme.spacing.sm, fontSize: theme.font.sizeSm, color: theme.colors.textSecondary }}>{exportMessage}</div>}
-      </Card>
-
-      <Card style={{ maxWidth: '480px' }}>
-        <h4 style={{ margin: '0 0 8px', color: theme.colors.textPrimary }}>Restore from Backup</h4>
-        <p style={{ color: theme.colors.textSecondary, fontSize: theme.font.sizeSm }}>
-          Replaces all current data with a previously exported backup file. The app will need to restart afterward.
-        </p>
-        <Button variant="danger" onClick={handleRestore} disabled={restoring}>
-          {restoring ? 'Restoring…' : 'Restore from Backup'}
-        </Button>
-        <Banner>{error}</Banner>
-      </Card>
-
-      <div
-        style={{
-          maxWidth: '480px',
-          marginTop: theme.spacing.xl,
-          padding: theme.spacing.md,
-          borderRadius: theme.radius.lg,
-          backgroundColor: theme.colors.dangerBackground,
-          border: `1px solid ${theme.colors.danger}`,
-        }}
-      >
-        <h4 style={{ margin: '0 0 8px', color: theme.colors.danger }}>Danger Zone — Factory Reset</h4>
-        <p style={{ color: theme.colors.textSecondary, fontSize: theme.font.sizeSm }}>
-          Wipes all sales, products, customers, suppliers, users, and other business data on this PC, and clears its
-          license activation — the app returns to the Setup screen and needs a new activation key. This cannot be
-          undone. Back up first using Export Backup above if there's any chance you'll need this data again.
-        </p>
-
-        <Label>Type RESET to enable the button below</Label>
-        <TextInput
-          value={resetConfirmText}
-          onChange={(e) => setResetConfirmText(e.target.value)}
-          placeholder="RESET"
-          style={{ borderColor: theme.colors.danger }}
-        />
-
-        <Button
-          variant="danger"
-          onClick={handleFactoryReset}
-          disabled={resetConfirmText !== 'RESET' || resetting}
-          style={{ marginTop: theme.spacing.md }}
-        >
-          {resetting ? 'Resetting…' : 'Factory Reset This PC'}
-        </Button>
-        <Banner>{resetError}</Banner>
-      </div>
+    <div style={settingsColumn}>
+      <BackupCard exporting={exporting} onExport={handleExport} savedPath={savedPath} />
+      <RestoreCard restoring={restoring} onRestore={handleRestore} error={error} />
+      <DangerZone
+        confirmText={resetConfirmText}
+        onConfirmText={setResetConfirmText}
+        resetting={resetting}
+        onReset={handleFactoryReset}
+        error={resetError}
+      />
     </div>
   );
 }

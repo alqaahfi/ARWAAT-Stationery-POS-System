@@ -1,28 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ArrowUp, ArrowDown } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import theme from '../../config/theme';
-import { Card, PageHeader, TextInput, Select, tableStyles, Tr } from '../../components/ui';
-import { formatDateTime } from '../../utils/format';
-
-const SORT_OPTIONS = [
-  { key: 'login_at', label: 'Login Time' },
-  { key: 'cashier', label: 'Cashier' },
-  { key: 'activity_count', label: 'Activity Count' },
-];
-
-function formatDuration(startIso, endIso) {
-  if (!startIso || !endIso) return null;
-  const start = new Date(startIso.replace(' ', 'T') + 'Z');
-  const end = new Date(endIso.replace(' ', 'T') + 'Z');
-  const ms = end - start;
-  if (Number.isNaN(ms) || ms < 0) return null;
-  const totalMinutes = Math.round(ms / 60000);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  if (hours === 0) return `${minutes}m`;
-  return `${hours}h ${minutes}m`;
-}
+import { useAuth } from '../../context/AuthContext';
+import { Card, DataTable } from '../../components/ui';
+import { ListSummary, LoadError, RestrictedNotice } from '../Parties/PartyParts';
+import { NoSessions, SessionToolbar, sessionColumns } from './parts/SessionParts';
 
 // The click-through detail view (SessionDetail.jsx) is where "what did this
 // cashier actually do" lives — this list is just the index of sessions to
@@ -31,131 +12,104 @@ export default function CashierSessions({ onNavigate }) {
   const { user } = useAuth();
 
   const [sessions, setSessions] = useState([]);
+  const [cashiers, setCashiers] = useState([]);
   const [search, setSearch] = useState('');
+  const [cashierId, setCashierId] = useState('');
   const [sortBy, setSortBy] = useState('login_at');
   const [sortDirection, setSortDirection] = useState('desc');
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const debounceRef = useRef(null);
+  const searchRef = useRef('');
+  const requestRef = useRef(0);
+
+  useEffect(() => {
+    window.api.users
+      .list({ cashiersOnly: true, sortBy: 'full_name' })
+      .then((rows) => setCashiers((rows || []).filter((r) => r.role === 'cashier')))
+      .catch(() => setCashiers([]));
+  }, []);
+
+  const load = useCallback(async () => {
+    const req = ++requestRef.current;
+    setLoading(true);
+    try {
+      const rows = await window.api.sessions.list({
+        search: searchRef.current,
+        cashierId: cashierId ? Number(cashierId) : undefined,
+        sortBy,
+        sortDirection,
+      });
+      if (req !== requestRef.current) return;
+      setSessions(rows || []);
+      setLoadFailed(false);
+    } catch {
+      if (req === requestRef.current) setLoadFailed(true);
+    } finally {
+      if (req === requestRef.current) setLoading(false);
+    }
+  }, [cashierId, sortBy, sortDirection]);
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortBy, sortDirection]);
+  }, [load]);
+
+  useEffect(() => () => clearTimeout(debounceRef.current), []);
 
   function handleSearchChange(value) {
     setSearch(value);
+    searchRef.current = value;
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(load, 250);
+    debounceRef.current = setTimeout(() => load(), 250);
   }
 
-  async function load() {
-    setLoading(true);
-    const rows = await window.api.sessions.list({ search, sortBy, sortDirection });
-    setSessions(rows);
-    setLoading(false);
+  function clearFilters() {
+    clearTimeout(debounceRef.current);
+    setSearch('');
+    searchRef.current = '';
+    if (cashierId) setCashierId('');
+    else load();
   }
 
-  function toggleSortDirection() {
-    setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
-  }
+  const columns = useMemo(() => sessionColumns(), []);
 
-  if (user.role !== 'admin') {
-    return (
-      <Card style={{ padding: '48px', textAlign: 'center' }}>
-        <h3 style={{ margin: 0, color: theme.colors.textPrimary }}>This section is restricted to Admin accounts</h3>
-      </Card>
-    );
-  }
+  if (user.role !== 'admin') return <RestrictedNotice />;
+
+  const filtered = !!(search.trim() || cashierId);
 
   return (
-    <div>
-      <PageHeader title="Session Activity" />
+    <div style={{ paddingBottom: '48px' }}>
+      <p style={{ ...theme.type.subhead, color: theme.colors.labelSecondary, margin: `0 0 ${theme.spacing.smd}` }}>
+        When each cashier signed in, and for how long.
+      </p>
 
-      <Card style={{ marginBottom: theme.spacing.md }}>
-        <div style={styles.filterRow}>
-          <TextInput
-            placeholder="Search cashier name or username…"
-            value={search}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            style={{ flex: 1 }}
+      <SessionToolbar
+        search={search}
+        onSearch={handleSearchChange}
+        cashiers={cashiers}
+        cashierId={cashierId}
+        onCashierId={setCashierId}
+        sortBy={sortBy}
+        onSortBy={setSortBy}
+        sortDirection={sortDirection}
+        onToggleDirection={() => setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'))}
+      />
+
+      <ListSummary>{loading ? 'Loading…' : `${sessions.length} session${sessions.length === 1 ? '' : 's'}`}</ListSummary>
+
+      <Card padding="0" style={{ overflow: 'hidden' }}>
+        {loadFailed ? (
+          <LoadError message="Session Activity couldn't be loaded." onRetry={load} />
+        ) : (
+          <DataTable
+            columns={columns}
+            rows={sessions}
+            loading={loading}
+            onRowClick={(s) => onNavigate('/cashiers/sessions/detail', { id: s.id })}
+            emptyState={<NoSessions filtered={filtered} onClear={clearFilters} />}
           />
-          <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ width: '190px' }}>
-            {SORT_OPTIONS.map((opt) => (
-              <option key={opt.key} value={opt.key}>
-                Sort: {opt.label}
-              </option>
-            ))}
-          </Select>
-          <button style={styles.sortDirBtn} onClick={toggleSortDirection} title="Toggle sort direction">
-            {sortDirection === 'asc' ? <ArrowUp size={15} /> : <ArrowDown size={15} />}
-          </button>
-        </div>
-      </Card>
-
-      <Card style={{ padding: 0 }}>
-        <div style={tableStyles.scroll}>
-          <table style={tableStyles.table}>
-            <thead>
-              <tr>
-                <th style={tableStyles.th}>Cashier</th>
-                <th style={tableStyles.th}>Login Time</th>
-                <th style={tableStyles.th}>Logout Time</th>
-                <th style={tableStyles.th}>Duration</th>
-                <th style={tableStyles.th}>Status</th>
-                <th style={{ ...tableStyles.th, textAlign: 'right' }}>Activities</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sessions.map((s) => {
-                const duration = formatDuration(s.login_at, s.ended_at);
-                return (
-                  <Tr key={s.id} onClick={() => onNavigate('/cashiers/sessions/detail', { id: s.id })}>
-                    <td style={tableStyles.td}>
-                      <div style={{ fontWeight: theme.font.weightMedium }}>{s.cashier_name}</div>
-                      <div style={{ color: theme.colors.textSecondary, fontSize: theme.font.sizeXs }}>{s.username}</div>
-                    </td>
-                    <td style={tableStyles.td}>{formatDateTime(s.login_at)}</td>
-                    <td style={tableStyles.td}>{s.ended_at ? formatDateTime(s.ended_at) : '—'}</td>
-                    <td style={tableStyles.td}>{duration || (s.is_active ? 'In progress' : '—')}</td>
-                    <td style={tableStyles.td}>
-                      <span style={s.is_active ? styles.statusActive : styles.statusEnded}>
-                        {s.is_active ? 'Active' : 'Ended'}
-                      </span>
-                    </td>
-                    <td style={{ ...tableStyles.td, textAlign: 'right' }}>{s.activity_count}</td>
-                  </Tr>
-                );
-              })}
-              {!loading && sessions.length === 0 && (
-                <tr>
-                  <td colSpan={6} style={tableStyles.emptyState}>
-                    No sessions found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        )}
       </Card>
     </div>
   );
 }
-
-const styles = {
-  filterRow: { display: 'flex', gap: theme.spacing.sm, alignItems: 'center' },
-  sortDirBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '36px',
-    height: '36px',
-    borderRadius: theme.radius.sm,
-    border: `1px solid ${theme.colors.border}`,
-    backgroundColor: theme.colors.cardBackground,
-    color: theme.colors.textSecondary,
-    cursor: 'pointer',
-    flexShrink: 0,
-  },
-  statusActive: { color: theme.colors.success, fontSize: theme.font.sizeSm, fontWeight: theme.font.weightMedium },
-  statusEnded: { color: theme.colors.textSecondary, fontSize: theme.font.sizeSm },
-};

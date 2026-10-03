@@ -158,13 +158,14 @@ export default function CustomerForm({ customerId, onDone, onCancel, onNavigate 
   }
 
   const openAccount = onNavigate ? () => onNavigate('/ledgers/customers', { id: customerId, name: saved?.name }) : undefined;
+  const receivePayment = onNavigate ? () => onNavigate('/payments/record', { id: customerId, name: saved?.name }) : undefined;
 
   return (
     <div style={pageWrap}>
       <div style={pageColumn}>
         {isEdit && saved && (
           <>
-            <CustomerHeader customer={saved} balance={ledger.data?.balance} onOpenAccount={openAccount} />
+            <CustomerHeader customer={saved} balance={ledger.data?.balance} onOpenAccount={openAccount} onReceivePayment={receivePayment} />
             <RecentActivityCard
               rows={ledger.data?.transactions}
               loading={ledger.loading}

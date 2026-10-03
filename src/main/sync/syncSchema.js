@@ -102,6 +102,21 @@ const SYNC_TABLES = {
       product_unit_id: { table: 'product_units' },
     },
   },
+  sale_returns: {
+    kind: 'insert_only',
+    fks: {
+      sale_id: { table: 'sales' },
+      customer_id: { table: 'customers', nullable: true },
+      created_by: { table: 'users', nullable: true },
+    },
+  },
+  sale_return_items: {
+    kind: 'insert_only',
+    fks: {
+      return_id: { table: 'sale_returns' },
+      sale_item_id: { table: 'sale_items' },
+    },
+  },
   payments: {
     kind: 'insert_only',
     fks: { sale_id: { table: 'sales', nullable: true }, received_by: { table: 'users', nullable: true } },
@@ -129,7 +144,7 @@ const SYNC_TABLES = {
     fks: { product_variant_id: { table: 'product_variants' }, created_by: { table: 'users', nullable: true } },
     // reference_type 'adjustment' has no target table at all (reference_id is
     // just NULL for those rows) — see stock.ipc.js.
-    polymorphicFk: { column: 'reference_id', typeColumn: 'reference_type', targets: { sale: 'sales', purchase: 'purchases' } },
+    polymorphicFk: { column: 'reference_id', typeColumn: 'reference_type', targets: { sale: 'sales', purchase: 'purchases', return: 'sale_returns' } },
   },
 };
 

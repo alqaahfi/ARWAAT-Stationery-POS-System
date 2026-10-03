@@ -7,7 +7,7 @@ const pad = theme.spacing.lg; // the content region's padding, cancelled so the 
 
 // Save bar pinned to the bottom of the content area. Right padding keeps the
 // buttons clear of the Dev Panel corner.
-export function StickyActions({ onCancel, onSave, saving, saveLabel = 'Save product' }) {
+export function StickyActions({ onCancel, onSave, saving, saveLabel = 'Save product', cancelLabel = 'Cancel', saveDisabled = false, size }) {
   return (
     <div
       style={{
@@ -24,10 +24,10 @@ export function StickyActions({ onCancel, onSave, saving, saveLabel = 'Save prod
         borderTop: `1px solid ${c.separator}`,
       }}
     >
-      <Button variant="plain" onClick={onCancel} disabled={saving}>
-        Cancel
+      <Button variant="plain" size={size} onClick={onCancel} disabled={saving}>
+        {cancelLabel}
       </Button>
-      <Button onClick={onSave} loading={saving}>
+      <Button size={size} onClick={onSave} loading={saving} disabled={saveDisabled}>
         {saveLabel}
       </Button>
     </div>

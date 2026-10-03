@@ -76,7 +76,7 @@ const SORT_COLUMNS = {
 // status is computed identically everywhere.
 function buildFilteredQuery() {
   return `
-    SELECT p.id, p.name, p.sku, p.base_unit_name, p.min_stock_alert, p.dead_stock_days,
+    SELECT p.id, p.name, p.sku, p.company_name, p.base_unit_name, p.min_stock_alert, p.dead_stock_days,
            p.is_active, p.category_id, p.created_at, p.updated_at,
            c.name AS category_name,
            COALESCE(SUM(pv.stock_qty), 0) AS total_stock,
@@ -175,7 +175,7 @@ function create(payload) {
   } = payload;
 
   if (!name || !name.trim()) return { success: false, reason: 'Product name is required.' };
-  if (isSkuTaken(db, sku)) return { success: false, reason: 'That SKU is already in use.' };
+  if (isSkuTaken(db, sku)) return { success: false, reason: 'That item code is already in use.' };
 
   const normalized = normalizeVariantsAndUnits(variants, units, standardStartingStock, standardBarcode);
   if (normalized.error) return { success: false, reason: normalized.error };
@@ -263,7 +263,7 @@ function create(payload) {
     const id = run();
     return { success: true, id };
   } catch (err) {
-    if (/UNIQUE/.test(err.message)) return { success: false, reason: 'A product with that SKU or a variant barcode already exists.' };
+    if (/UNIQUE/.test(err.message)) return { success: false, reason: 'A product with that item code or a variant barcode already exists.' };
     return { success: false, reason: 'Could not save product.' };
   }
 }
@@ -279,7 +279,7 @@ function update(payload) {
   } = payload;
 
   if (!name || !name.trim()) return { success: false, reason: 'Product name is required.' };
-  if (isSkuTaken(db, sku, id)) return { success: false, reason: 'That SKU is already in use.' };
+  if (isSkuTaken(db, sku, id)) return { success: false, reason: 'That item code is already in use.' };
 
   const normalized = normalizeVariantsAndUnits(variants, units, standardStartingStock, standardBarcode, standardVariantId);
   if (normalized.error) return { success: false, reason: normalized.error };
@@ -402,7 +402,7 @@ function update(payload) {
     run();
     return { success: true };
   } catch (err) {
-    if (/UNIQUE/.test(err.message)) return { success: false, reason: 'A product with that SKU or a variant barcode already exists.' };
+    if (/UNIQUE/.test(err.message)) return { success: false, reason: 'A product with that item code or a variant barcode already exists.' };
     return { success: false, reason: 'Could not save product.' };
   }
 }

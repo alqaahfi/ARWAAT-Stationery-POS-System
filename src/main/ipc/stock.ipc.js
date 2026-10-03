@@ -77,13 +77,15 @@ function getMovements(filters = {}) {
               pv.id AS variant_id, pv.variant_name,
               u.full_name AS created_by_name,
               pur.reference_no AS purchase_reference_no,
-              sa.invoice_no AS sale_invoice_no
+              sa.invoice_no AS sale_invoice_no,
+              sr.return_no AS return_no
        FROM stock_movements sm
        JOIN product_variants pv ON pv.id = sm.product_variant_id
        JOIN products p ON p.id = pv.product_id
        LEFT JOIN users u ON u.id = sm.created_by
        LEFT JOIN purchases pur ON sm.reference_type = 'purchase' AND pur.id = sm.reference_id
        LEFT JOIN sales sa ON sm.reference_type = 'sale' AND sa.id = sm.reference_id
+       LEFT JOIN sale_returns sr ON sm.reference_type = 'return' AND sr.id = sm.reference_id
        WHERE (@productId IS NULL OR p.id = @productId)
          AND (@movementType IS NULL OR sm.movement_type = @movementType)
          AND (@dateFrom IS NULL OR date(sm.created_at) >= date(@dateFrom))

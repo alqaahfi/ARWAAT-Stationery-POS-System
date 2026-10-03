@@ -1,66 +1,59 @@
-import React, { useEffect, useState } from 'react';
-import theme from '../../config/theme';
-import { Card, PageHeader, Label, Select, Checkbox } from '../../components/ui';
-import ReportSummaryCards from './components/ReportSummaryCards';
-import ReportTable from './components/ReportTable';
+import React, { useCallback, useMemo, useState } from 'react';
+import glossary from '../../config/glossary';
+import { Checkbox, Field, Select } from '../../components/ui';
+import { PRICE_LEVELS, priceLevelLabel } from '../../utils/priceLevel';
 import ExportButtons from './components/ExportButtons';
-
-const TIERS = ['C1', 'C2', 'C3', 'C4', 'C5'];
+import ReportShell from './parts/ReportShell';
+import { useReportData } from './parts/reportUtils';
+import { StatementSummary, StatementTable } from './parts/StatementParts';
 
 export default function CustomerStatements({ onNavigate }) {
   const [tier, setTier] = useState('');
   const [onlyWithBalance, setOnlyWithBalance] = useState(false);
-  const [data, setData] = useState(null);
 
   const filters = { tier: tier || null, onlyWithBalance };
 
-  useEffect(() => {
-    window.api.reports.getCustomerStatements({ filters }).then(setData);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tier, onlyWithBalance]);
+  const { data, loading, error, retry } = useReportData(() => window.api.reports.getCustomerStatements({ filters }), [tier, onlyWithBalance]);
 
-  if (!data) return <Card>Loading…</Card>;
+  const openAccount = useCallback((row) => onNavigate('/ledgers/customers', { id: row.id, name: row.name }), [onNavigate]);
+  const tableColumns = useMemo(() => (data ? data.columns.filter((c) => c.key !== 'id') : []), [data]);
 
   return (
-    <div>
-      <PageHeader
-        title="Customer Statements"
-        actions={
-          <ExportButtons rows={data.rows} columns={data.columns} reportType="customers" filters={filters} suggestedName="customer-statements.csv" />
-        }
-      />
-
-      <Card style={{ marginBottom: theme.spacing.md }}>
-        <div style={styles.filterRow}>
-          <div>
-            <Label>Tier</Label>
-            <Select value={tier} onChange={(e) => setTier(e.target.value)} style={{ width: '220px' }}>
-              <option value="">All Tiers</option>
-              <option value="NONE">None</option>
-              {TIERS.map((t) => (
+    <ReportShell
+      intro="Who owes you money."
+      filters={
+        <>
+          <Field label="Price Level" style={{ marginBottom: 0 }}>
+            <Select value={tier} onChange={(e) => setTier(e.target.value)} style={{ width: '200px' }}>
+              <option value="">All price levels</option>
+              <option value="NONE">{glossary.noPriceLevel}</option>
+              {PRICE_LEVELS.map((t) => (
                 <option key={t} value={t}>
-                  {t}
+                  {priceLevelLabel(t)}
                 </option>
               ))}
             </Select>
-          </div>
-          <Checkbox label="Only show customers with a balance owed" checked={onlyWithBalance} onChange={(e) => setOnlyWithBalance(e.target.checked)} />
-        </div>
-      </Card>
-
-      <ReportSummaryCards items={data.summary} />
-
-      <Card style={{ padding: 0, marginTop: theme.spacing.md }}>
-        <ReportTable
-          columns={data.columns.filter((c) => c.key !== 'id')}
-          rows={data.rows}
-          onRowClick={(row) => onNavigate('/ledgers/customers', { id: row.id, name: row.name })}
-        />
-      </Card>
-    </div>
+          </Field>
+          <Checkbox
+            label="Only customers who owe"
+            checked={onlyWithBalance}
+            onChange={(e) => setOnlyWithBalance(e.target.checked)}
+            style={{ marginTop: 0, height: '36px' }}
+          />
+        </>
+      }
+      exportAction={
+        <ExportButtons rows={data?.rows || []} columns={data?.columns || []} reportType="customers" filters={filters} suggestedName="customer-statements.csv" />
+      }
+      loading={loading}
+      error={error}
+      onRetry={retry}
+      isEmpty={!!data && data.rows.length === 0}
+      emptyHint={onlyWithBalance ? 'Nobody owes you money right now.' : 'No customers match these filters.'}
+      summary={data && <StatementSummary data={data} party="customer" />}
+      footnotes={['Balances include every sale, payment, return and correction up to today.']}
+    >
+      {data && <StatementTable columns={tableColumns} rows={data.rows} party="customer" onRowClick={openAccount} />}
+    </ReportShell>
   );
 }
-
-const styles = {
-  filterRow: { display: 'flex', alignItems: 'flex-end', gap: theme.spacing.lg },
-};

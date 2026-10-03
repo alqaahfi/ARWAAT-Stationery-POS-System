@@ -33,6 +33,7 @@ import {
   Trash2,
   Check,
   TriangleAlert,
+  Undo2,
 } from 'lucide-react';
 
 const appIcons = {
@@ -68,6 +69,7 @@ const appIcons = {
   delete: { icon: Trash2, color: 'red' },
   check: { icon: Check, color: 'green' },
   warning: { icon: TriangleAlert, color: 'orange' },
+  returns: { icon: Undo2, color: 'gray' },
 };
 
 export default appIcons;

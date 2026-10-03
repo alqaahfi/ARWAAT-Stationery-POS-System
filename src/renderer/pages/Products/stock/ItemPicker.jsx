@@ -127,6 +127,7 @@ export function ItemPicker({ id, label, placeholder, search, mapResult, onPick, 
           placeholder={placeholder}
           value={query}
           onChange={(e) => handleChange(e.target.value)}
+          data-ui-input
           onKeyDown={handleKeyDown}
           onFocus={() => setOpen(true)}
           onBlur={() => setOpen(false)}

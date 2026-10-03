@@ -1,108 +1,101 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import theme from '../../config/theme';
-import { Card, PageHeader, Label, Select, Button, Banner, HelperText } from '../../components/ui';
+import { useToast } from '../../components/ui';
+import { LoadError, RestrictedNotice } from '../Parties/PartyParts';
+import { SettingsSkeleton, settingsColumn } from './parts/SettingsParts';
+import { A4PrinterCard, ReceiptPrinterCard } from './parts/PrinterParts';
 
 // A4 wholesale invoices always go through the normal OS print dialog (the
 // admin/cashier picks the printer there, every time) — this page only ever
 // configures the thermal RETAIL receipt printer.
 export default function PrinterSettings() {
   const { user } = useAuth();
+  const toast = useToast();
 
   const [installedPrinters, setInstalledPrinters] = useState([]);
   const [printerName, setPrinterName] = useState('');
   const [paperWidth, setPaperWidth] = useState('58mm');
-  const [loaded, setLoaded] = useState(false);
+  const [initial, setInitial] = useState(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState(null);
-  const [error, setError] = useState('');
 
-  useEffect(() => {
-    window.api.printers.listInstalled().then(setInstalledPrinters);
-    window.api.settings.getAll().then((s) => {
-      setPrinterName(s.thermal_printer_name || '');
-      setPaperWidth(s.thermal_paper_width || '58mm');
-      setLoaded(true);
-    });
+  const load = useCallback(() => {
+    setLoadFailed(false);
+    window.api.printers
+      .listInstalled()
+      .then((list) => setInstalledPrinters(list || []))
+      .catch(() => setInstalledPrinters([]));
+    window.api.settings
+      .getAll()
+      .then((s) => {
+        const name = s.thermal_printer_name || '';
+        const width = s.thermal_paper_width || '58mm';
+        setPrinterName(name);
+        setPaperWidth(width);
+        setInitial({ name, width });
+      })
+      .catch(() => setLoadFailed(true));
   }, []);
 
-  async function handleSave() {
-    setError('');
-    setSaved(false);
-    setSaving(true);
-    const res = await window.api.settings.setMany({
-      thermal_printer_name: printerName,
-      thermal_paper_width: paperWidth,
-    });
-    setSaving(false);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-    if (!res.success) {
-      setError(res.reason || 'Could not save printer settings.');
-      return;
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const res = await window.api.settings.setMany({
+        thermal_printer_name: printerName,
+        thermal_paper_width: paperWidth,
+      });
+      if (!res.success) {
+        toast.error(res.reason || 'Could not save printer settings.');
+        return;
+      }
+      setInitial({ name: printerName, width: paperWidth });
+      toast.success('Printer saved');
+    } catch {
+      toast.error('Could not save printer settings. Please try again.');
+    } finally {
+      setSaving(false);
     }
-    setSaved(true);
   }
 
   async function handleTestPrint() {
     setTesting(true);
-    setTestResult(null);
-    const res = await window.api.printers.testPrint();
-    setTesting(false);
-    setTestResult(res);
+    try {
+      const res = await window.api.printers.testPrint();
+      if (res?.success) toast.success('Test page sent to the printer');
+      else toast.error(res?.reason || 'Test print failed.');
+    } catch {
+      toast.error('Test print failed.');
+    } finally {
+      setTesting(false);
+    }
   }
 
-  if (user.role !== 'admin') {
-    return (
-      <Card style={{ padding: '48px', textAlign: 'center' }}>
-        <h3 style={{ margin: 0, color: theme.colors.textPrimary }}>This section is restricted to Admin accounts</h3>
-      </Card>
-    );
-  }
+  if (user.role !== 'admin') return <RestrictedNotice />;
+  if (loadFailed) return <LoadError message="Printer settings couldn't be loaded." onRetry={load} />;
+  if (!initial) return <SettingsSkeleton />;
 
-  if (!loaded) return <Card>Loading…</Card>;
+  const dirty = printerName !== initial.name || paperWidth !== initial.width;
 
   return (
-    <div>
-      <PageHeader title="Printer Settings" />
-      <Card style={{ maxWidth: '480px' }}>
-        <Label>Thermal Receipt Printer</Label>
-        <Select value={printerName} onChange={(e) => setPrinterName(e.target.value)}>
-          <option value="">Select a printer…</option>
-          {installedPrinters.map((p) => (
-            <option key={p.name} value={p.name}>
-              {p.displayName || p.name}
-              {p.isDefault ? ' (Windows default)' : ''}
-            </option>
-          ))}
-        </Select>
-        {installedPrinters.length === 0 && <HelperText>No printers detected on this PC.</HelperText>}
-
-        <Label>Paper Width</Label>
-        <Select value={paperWidth} onChange={(e) => setPaperWidth(e.target.value)}>
-          <option value="58mm">58mm (~32 characters/line)</option>
-          <option value="80mm">80mm (~42 characters/line)</option>
-        </Select>
-
-        <Banner>{error}</Banner>
-        {saved && !error && <div style={{ color: theme.colors.success, fontSize: theme.font.sizeSm, marginTop: theme.spacing.sm }}>Saved.</div>}
-
-        <div style={{ display: 'flex', gap: theme.spacing.sm, marginTop: theme.spacing.lg }}>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </Button>
-          <Button variant="secondary" onClick={handleTestPrint} disabled={testing || !printerName}>
-            {testing ? 'Printing…' : 'Test Print'}
-          </Button>
-        </div>
-
-        {testResult && (
-          <div style={{ marginTop: theme.spacing.sm, fontSize: theme.font.sizeSm, color: testResult.success ? theme.colors.success : theme.colors.danger }}>
-            {testResult.success ? 'Test print sent.' : testResult.reason || 'Test print failed.'}
-          </div>
-        )}
-      </Card>
+    <div style={settingsColumn}>
+      <ReceiptPrinterCard
+        printers={installedPrinters}
+        printerName={printerName}
+        onPrinterName={setPrinterName}
+        paperWidth={paperWidth}
+        onPaperWidth={setPaperWidth}
+        dirty={dirty}
+        saving={saving}
+        onSave={handleSave}
+        testing={testing}
+        onTest={handleTestPrint}
+      />
+      <A4PrinterCard />
     </div>
   );
 }

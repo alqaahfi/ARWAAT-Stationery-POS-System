@@ -22,6 +22,9 @@ function dateRangeParams(filters) {
 }
 
 // ---------------- 1. Sales Report ----------------
+// Money rules shared by every date-ranged report here: sales/returns are
+// stored in UTC (datetime('now')) but filtered and grouped by the shop's
+// LOCAL calendar day, and a return reduces sales on the day it was made.
 
 function getSalesReport(filters, requestingUserId) {
   const db = getDb();
@@ -35,57 +38,86 @@ function getSalesReport(filters, requestingUserId) {
     if (requester && requester.role !== 'admin') lockedCashierId = requestingUserId;
   }
 
-  let sql = `
-    SELECT s.id, s.invoice_no, s.created_at, s.sale_type, s.total_amount, s.discount_amount,
-           s.payment_status, s.cashier_id, u.full_name AS cashier_name,
-           s.customer_id, c.name AS customer_name
-    FROM sales s
-    JOIN users u ON u.id = s.cashier_id
-    LEFT JOIN customers c ON c.id = s.customer_id
-    WHERE date(s.created_at) BETWEEN date(?) AND date(?)
-  `;
-  const params = [from, to];
-
+  // Same sale filters apply to both queries (returns are filtered by their
+  // original sale's cashier / type / payment status).
+  let saleFilterSql = '';
+  const saleFilterParams = [];
   if (lockedCashierId) {
-    sql += ' AND s.cashier_id = ?';
-    params.push(lockedCashierId);
+    saleFilterSql += ' AND s.cashier_id = ?';
+    saleFilterParams.push(lockedCashierId);
   }
   if (filters?.saleType && filters.saleType !== 'all') {
-    sql += ' AND s.sale_type = ?';
-    params.push(filters.saleType);
+    saleFilterSql += ' AND s.sale_type = ?';
+    saleFilterParams.push(filters.saleType);
   }
   if (filters?.paymentStatus && filters.paymentStatus !== 'all') {
-    sql += ' AND s.payment_status = ?';
-    params.push(filters.paymentStatus);
+    saleFilterSql += ' AND s.payment_status = ?';
+    saleFilterParams.push(filters.paymentStatus);
   }
-  sql += ' ORDER BY s.created_at';
 
-  const rows = db.prepare(sql).all(...params);
+  const rows = db
+    .prepare(
+      `SELECT s.id, s.invoice_no, s.created_at, date(s.created_at, 'localtime') AS sale_day, s.sale_type, s.total_amount,
+              s.discount_amount, s.payment_status, s.cashier_id, u.full_name AS cashier_name,
+              s.customer_id, c.name AS customer_name
+       FROM sales s
+       JOIN users u ON u.id = s.cashier_id
+       LEFT JOIN customers c ON c.id = s.customer_id
+       WHERE date(s.created_at, 'localtime') BETWEEN date(?) AND date(?)${saleFilterSql}
+       ORDER BY s.created_at`
+    )
+    .all(from, to, ...saleFilterParams);
 
-  const totalRevenue = rows.reduce((sum, r) => sum + r.total_amount, 0);
+  const returnsByDay = db
+    .prepare(
+      `SELECT date(r.created_at, 'localtime') AS day, COUNT(*) AS count, COALESCE(SUM(r.total_amount), 0) AS total
+       FROM sale_returns r
+       JOIN sales s ON s.id = r.sale_id
+       WHERE date(r.created_at, 'localtime') BETWEEN date(?) AND date(?)${saleFilterSql}
+       GROUP BY day`
+    )
+    .all(from, to, ...saleFilterParams);
+
+  const grossRevenue = rows.reduce((sum, r) => sum + r.total_amount, 0);
+  const returnsTotal = returnsByDay.reduce((sum, r) => sum + r.total, 0);
+  const returnsCount = returnsByDay.reduce((sum, r) => sum + r.count, 0);
+  const totalRevenue = grossRevenue - returnsTotal;
   const salesCount = rows.length;
-  const avgSaleValue = salesCount > 0 ? totalRevenue / salesCount : 0;
+  const avgSaleValue = salesCount > 0 ? grossRevenue / salesCount : 0;
   const retailTotal = rows.filter((r) => r.sale_type === 'retail').reduce((s, r) => s + r.total_amount, 0);
   const wholesaleTotal = rows.filter((r) => r.sale_type === 'wholesale').reduce((s, r) => s + r.total_amount, 0);
 
   const byDay = {};
-  for (const r of rows) {
-    const day = r.created_at.slice(0, 10);
-    byDay[day] = (byDay[day] || 0) + r.total_amount;
-  }
+  const dayOf = (day) => (byDay[day] = byDay[day] || { date: day, revenue: 0, gross: 0, returns: 0 });
+  for (const r of rows) dayOf(r.sale_day).gross += r.total_amount;
+  for (const r of returnsByDay) dayOf(r.day).returns += r.total;
   const chartData = Object.keys(byDay)
     .sort()
-    .map((day) => ({ date: day, revenue: byDay[day] }));
+    .map((day) => ({ ...byDay[day], revenue: byDay[day].gross - byDay[day].returns }));
+
+  const summary = [
+    { label: 'Net Sales', value: totalRevenue, accentKey: 'blue', format: 'currency' },
+    { label: 'Total Sales', value: salesCount, accentKey: 'green', format: 'number' },
+    { label: 'Average Sale Value', value: avgSaleValue, accentKey: 'amber', format: 'currency' },
+    { label: 'Retail vs Wholesale', value: `${retailTotal.toFixed(0)} / ${wholesaleTotal.toFixed(0)}`, accentKey: 'purple', format: 'text' },
+  ];
+  if (returnsTotal > 0) {
+    summary.push({ label: 'Returns', value: returnsTotal, accentKey: 'amber', format: 'currency' });
+    summary.push({ label: 'Before Returns', value: grossRevenue, accentKey: 'blue', format: 'currency' });
+  }
 
   return {
     success: true,
     isCashierScoped: !!lockedCashierId,
-    summary: [
-      { label: 'Total Revenue', value: totalRevenue, accentKey: 'blue', format: 'currency' },
-      { label: 'Total Sales', value: salesCount, accentKey: 'green', format: 'number' },
-      { label: 'Average Sale Value', value: avgSaleValue, accentKey: 'amber', format: 'currency' },
-      { label: 'Retail vs Wholesale', value: `${retailTotal.toFixed(0)} / ${wholesaleTotal.toFixed(0)}`, accentKey: 'purple', format: 'text' },
-    ],
+    summary,
+    netRevenue: totalRevenue,
+    grossRevenue,
+    returnsTotal,
+    returnsCount,
+    salesCount,
+    avgSaleValue,
+    retailTotal,
+    wholesaleTotal,
     chartData,
     columns: [
       { key: 'invoice_no', label: 'Invoice No', format: 'text' },
@@ -102,11 +134,15 @@ function getSalesReport(filters, requestingUserId) {
 
 // ---------------- 2. Profit & Loss ----------------
 
+// `expr(col, local)` builds the bucket expression for a column: local=true
+// for UTC datetime('now') timestamps (sales, returns), false for columns that
+// already hold a user-entered local calendar date (expense_date).
 function pickBucket(from, to) {
   const days = (new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24);
-  if (days <= 31) return { unit: 'day', expr: "date(%COL%)" };
-  if (days <= 180) return { unit: 'week', expr: "strftime('%Y-W%W', %COL%)" };
-  return { unit: 'month', expr: "strftime('%Y-%m', %COL%)" };
+  const mod = (local) => (local ? ", 'localtime'" : '');
+  if (days <= 31) return { unit: 'day', expr: (col, local) => `date(${col}${mod(local)})` };
+  if (days <= 180) return { unit: 'week', expr: (col, local) => `strftime('%Y-W%W', ${col}${mod(local)})` };
+  return { unit: 'month', expr: (col, local) => `strftime('%Y-%m', ${col}${mod(local)})` };
 }
 
 function getProfitLoss(filters) {
@@ -114,13 +150,22 @@ function getProfitLoss(filters) {
   const db = getDb();
   const { from, to } = dateRangeParams(filters);
   const bucket = pickBucket(from, to);
-  const salesExpr = bucket.expr.replace('%COL%', 's.created_at');
-  const expenseExpr = bucket.expr.replace('%COL%', 'e.expense_date');
+  const salesExpr = bucket.expr('s.created_at', true);
+  const returnExpr = bucket.expr('r.created_at', true);
+  const expenseExpr = bucket.expr('e.expense_date', false);
 
   const revenueRows = db
     .prepare(
       `SELECT ${salesExpr} AS bucket, COALESCE(SUM(s.total_amount), 0) AS revenue
-       FROM sales s WHERE date(s.created_at) BETWEEN date(?) AND date(?) GROUP BY bucket`
+       FROM sales s WHERE date(s.created_at, 'localtime') BETWEEN date(?) AND date(?) GROUP BY bucket`
+    )
+    .all(from, to);
+
+  // Returns reduce sales on the day the return was made.
+  const returnRows = db
+    .prepare(
+      `SELECT ${returnExpr} AS bucket, COALESCE(SUM(r.total_amount), 0) AS returns
+       FROM sale_returns r WHERE date(r.created_at, 'localtime') BETWEEN date(?) AND date(?) GROUP BY bucket`
     )
     .all(from, to);
 
@@ -129,11 +174,26 @@ function getProfitLoss(filters) {
   // is the line's cost directly, no conversion_factor multiplication needed.
   const cogsRows = db
     .prepare(
-      `SELECT ${bucket.expr.replace('%COL%', 's.created_at')} AS bucket, COALESCE(SUM(si.quantity * pu.cost_price), 0) AS cogs
+      `SELECT ${salesExpr} AS bucket, COALESCE(SUM(si.quantity * pu.cost_price), 0) AS cogs
        FROM sale_items si
        JOIN sales s ON s.id = si.sale_id
        JOIN product_units pu ON pu.id = si.product_unit_id
-       WHERE date(s.created_at) BETWEEN date(?) AND date(?)
+       WHERE date(s.created_at, 'localtime') BETWEEN date(?) AND date(?)
+       GROUP BY bucket`
+    )
+    .all(from, to);
+
+  // Returned items that went back on the shelf are no longer a cost (same
+  // current-cost-price lookup as above; return quantities are in the unit
+  // sold). Returned-but-not-restocked items keep their cost as a loss.
+  const returnedCostRows = db
+    .prepare(
+      `SELECT ${returnExpr} AS bucket, COALESCE(SUM(sri.quantity * pu.cost_price), 0) AS returnedCost
+       FROM sale_return_items sri
+       JOIN sale_returns r ON r.id = sri.return_id
+       JOIN sale_items si ON si.id = sri.sale_item_id
+       JOIN product_units pu ON pu.id = si.product_unit_id
+       WHERE r.restocked = 1 AND date(r.created_at, 'localtime') BETWEEN date(?) AND date(?)
        GROUP BY bucket`
     )
     .all(from, to);
@@ -146,41 +206,48 @@ function getProfitLoss(filters) {
     .all(from, to);
 
   const buckets = {};
-  for (const r of revenueRows) buckets[r.bucket] = { bucket: r.bucket, revenue: r.revenue, cogs: 0, expenses: 0 };
-  for (const r of cogsRows) {
-    buckets[r.bucket] = buckets[r.bucket] || { bucket: r.bucket, revenue: 0, cogs: 0, expenses: 0 };
-    buckets[r.bucket].cogs = r.cogs;
-  }
-  for (const r of expenseRows) {
-    buckets[r.bucket] = buckets[r.bucket] || { bucket: r.bucket, revenue: 0, cogs: 0, expenses: 0 };
-    buckets[r.bucket].expenses = r.expenses;
-  }
+  const at = (key) => (buckets[key] = buckets[key] || { bucket: key, gross: 0, returns: 0, cogs: 0, returnedCost: 0, expenses: 0 });
+  for (const r of revenueRows) at(r.bucket).gross = r.revenue;
+  for (const r of returnRows) at(r.bucket).returns = r.returns;
+  for (const r of cogsRows) at(r.bucket).cogs = r.cogs;
+  for (const r of returnedCostRows) at(r.bucket).returnedCost = r.returnedCost;
+  for (const r of expenseRows) at(r.bucket).expenses = r.expenses;
 
   const rows = Object.values(buckets)
     .sort((a, b) => (a.bucket < b.bucket ? -1 : 1))
-    .map((b) => ({ ...b, netProfit: b.revenue - b.cogs - b.expenses }));
+    .map(({ bucket: key, gross, returns, cogs, returnedCost, expenses }) => {
+      const revenue = gross - returns;
+      const netCogs = cogs - returnedCost;
+      return { bucket: key, revenue, cogs: netCogs, expenses, netProfit: revenue - netCogs - expenses, grossRevenue: gross, returns };
+    });
 
   const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0);
   const totalCogs = rows.reduce((s, r) => s + r.cogs, 0);
   const totalExpenses = rows.reduce((s, r) => s + r.expenses, 0);
+  const returnsTotal = rows.reduce((s, r) => s + r.returns, 0);
   const netProfit = totalRevenue - totalCogs - totalExpenses;
+
+  const summary = [
+    { label: 'Net Sales', value: totalRevenue, accentKey: 'blue', format: 'currency' },
+    { label: 'Cost of Goods', value: totalCogs, accentKey: 'amber', format: 'currency' },
+    { label: 'Total Expenses', value: totalExpenses, accentKey: 'purple', format: 'currency' },
+    { label: 'Profit', value: netProfit, accentKey: netProfit >= 0 ? 'green' : 'amber', format: 'currency' },
+  ];
+  if (returnsTotal > 0) summary.push({ label: 'Returns', value: returnsTotal, accentKey: 'amber', format: 'currency' });
 
   return {
     success: true,
     bucketUnit: bucket.unit,
-    summary: [
-      { label: 'Total Revenue', value: totalRevenue, accentKey: 'blue', format: 'currency' },
-      { label: 'Total COGS', value: totalCogs, accentKey: 'amber', format: 'currency' },
-      { label: 'Total Expenses', value: totalExpenses, accentKey: 'purple', format: 'currency' },
-      { label: 'Net Profit', value: netProfit, accentKey: netProfit >= 0 ? 'green' : 'amber', format: 'currency' },
-    ],
+    summary,
+    totals: { revenue: totalRevenue, cogs: totalCogs, expenses: totalExpenses, netProfit },
+    returnsTotal,
     chartData: rows.map((r) => ({ bucket: r.bucket, Revenue: r.revenue, Cost: r.cogs, Expenses: r.expenses })),
     columns: [
       { key: 'bucket', label: bucket.unit === 'day' ? 'Date' : bucket.unit === 'week' ? 'Week' : 'Month', format: 'text' },
-      { key: 'revenue', label: 'Revenue', format: 'currency' },
-      { key: 'cogs', label: 'COGS', format: 'currency' },
+      { key: 'revenue', label: 'Net Sales', format: 'currency' },
+      { key: 'cogs', label: 'Cost of Goods', format: 'currency' },
       { key: 'expenses', label: 'Expenses', format: 'currency' },
-      { key: 'netProfit', label: 'Net Profit', format: 'currency' },
+      { key: 'netProfit', label: 'Profit', format: 'currency' },
     ],
     rows,
   };
@@ -289,9 +356,12 @@ function getCustomerStatements(filters) {
   const totalReceivable = rows.reduce((s, r) => s + Math.max(0, r.balance_owed), 0);
   const countWithBalance = rows.filter((r) => r.balance_owed > 0).length;
   const highestBalance = rows.reduce((m, r) => Math.max(m, r.balance_owed), 0);
+  const highestRow = rows.find((r) => r.balance_owed > 0 && r.balance_owed === highestBalance);
 
   return {
     success: true,
+    totalReceivable,
+    highestBalanceName: highestRow ? highestRow.name : null,
     summary: [
       { label: 'Total Receivable', value: totalReceivable, accentKey: 'blue', format: 'currency' },
       { label: 'Customers With Balance', value: countWithBalance, accentKey: 'amber', format: 'number' },
@@ -309,9 +379,6 @@ function getCustomerStatements(filters) {
 }
 
 // ---------------- 5. Supplier Statements ----------------
-// Known limitation: purchase invoice totals aren't tracked yet (that arrives
-// with the future Purchase Entry module), so this can only reflect opening
-// balance minus payments made — flagged with a banner in the renderer.
 
 function getSupplierStatements(filters) {
   const db = getDb();
@@ -325,9 +392,12 @@ function getSupplierStatements(filters) {
   const totalPayable = rows.reduce((s, r) => s + Math.max(0, r.balance_owed), 0);
   const countWithBalance = rows.filter((r) => r.balance_owed > 0).length;
   const highestBalance = rows.reduce((m, r) => Math.max(m, r.balance_owed), 0);
+  const highestRow = rows.find((r) => r.balance_owed > 0 && r.balance_owed === highestBalance);
 
   return {
     success: true,
+    totalPayable,
+    highestBalanceName: highestRow ? highestRow.name : null,
     summary: [
       { label: 'Total Payable', value: totalPayable, accentKey: 'blue', format: 'currency' },
       { label: 'Suppliers With Balance', value: countWithBalance, accentKey: 'amber', format: 'number' },
@@ -349,36 +419,75 @@ function getCashierPerformance(filters) {
   const db = getDb();
   const { from, to } = dateRangeParams(filters);
 
-  const rows = db
+  const salesRows = db
     .prepare(
-      `SELECT u.id, u.full_name,
+      `SELECT s.cashier_id AS id,
               COUNT(s.id) AS sales_count,
-              COALESCE(SUM(s.total_amount), 0) AS total_revenue,
+              COALESCE(SUM(s.total_amount), 0) AS gross_revenue,
               COALESCE(SUM(s.discount_amount), 0) AS total_discounts
-       FROM users u
-       JOIN sales s ON s.cashier_id = u.id
-       WHERE date(s.created_at) BETWEEN date(?) AND date(?)
-       GROUP BY u.id
-       ORDER BY total_revenue DESC`
+       FROM sales s
+       WHERE date(s.created_at, 'localtime') BETWEEN date(?) AND date(?)
+       GROUP BY s.cashier_id`
     )
-    .all(from, to)
-    .map((r) => ({ ...r, avg_sale_value: r.sales_count > 0 ? r.total_revenue / r.sales_count : 0 }));
+    .all(from, to);
+
+  // A return counts against the cashier who made the ORIGINAL sale, on the
+  // day the return was made.
+  const returnRows = db
+    .prepare(
+      `SELECT s.cashier_id AS id, COALESCE(SUM(r.total_amount), 0) AS returns_total
+       FROM sale_returns r
+       JOIN sales s ON s.id = r.sale_id
+       WHERE date(r.created_at, 'localtime') BETWEEN date(?) AND date(?)
+       GROUP BY s.cashier_id`
+    )
+    .all(from, to);
+
+  const byId = {};
+  const at = (id) => (byId[id] = byId[id] || { id, sales_count: 0, gross_revenue: 0, total_discounts: 0, returns_total: 0 });
+  for (const r of salesRows) Object.assign(at(r.id), r);
+  for (const r of returnRows) at(r.id).returns_total = r.returns_total;
+
+  const ids = Object.keys(byId).map(Number);
+  const names = ids.length
+    ? Object.fromEntries(
+        db
+          .prepare(`SELECT id, full_name FROM users WHERE id IN (${ids.map(() => '?').join(',')})`)
+          .all(...ids)
+          .map((u) => [u.id, u.full_name])
+      )
+    : {};
+
+  const rows = Object.values(byId)
+    .map((r) => ({
+      ...r,
+      full_name: names[r.id] || 'Unknown',
+      total_revenue: r.gross_revenue - r.returns_total,
+      avg_sale_value: r.sales_count > 0 ? r.gross_revenue / r.sales_count : 0,
+    }))
+    .sort((a, b) => b.total_revenue - a.total_revenue);
 
   const topCashier = rows[0]?.full_name || '—';
+  const returnsTotal = rows.reduce((s, r) => s + r.returns_total, 0);
+  const totalDiscounts = rows.reduce((s, r) => s + r.total_discounts, 0);
 
   return {
     success: true,
     summary: [
       { label: 'Top Performing Cashier', value: topCashier, accentKey: 'blue', format: 'text' },
       { label: 'Cashiers Active in Range', value: rows.length, accentKey: 'green', format: 'number' },
+      { label: 'Discounts Given', value: totalDiscounts, accentKey: 'amber', format: 'currency' },
     ],
+    returnsTotal,
+    totalDiscounts,
     chartData: rows.map((r) => ({ name: r.full_name, revenue: r.total_revenue })),
     columns: [
       { key: 'full_name', label: 'Cashier Name', format: 'text' },
-      { key: 'sales_count', label: 'Sales Count', format: 'number' },
-      { key: 'total_revenue', label: 'Total Revenue', format: 'currency' },
-      { key: 'avg_sale_value', label: 'Average Sale Value', format: 'currency' },
-      { key: 'total_discounts', label: 'Total Discounts Given', format: 'currency' },
+      { key: 'sales_count', label: 'Sales', format: 'number' },
+      { key: 'total_revenue', label: 'Net Sales', format: 'currency' },
+      { key: 'returns_total', label: 'Returned', format: 'currency' },
+      { key: 'avg_sale_value', label: 'Average Sale', format: 'currency' },
+      { key: 'total_discounts', label: 'Discounts Given', format: 'currency' },
     ],
     rows,
   };
