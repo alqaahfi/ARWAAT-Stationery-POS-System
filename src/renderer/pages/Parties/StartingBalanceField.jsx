@@ -1,8 +1,8 @@
 import React from 'react';
 import theme from '../../config/theme';
 import glossary from '../../config/glossary';
-import { Field, NumberInput } from '../../components/ui';
-import { SectionCard } from '../Products/form/fields';
+import { NumberInput } from '../../components/ui';
+import { FormRow } from './PartyParts';
 import { formatCurrency } from '../../utils/format';
 
 const c = theme.colors;
@@ -28,24 +28,16 @@ const LATER = {
 // Editable only when creating; afterwards the balance moves through payments
 // and corrections, so here it is just shown.
 export function StartingBalanceField({ party = 'customer', isEdit, value, onChange, id }) {
+  if (isEdit) {
+    return (
+      <FormRow label={glossary.startingBalance} hint={LATER[party]}>
+        <div style={{ ...theme.type.body, ...theme.font.numeric, color: c.label, fontWeight: theme.font.weightSemibold }}>{formatCurrency(value)}</div>
+      </FormRow>
+    );
+  }
   return (
-    <SectionCard dense title={glossary.startingBalance}>
-      {isEdit ? (
-        <div>
-          <div style={{ ...theme.type.headline, ...theme.font.numeric, color: c.label }}>{formatCurrency(value)}</div>
-          <div style={{ ...theme.type.footnote, color: c.labelSecondary, marginTop: '6px' }}>{LATER[party]}</div>
-        </div>
-      ) : (
-        <Field label="Amount" hint={HINTS[party]} style={{ marginBottom: 0, maxWidth: '260px' }}>
-          <NumberInput
-            id={id}
-            value={value ?? ''}
-            placeholder="0"
-            onFocus={(e) => e.target.select()}
-            onChange={(e) => onChange(cleanAmount(e.target.value))}
-          />
-        </Field>
-      )}
-    </SectionCard>
+    <FormRow label={glossary.startingBalance} hint={HINTS[party]}>
+      <NumberInput id={id} value={value ?? ''} placeholder="0" onFocus={(e) => e.target.select()} onChange={(e) => onChange(cleanAmount(e.target.value))} />
+    </FormRow>
   );
 }

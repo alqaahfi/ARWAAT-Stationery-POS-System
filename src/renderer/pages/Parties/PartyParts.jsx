@@ -1,4 +1,4 @@
-import React, { memo, useId } from 'react';
+import React, { memo, useId, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronRight, CircleAlert, Lock, RotateCw, SearchX } from 'lucide-react';
 import theme from '../../config/theme';
 import { Avatar, Badge, Button, Card, EmptyState, Icon, Skeleton, Toggle } from '../../components/ui';
@@ -122,20 +122,66 @@ export const pageColumn = {
   paddingBottom: theme.spacing.xxl,
 };
 
-// Fixed one-screen form: fills the content region, never scrolls. The grid
-// clips (not the wrapper) so StickyActions can still bleed to the edges.
-export const fixedPage = { height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', gap: theme.spacing.smd };
-export const fixedGrid = {
+// --- Fixed one-screen form ------------------------------------------------
+// The content region scrolls and has tabs above the page, so a plain 100%
+// height overflows. Measure the room left and fill exactly that.
+export function useFitHeight() {
+  const ref = useRef(null);
+  const [height, setHeight] = useState(null);
+  useLayoutEffect(() => {
+    function fit() {
+      if (!ref.current) return;
+      const top = ref.current.getBoundingClientRect().top;
+      setHeight(Math.max(320, window.innerHeight - top - parseInt(theme.spacing.lg, 10)));
+    }
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, []);
+  return [ref, height];
+}
+
+export const fixedPage = (height) => ({ height: height ?? '100%', minHeight: 0, display: 'flex', flexDirection: 'column', gap: theme.spacing.smd });
+// One surface holding every field; clips so nothing ever scrolls.
+export const formBox = {
   flex: 1,
   minHeight: 0,
-  display: 'grid',
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-  gap: theme.spacing.smd,
-  alignItems: 'start',
   overflow: 'hidden',
+  boxSizing: 'border-box',
+  backgroundColor: c.surface,
+  border: `1px solid ${c.separator}`,
+  borderRadius: theme.radius.lg,
+  padding: `${theme.spacing.smd} ${theme.spacing.mdl}`,
 };
-export const fixedCol = { display: 'flex', flexDirection: 'column', gap: theme.spacing.smd, minWidth: 0, minHeight: 0 };
-// Holds a card that must shrink to the space left in its column.
-export const fixedFill = { flex: 1, minHeight: 0, overflow: 'hidden' };
+export const formColumns = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', columnGap: theme.spacing.xl, alignItems: 'start' };
+export const formDivider = { height: '1px', backgroundColor: c.separator, margin: `${theme.spacing.xs} 0 ${theme.spacing.smd}` };
+
+// Label on the left, control on the right — one line per field.
+export function FormRow({ label, required, error, hint, top, children }) {
+  const autoId = useId();
+  const child = React.Children.only(children);
+  const id = child.props.id || autoId;
+  const control = React.cloneElement(child, {
+    id,
+    'aria-invalid': error ? true : child.props['aria-invalid'],
+    'aria-describedby': error || hint ? `${id}-msg` : undefined,
+  });
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '112px minmax(0, 1fr)', columnGap: theme.spacing.smd, alignItems: top ? 'start' : 'center', marginBottom: theme.spacing.sm }}>
+      <label htmlFor={id} style={{ ...theme.type.subhead, fontWeight: theme.font.weightMedium, color: c.labelSecondary, paddingTop: top ? '8px' : 0 }}>
+        {label}
+        {required && <span style={{ color: c.redText }}> *</span>}
+      </label>
+      <div style={{ minWidth: 0 }}>
+        {control}
+        {(error || hint) && (
+          <div id={`${id}-msg`} role={error ? 'alert' : undefined} style={{ ...theme.type.footnote, color: error ? c.redText : c.labelSecondary, marginTop: '2px' }}>
+            {error || hint}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export const listToolbar = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: theme.spacing.sm };

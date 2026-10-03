@@ -1,12 +1,10 @@
 import React from 'react';
-import { BookOpen, CalendarDays, HandCoins, Mail, Phone, ShieldCheck, Smartphone, StickyNote } from 'lucide-react';
-import theme from '../../../config/theme';
+import { BookOpen, HandCoins } from 'lucide-react';
 import glossary from '../../../config/glossary';
-import { Badge, Button, Disclosure, Field, NumberInput, SegmentedControl, Select, TextInput, Textarea } from '../../../components/ui';
+import { Badge, Button, NumberInput, SegmentedControl, Select, TextInput, Textarea, Toggle } from '../../../components/ui';
 import { PRICE_LEVELS, priceLevelLabel } from '../../../utils/priceLevel';
-import { SectionCard } from '../../Products/form/fields';
 import { PartyHeader, contactLine } from '../../Parties/PartyHeader';
-import { OptionRow } from '../../Parties/PartyParts';
+import { FormRow } from '../../Parties/PartyParts';
 import { TypeBadge } from './CustomerListParts';
 
 const TYPE_OPTIONS = [
@@ -14,9 +12,12 @@ const TYPE_OPTIONS = [
   { value: 'wholesale', label: 'Wholesale' },
 ];
 
+const textareaStyle = { minHeight: '56px', height: '56px', resize: 'none' };
+
 export function CustomerHeader({ customer, balance, onOpenAccount, onReceivePayment }) {
   return (
     <PartyHeader
+      bare
       name={customer.name}
       party="customer"
       balance={balance}
@@ -42,96 +43,50 @@ export function CustomerHeader({ customer, balance, onOpenAccount, onReceivePaym
   );
 }
 
-// Label text with a small leading icon (outside the input).
-function IconLabel({ icon: IconComponent, children }) {
+export function NameRow({ name, onName, nameError, autoFocus }) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: theme.spacing.xs }}>
-      <IconComponent size={14} aria-hidden="true" />
-      {children}
-    </span>
+    <FormRow label="Name" required error={nameError}>
+      <TextInput id="customer-name" value={name} onChange={(e) => onName(e.target.value)} autoFocus={autoFocus} autoComplete="off" />
+    </FormRow>
   );
 }
 
-const twoCol = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', columnGap: theme.spacing.sm };
-
-export function BasicsCard({ name, onName, nameError, autoFocus, customerType, onCustomerType }) {
+export function TypeRow({ customerType, onCustomerType }) {
   return (
-    <SectionCard dense title="Basics">
-      <Field label="Name" required error={nameError}>
-        <TextInput id="customer-name" value={name} onChange={(e) => onName(e.target.value)} autoFocus={autoFocus} autoComplete="off" />
-      </Field>
-      <Field label="Type" hint="Wholesale customers get wholesale prices and an A4 invoice by default." style={{ marginBottom: 0 }}>
-        <SegmentedControl label="Customer type" options={TYPE_OPTIONS} value={customerType} onChange={onCustomerType} />
-      </Field>
-    </SectionCard>
+    <FormRow label="Type">
+      <SegmentedControl label="Customer type" options={TYPE_OPTIONS} value={customerType} onChange={onCustomerType} />
+    </FormRow>
   );
 }
 
-export function ContactCard({ phone, onPhone, mobile, onMobile, email, onEmail }) {
+export function ContactRows({ phone, onPhone, mobile, onMobile, email, onEmail }) {
   return (
-    <SectionCard dense title="Contact">
-      <div style={twoCol}>
-        <Field label={<IconLabel icon={Phone}>Phone</IconLabel>}>
-          <TextInput type="tel" value={phone} onChange={(e) => onPhone(e.target.value)} autoComplete="off" />
-        </Field>
-        <Field label={<IconLabel icon={Smartphone}>Mobile</IconLabel>}>
-          <TextInput type="tel" value={mobile} onChange={(e) => onMobile(e.target.value)} autoComplete="off" />
-        </Field>
-      </div>
-      <Field label={<IconLabel icon={Mail}>Email</IconLabel>} style={{ marginBottom: 0 }}>
+    <>
+      <FormRow label="Phone">
+        <TextInput type="tel" value={phone} onChange={(e) => onPhone(e.target.value)} autoComplete="off" />
+      </FormRow>
+      <FormRow label="Mobile">
+        <TextInput type="tel" value={mobile} onChange={(e) => onMobile(e.target.value)} autoComplete="off" />
+      </FormRow>
+      <FormRow label="Email">
         <TextInput type="email" value={email} onChange={(e) => onEmail(e.target.value)} autoComplete="off" />
-      </Field>
-    </SectionCard>
+      </FormRow>
+    </>
   );
 }
 
-export function AddressCard({ address, onAddress }) {
+export function AddressRow({ address, onAddress }) {
   return (
-    <SectionCard dense title="Address">
-      <Field label="Address" style={{ marginBottom: 0 }}>
-        <Textarea value={address} onChange={(e) => onAddress(e.target.value)} rows={2} style={{ minHeight: '48px' }} />
-      </Field>
-    </SectionCard>
+    <FormRow label="Address" top>
+      <Textarea value={address} onChange={(e) => onAddress(e.target.value)} rows={2} style={textareaStyle} />
+    </FormRow>
   );
 }
 
-export function CreditCard({ creditLimit, onCreditLimit, joiningDate, onJoiningDate }) {
+export function PricingRows({ tier, onTier, customerType, letterheads, letterheadId, onLetterheadId }) {
   return (
-    <SectionCard dense title="Credit and History">
-      <div style={twoCol}>
-        <Field
-          label={<IconLabel icon={ShieldCheck}>Credit Limit</IconLabel>}
-          hint="The most credit this customer can owe. Saved for reference only. 0 means no limit set."
-          style={{ marginBottom: 0 }}
-        >
-          <NumberInput value={creditLimit} onChange={(e) => onCreditLimit(e.target.value)} />
-        </Field>
-        <Field label={<IconLabel icon={CalendarDays}>Joined</IconLabel>} style={{ marginBottom: 0 }}>
-          <TextInput type="date" value={joiningDate} onChange={(e) => onJoiningDate(e.target.value)} />
-        </Field>
-      </div>
-    </SectionCard>
-  );
-}
-
-export function NotesCard({ notes, onNotes }) {
-  return (
-    <SectionCard dense title="Notes">
-      <Field label={<IconLabel icon={StickyNote}>Notes</IconLabel>} style={{ marginBottom: 0 }}>
-        <Textarea value={notes} onChange={(e) => onNotes(e.target.value)} rows={3} />
-      </Field>
-    </SectionCard>
-  );
-}
-
-export function PricingCard({ tier, onTier, customerType, letterheads, letterheadId, onLetterheadId }) {
-  return (
-    <SectionCard dense title="Pricing">
-      <Field
-        label="Price Level"
-        hint="Customers on a Price Level automatically get the special price you set for that level on each item. Leave as None for normal prices."
-        style={customerType === 'wholesale' ? undefined : { marginBottom: 0 }}
-      >
+    <>
+      <FormRow label="Price level">
         <Select value={tier} onChange={(e) => onTier(e.target.value)}>
           <option value="">{glossary.noPriceLevel}</option>
           {PRICE_LEVELS.map((t) => (
@@ -140,9 +95,9 @@ export function PricingCard({ tier, onTier, customerType, letterheads, letterhea
             </option>
           ))}
         </Select>
-      </Field>
+      </FormRow>
       {customerType === 'wholesale' && (
-        <Field label="Letterhead" hint="Used on this customer's A4 invoices." style={{ marginBottom: 0 }}>
+        <FormRow label="Letterhead">
           <Select value={letterheadId} onChange={(e) => onLetterheadId(e.target.value)}>
             <option value="">{glossary.shopDefaultLetterhead}</option>
             {letterheads.map((l) => (
@@ -151,16 +106,37 @@ export function PricingCard({ tier, onTier, customerType, letterheads, letterhea
               </option>
             ))}
           </Select>
-        </Field>
+        </FormRow>
       )}
-    </SectionCard>
+    </>
   );
 }
 
-export function CustomerMoreOptions({ isActive, onIsActive }) {
+export function CreditRows({ creditLimit, onCreditLimit, joiningDate, onJoiningDate }) {
   return (
-    <Disclosure title="More options" summary={isActive ? undefined : glossary.inactive}>
-      <OptionRow label="Active" hint="Inactive customers don't show up when making a sale." checked={isActive} onChange={onIsActive} />
-    </Disclosure>
+    <>
+      <FormRow label="Credit limit" hint="0 means no limit. Saved for reference only.">
+        <NumberInput value={creditLimit} onChange={(e) => onCreditLimit(e.target.value)} />
+      </FormRow>
+      <FormRow label="Joined">
+        <TextInput type="date" value={joiningDate} onChange={(e) => onJoiningDate(e.target.value)} />
+      </FormRow>
+    </>
+  );
+}
+
+export function NotesRow({ notes, onNotes }) {
+  return (
+    <FormRow label="Notes" top>
+      <Textarea value={notes} onChange={(e) => onNotes(e.target.value)} rows={2} style={textareaStyle} />
+    </FormRow>
+  );
+}
+
+export function ActiveRow({ isActive, onIsActive }) {
+  return (
+    <FormRow label="Active" hint="Inactive customers don't show up when making a sale.">
+      <Toggle checked={isActive} onChange={onIsActive} label="Active" />
+    </FormRow>
   );
 }

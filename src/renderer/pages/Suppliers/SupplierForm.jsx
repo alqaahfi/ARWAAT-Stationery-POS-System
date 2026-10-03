@@ -3,17 +3,16 @@ import { UserX } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Button, Card, EmptyState, useToast } from '../../components/ui';
 import { StickyActions } from '../Products/form/StickyActions';
-import { RecentActivityCard } from '../Parties/RecentActivityCard';
 import { StartingBalanceField } from '../Parties/StartingBalanceField';
-import { FormSkeleton, RestrictedNotice, fixedCol, fixedFill, fixedGrid, fixedPage } from '../Parties/PartyParts';
+import { FormSkeleton, RestrictedNotice, fixedPage, formBox, formColumns, formDivider, useFitHeight } from '../Parties/PartyParts';
 import {
-  SupplierAddressCard,
-  SupplierBasicsCard,
-  SupplierContactCard,
+  SupplierActiveRow,
+  SupplierAddressRow,
+  SupplierContactRows,
   SupplierHeader,
-  SupplierHistoryCard,
-  SupplierMoreOptions,
-  SupplierNotesCard,
+  SupplierJoinedRow,
+  SupplierNameRow,
+  SupplierNotesRow,
 } from './parts/SupplierFormParts';
 
 function todayLocal() {
@@ -44,6 +43,7 @@ export default function SupplierForm({ supplierId, onDone, onCancel, onNavigate 
   const [saved, setSaved] = useState(null);
   const [ledger, setLedger] = useState({ loading: false, error: false, data: null });
   const savingRef = useRef(false);
+  const [pageRef, pageHeight] = useFitHeight();
 
   const loadLedger = useCallback(async () => {
     if (!supplierId) return;
@@ -176,46 +176,43 @@ export default function SupplierForm({ supplierId, onDone, onCancel, onNavigate 
   const newPurchase = onNavigate ? () => onNavigate('/products/purchases') : undefined;
 
   return (
-    <div style={fixedPage}>
-      {isEdit && saved && <SupplierHeader supplier={saved} balance={ledger.data?.balance} onPay={openAccount} onNewPurchase={newPurchase} />}
+    <div ref={pageRef} style={fixedPage(pageHeight)}>
+      <div style={formBox}>
+        {isEdit && saved && <SupplierHeader supplier={saved} balance={ledger.data?.balance} onPay={openAccount} onNewPurchase={newPurchase} />}
 
-      <div style={fixedGrid}>
-        <div style={fixedCol}>
-          <SupplierBasicsCard
-            name={name}
-            onName={(v) => {
-              setName(v);
-              if (v.trim()) setNameError('');
-            }}
-            nameError={nameError}
-            autoFocus={!isEdit}
-            contactPerson={contactPerson}
-            onContactPerson={setContactPerson}
-          />
-          <SupplierContactCard phone={phone} onPhone={setPhone} mobile={mobile} onMobile={setMobile} email={email} onEmail={setEmail} />
+        <SupplierNameRow
+          name={name}
+          onName={(v) => {
+            setName(v);
+            if (v.trim()) setNameError('');
+          }}
+          nameError={nameError}
+          autoFocus={!isEdit}
+        />
+
+        <div style={formColumns}>
+          <div>
+            <SupplierContactRows
+              contactPerson={contactPerson}
+              onContactPerson={setContactPerson}
+              phone={phone}
+              onPhone={setPhone}
+              mobile={mobile}
+              onMobile={setMobile}
+              email={email}
+              onEmail={setEmail}
+            />
+          </div>
+          <div>
+            <SupplierAddressRow address={address} onAddress={setAddress} />
+            <SupplierJoinedRow joiningDate={joiningDate} onJoiningDate={setJoiningDate} />
+            <StartingBalanceField party="supplier" isEdit={isEdit} value={openingBalance} onChange={setOpeningBalance} id="supplier-opening-balance" />
+            {isEdit && <SupplierActiveRow isActive={isActive} onIsActive={setIsActive} />}
+          </div>
         </div>
 
-        <div style={fixedCol}>
-          <SupplierAddressCard address={address} onAddress={setAddress} />
-          <SupplierHistoryCard joiningDate={joiningDate} onJoiningDate={setJoiningDate} />
-          <StartingBalanceField party="supplier" isEdit={isEdit} value={openingBalance} onChange={setOpeningBalance} id="supplier-opening-balance" />
-        </div>
-
-        <div style={{ ...fixedCol, height: '100%' }}>
-          <SupplierNotesCard notes={notes} onNotes={setNotes} />
-          <SupplierMoreOptions isEdit={isEdit} isActive={isActive} onIsActive={setIsActive} />
-          {isEdit && saved && (
-            <div style={fixedFill}>
-              <RecentActivityCard
-                rows={ledger.data?.transactions}
-                loading={ledger.loading}
-                error={ledger.error}
-                onRetry={loadLedger}
-                onSeeAll={openAccount}
-              />
-            </div>
-          )}
-        </div>
+        <div style={formDivider} />
+        <SupplierNotesRow notes={notes} onNotes={setNotes} />
       </div>
 
       <StickyActions onCancel={onCancel} onSave={handleSave} saving={saving} saveLabel={isEdit ? 'Save changes' : 'Save supplier'} />
