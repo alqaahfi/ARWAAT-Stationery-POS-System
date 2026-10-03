@@ -143,15 +143,20 @@ export function useFitHeight() {
 
 export const fixedPage = (height) => ({ height: height ?? '100%', minHeight: 0, display: 'flex', flexDirection: 'column', gap: theme.spacing.smd });
 // One surface holding every field; clips so nothing ever scrolls.
+// Stage that centres the card in the space above the save bar.
+export const formStage = { flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' };
+// One centred iOS-style card holding every field; clips so nothing scrolls.
 export const formBox = {
-  flex: 1,
-  minHeight: 0,
+  width: '100%',
+  maxWidth: '900px',
+  maxHeight: '100%',
   overflow: 'hidden',
   boxSizing: 'border-box',
   backgroundColor: c.surface,
   border: `1px solid ${c.separator}`,
-  borderRadius: theme.radius.lg,
-  padding: `${theme.spacing.smd} ${theme.spacing.mdl}`,
+  borderRadius: theme.radius.xl,
+  boxShadow: theme.shadow.popover,
+  padding: `${theme.spacing.mdl} ${theme.spacing.lg}`,
 };
 export const formColumns = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', columnGap: theme.spacing.xl, alignItems: 'start' };
 export const formDivider = { height: '1px', backgroundColor: c.separator, margin: `${theme.spacing.xs} 0 ${theme.spacing.smd}` };

@@ -1,10 +1,19 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { UserX } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
-import { Button, Card, EmptyState, useToast } from '../../components/ui';
-import { StickyActions } from '../Products/form/StickyActions';
-import { StartingBalanceField } from '../Parties/StartingBalanceField';
-import { FormSkeleton, RestrictedNotice, fixedPage, formBox, formColumns, formDivider, useFitHeight } from '../Parties/PartyParts';
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { UserX } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
+import { Button, Card, EmptyState, useToast } from "../../components/ui";
+import { StickyActions } from "../Products/form/StickyActions";
+import { StartingBalanceField } from "../Parties/StartingBalanceField";
+import {
+  FormSkeleton,
+  RestrictedNotice,
+  fixedPage,
+  formBox,
+  formColumns,
+  formStage,
+  formDivider,
+  useFitHeight,
+} from "../Parties/PartyParts";
 import {
   ActiveRow,
   AddressRow,
@@ -15,40 +24,49 @@ import {
   NotesRow,
   PricingRows,
   TypeRow,
-} from './parts/CustomerFormParts';
+} from "./parts/CustomerFormParts";
 
 function todayLocal() {
   const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
+  const pad = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-export default function CustomerForm({ customerId, onDone, onCancel, onNavigate }) {
+export default function CustomerForm({
+  customerId,
+  onDone,
+  onCancel,
+  onNavigate,
+}) {
   const { user } = useAuth();
   const toast = useToast();
   const isEdit = !!customerId;
 
   const [letterheads, setLetterheads] = useState([]);
-  const [name, setName] = useState('');
-  const [customerType, setCustomerType] = useState('retail');
-  const [tier, setTier] = useState('');
-  const [assignedLetterheadId, setAssignedLetterheadId] = useState('');
-  const [phone, setPhone] = useState('');
-  const [mobile, setMobile] = useState('');
-  const [email, setEmail] = useState('');
-  const [address, setAddress] = useState('');
+  const [name, setName] = useState("");
+  const [customerType, setCustomerType] = useState("retail");
+  const [tier, setTier] = useState("");
+  const [assignedLetterheadId, setAssignedLetterheadId] = useState("");
+  const [phone, setPhone] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [email, setEmail] = useState("");
+  const [address, setAddress] = useState("");
   const [creditLimit, setCreditLimit] = useState(0);
-  const [joiningDate, setJoiningDate] = useState(isEdit ? '' : todayLocal());
-  const [notes, setNotes] = useState('');
+  const [joiningDate, setJoiningDate] = useState(isEdit ? "" : todayLocal());
+  const [notes, setNotes] = useState("");
   const [openingBalance, setOpeningBalance] = useState(0);
   const [isActive, setIsActive] = useState(true);
-  const [nameError, setNameError] = useState('');
+  const [nameError, setNameError] = useState("");
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(!isEdit);
   const [loadFailed, setLoadFailed] = useState(false);
   // The record as last loaded — drives the header, so it doesn't change while typing.
   const [saved, setSaved] = useState(null);
-  const [ledger, setLedger] = useState({ loading: false, error: false, data: null });
+  const [ledger, setLedger] = useState({
+    loading: false,
+    error: false,
+    data: null,
+  });
   const savingRef = useRef(false);
   const [pageRef, pageHeight] = useFitHeight();
 
@@ -66,7 +84,11 @@ export default function CustomerForm({ customerId, onDone, onCancel, onNavigate 
     setLedger((l) => ({ ...l, loading: true, error: false }));
     try {
       const res = await window.api.customers.getLedger({ id: customerId });
-      setLedger({ loading: false, error: !res?.success, data: res?.success ? res : null });
+      setLedger({
+        loading: false,
+        error: !res?.success,
+        data: res?.success ? res : null,
+      });
     } catch {
       setLedger({ loading: false, error: true, data: null });
     }
@@ -85,15 +107,15 @@ export default function CustomerForm({ customerId, onDone, onCancel, onNavigate 
         }
         setName(c.name);
         setCustomerType(c.customer_type);
-        setTier(c.tier || '');
-        setAssignedLetterheadId(c.assigned_letterhead_id || '');
-        setPhone(c.phone || '');
-        setMobile(c.mobile || '');
-        setEmail(c.email || '');
-        setAddress(c.address || '');
+        setTier(c.tier || "");
+        setAssignedLetterheadId(c.assigned_letterhead_id || "");
+        setPhone(c.phone || "");
+        setMobile(c.mobile || "");
+        setEmail(c.email || "");
+        setAddress(c.address || "");
         setCreditLimit(c.credit_limit || 0);
-        setJoiningDate(c.joining_date || '');
-        setNotes(c.notes || '');
+        setJoiningDate(c.joining_date || "");
+        setNotes(c.notes || "");
         setOpeningBalance(c.opening_balance);
         setIsActive(!!c.is_active);
         setSaved({
@@ -117,8 +139,8 @@ export default function CustomerForm({ customerId, onDone, onCancel, onNavigate 
 
   function focusName() {
     requestAnimationFrame(() => {
-      const el = document.getElementById('customer-name');
-      el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      const el = document.getElementById("customer-name");
+      el?.scrollIntoView({ block: "center", behavior: "smooth" });
       el?.focus({ preventScroll: true });
     });
   }
@@ -126,8 +148,8 @@ export default function CustomerForm({ customerId, onDone, onCancel, onNavigate 
   async function handleSave() {
     if (savingRef.current) return;
     if (!name.trim()) {
-      setNameError('Customer name is required.');
-      toast.error('Please check the highlighted fields');
+      setNameError("Customer name is required.");
+      toast.error("Please check the highlighted fields");
       focusName();
       return;
     }
@@ -139,7 +161,9 @@ export default function CustomerForm({ customerId, onDone, onCancel, onNavigate 
         name: name.trim(),
         customerType,
         tier: tier || null,
-        assignedLetterheadId: assignedLetterheadId ? Number(assignedLetterheadId) : null,
+        assignedLetterheadId: assignedLetterheadId
+          ? Number(assignedLetterheadId)
+          : null,
         phone: phone.trim() || null,
         mobile: mobile.trim() || null,
         email: email.trim() || null,
@@ -151,36 +175,42 @@ export default function CustomerForm({ customerId, onDone, onCancel, onNavigate 
 
       const res = isEdit
         ? await window.api.customers.update({ id: customerId, ...payload })
-        : await window.api.customers.create({ ...payload, openingBalance: Number(openingBalance) || 0 });
+        : await window.api.customers.create({
+            ...payload,
+            openingBalance: Number(openingBalance) || 0,
+          });
 
       if (!res.success) {
-        if (/name/i.test(res.reason || '')) {
+        if (/name/i.test(res.reason || "")) {
           setNameError(res.reason);
           focusName();
         }
-        toast.error(res.reason || 'Could not save customer.');
+        toast.error(res.reason || "Could not save customer.");
         return;
       }
       if (isEdit && saved && isActive !== saved.isActive) {
-        await window.api.customers.setActive({ id: customerId, isActive: isActive ? 1 : 0 });
+        await window.api.customers.setActive({
+          id: customerId,
+          isActive: isActive ? 1 : 0,
+        });
       }
-      toast.success('Customer saved');
+      toast.success("Customer saved");
       onDone();
     } catch {
-      toast.error('Could not save customer. Please try again.');
+      toast.error("Could not save customer. Please try again.");
     } finally {
       savingRef.current = false;
       setSaving(false);
     }
   }
 
-  if (user.role !== 'admin') {
+  if (user.role !== "admin") {
     return <RestrictedNotice />;
   }
 
   if (loadFailed) {
     return (
-      <Card style={{ maxWidth: '560px', margin: '0 auto' }}>
+      <Card style={{ maxWidth: "560px", margin: "0 auto" }}>
         <EmptyState
           icon={UserX}
           color="red"
@@ -196,52 +226,93 @@ export default function CustomerForm({ customerId, onDone, onCancel, onNavigate 
     return <FormSkeleton />;
   }
 
-  const openAccount = onNavigate ? () => onNavigate('/ledgers/customers', { id: customerId, name: saved?.name }) : undefined;
-  const receivePayment = onNavigate ? () => onNavigate('/payments/record', { id: customerId, name: saved?.name }) : undefined;
+  const openAccount = onNavigate
+    ? () =>
+        onNavigate("/ledgers/customers", { id: customerId, name: saved?.name })
+    : undefined;
+  const receivePayment = onNavigate
+    ? () =>
+        onNavigate("/payments/record", { id: customerId, name: saved?.name })
+    : undefined;
 
   return (
     <div ref={pageRef} style={fixedPage(pageHeight)}>
-      <div style={formBox}>
-        {isEdit && saved && (
-          <CustomerHeader customer={saved} balance={ledger.data?.balance} onOpenAccount={openAccount} onReceivePayment={receivePayment} />
-        )}
-
-        <NameRow
-          name={name}
-          onName={(v) => {
-            setName(v);
-            if (v.trim()) setNameError('');
-          }}
-          nameError={nameError}
-          autoFocus={!isEdit}
-        />
-
-        <div style={formColumns}>
-          <div>
-            <TypeRow customerType={customerType} onCustomerType={setCustomerType} />
-            <ContactRows phone={phone} onPhone={setPhone} mobile={mobile} onMobile={setMobile} email={email} onEmail={setEmail} />
-            <AddressRow address={address} onAddress={setAddress} />
-          </div>
-          <div>
-            <PricingRows
-              tier={tier}
-              onTier={setTier}
-              customerType={customerType}
-              letterheads={letterheads}
-              letterheadId={assignedLetterheadId}
-              onLetterheadId={setAssignedLetterheadId}
+      <div style={formStage}>
+        <div style={formBox}>
+          {isEdit && saved && (
+            <CustomerHeader
+              customer={saved}
+              balance={ledger.data?.balance}
+              onOpenAccount={openAccount}
+              onReceivePayment={receivePayment}
             />
-            <CreditRows creditLimit={creditLimit} onCreditLimit={setCreditLimit} joiningDate={joiningDate} onJoiningDate={setJoiningDate} />
-            <StartingBalanceField party="customer" isEdit={isEdit} value={openingBalance} onChange={setOpeningBalance} id="customer-opening-balance" />
-            {isEdit && <ActiveRow isActive={isActive} onIsActive={setIsActive} />}
-          </div>
-        </div>
+          )}
 
-        <div style={formDivider} />
-        <NotesRow notes={notes} onNotes={setNotes} />
+          <NameRow
+            name={name}
+            onName={(v) => {
+              setName(v);
+              if (v.trim()) setNameError("");
+            }}
+            nameError={nameError}
+            autoFocus={!isEdit}
+          />
+
+          <div style={formColumns}>
+            <div>
+              <TypeRow
+                customerType={customerType}
+                onCustomerType={setCustomerType}
+              />
+              <ContactRows
+                phone={phone}
+                onPhone={setPhone}
+                mobile={mobile}
+                onMobile={setMobile}
+                email={email}
+                onEmail={setEmail}
+              />
+              <AddressRow address={address} onAddress={setAddress} />
+            </div>
+            <div>
+              <PricingRows
+                tier={tier}
+                onTier={setTier}
+                customerType={customerType}
+                letterheads={letterheads}
+                letterheadId={assignedLetterheadId}
+                onLetterheadId={setAssignedLetterheadId}
+              />
+              <CreditRows
+                creditLimit={creditLimit}
+                onCreditLimit={setCreditLimit}
+                joiningDate={joiningDate}
+                onJoiningDate={setJoiningDate}
+              />
+              <StartingBalanceField
+                party="customer"
+                isEdit={isEdit}
+                value={openingBalance}
+                onChange={setOpeningBalance}
+                id="customer-opening-balance"
+              />
+              {isEdit && (
+                <ActiveRow isActive={isActive} onIsActive={setIsActive} />
+              )}
+            </div>
+          </div>
+
+          <div style={formDivider} />
+          <NotesRow notes={notes} onNotes={setNotes} />
+        </div>
       </div>
 
-      <StickyActions onCancel={onCancel} onSave={handleSave} saving={saving} saveLabel={isEdit ? 'Save changes' : 'Save customer'} />
+      <StickyActions
+        onCancel={onCancel}
+        onSave={handleSave}
+        saving={saving}
+        saveLabel={isEdit ? "Save changes" : "Save customer"}
+      />
     </div>
   );
 }
