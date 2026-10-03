@@ -1,0 +1,538 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Lock } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import theme from '../../config/theme';
+import { Card, EmptyState, useConfirm, useToast } from '../ui';
+import { formatCurrency } from '../../utils/format';
+import SaleCompleteSheet from '../../pages/POS/parts/SaleCompleteSheet';
+import { SALE_COMPLETED_EVENT } from '../../pages/POS/Sale';
+import BillOverlay from './BillOverlay';
+import BillPartyCard from './BillPartyCard';
+import BillItemSearch from './BillItemSearch';
+import BillLines from './BillLines';
+import BillSummary, { PartyTypeBadge } from './BillSummary';
+import { buildLine, computeTotals, lineTotal, lineUnits, resolveLetterheadId, round2 } from './billingUtils';
+
+// One billing form for both Sale and Purchase, so the two screens look and
+// behave the same: party → items (search / barcode, quantity, free units, pack
+// size, price) → discount → payment → save. Only the party (customer vs.
+// supplier), where the price comes from, and the print step differ.
+//
+//   kind        'sale' | 'purchase'
+//   presetParty { id } to lock the bill to a customer/supplier (opened from their profile)
+//   onSaved     called right after the bill is saved, so the page behind can refresh
+//   onClose     called when the overlay should go away
+export default function QuickBillForm({ kind, presetParty = null, onSaved, onClose }) {
+  const isPurchase = kind === 'purchase';
+  const { user, hasPermission, getPermissionValue } = useAuth();
+  const toast = useToast();
+  const confirm = useConfirm();
+  const isAdmin = user.role === 'admin';
+  const allowed = isPurchase ? isAdmin : hasPermission('make_sale');
+
+  // ---------------- bill state ----------------
+  const [party, setParty] = useState(null);
+  const [partyLoading, setPartyLoading] = useState(!!presetParty);
+  const [previousBalance, setPreviousBalance] = useState(null);
+  const [lines, setLines] = useState([]);
+  const [discountMode, setDiscountMode] = useState('percentage');
+  const [discountInput, setDiscountInput] = useState('');
+  const [paidInput, setPaidInput] = useState('');
+  const [method, setMethod] = useState('cash');
+  const [reference, setReference] = useState('');
+  const [printFormat, setPrintFormat] = useState('retail-thermal');
+  const [formatTouched, setFormatTouched] = useState(false);
+  const [showDues, setShowDues] = useState(false);
+  const [duesTouched, setDuesTouched] = useState(false);
+  const [discountCap, setDiscountCap] = useState(null);
+  const [discountError, setDiscountError] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(null);
+  const [retrying, setRetrying] = useState(false);
+  const [receiptPreview, setReceiptPreview] = useState(null);
+  const [focusKey, setFocusKey] = useState(null);
+
+  const linesRef = useRef(lines);
+  linesRef.current = lines;
+  const partyRef = useRef(party);
+  partyRef.current = party;
+  const savingRef = useRef(false);
+
+  // ---------------- loading the party ----------------
+  const loadParty = useCallback(
+    async (id) => {
+      const api = isPurchase ? window.api.suppliers : window.api.customers;
+      const [full, ledger] = await Promise.all([api.getById({ id }), api.getLedger({ id })]);
+      return { full, balance: ledger?.success ? ledger.balance : 0 };
+    },
+    [isPurchase]
+  );
+
+  async function repriceFor(customerId) {
+    const current = linesRef.current;
+    if (!current.length) return;
+    const updated = await Promise.all(
+      current.map(async (l) => ({ key: l.key, price: (await window.api.sales.resolvePrice({ productUnitId: l.unitId, customerId })).price }))
+    );
+    setLines((prev) => prev.map((l) => ({ ...l, unitPrice: updated.find((u) => u.key === l.key)?.price ?? l.unitPrice })));
+  }
+
+  async function choosePartyById(id) {
+    const { full, balance } = await loadParty(id);
+    if (!full) {
+      toast.error(isPurchase ? "That supplier couldn't be opened." : "That customer couldn't be opened.");
+      return;
+    }
+    setParty(full);
+    setPreviousBalance(balance);
+    if (!isPurchase) await repriceFor(full.id);
+  }
+
+  async function clearParty() {
+    setParty(null);
+    setPreviousBalance(null);
+    if (!isPurchase) await repriceFor(null);
+  }
+
+  useEffect(() => {
+    if (!presetParty?.id) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { full, balance } = await loadParty(presetParty.id);
+        if (cancelled) return;
+        if (full) {
+          setParty(full);
+          setPreviousBalance(balance);
+        } else {
+          toast.error("That account couldn't be opened.");
+        }
+      } catch {
+        if (!cancelled) toast.error("That account couldn't be opened.");
+      }
+      if (!cancelled) setPartyLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presetParty?.id]);
+
+  useEffect(() => {
+    if (isPurchase) return;
+    window.api.sales.getCashierDiscountCap({ userId: user.id }).then((res) => setDiscountCap(res?.capPercentage ?? null)).catch(() => {});
+  }, [isPurchase, user.id]);
+
+  // Wholesale customers default to the A4 invoice, everyone else to the small receipt.
+  useEffect(() => {
+    if (isPurchase || formatTouched) return;
+    setPrintFormat(party?.customer_type === 'wholesale' ? 'wholesale-a4' : 'retail-thermal');
+  }, [isPurchase, party, formatTouched]);
+
+  // ---------------- items ----------------
+  async function addItem(variantId) {
+    setError('');
+    let detail;
+    try {
+      detail = await window.api.sales.getVariantForCart({ variantId });
+    } catch {
+      detail = null;
+    }
+    if (!detail || !detail.defaultUnitId) {
+      toast.error('This item has no selling unit configured.');
+      return;
+    }
+    const unit = detail.units.find((u) => u.id === detail.defaultUnitId);
+    const existing = linesRef.current.find((l) => l.variantId === detail.variant.id && l.unitId === unit.id);
+    if (existing) {
+      setLines((prev) => prev.map((l) => (l.key === existing.key ? { ...l, quantity: round2((Number(l.quantity) || 0) + 1) } : l)));
+      setFocusKey(existing.key);
+      return;
+    }
+    const price = isPurchase
+      ? unit.costPrice
+      : (await window.api.sales.resolvePrice({ productUnitId: unit.id, customerId: partyRef.current?.id || null })).price;
+    const line = buildLine(detail, unit, price);
+    setLines((prev) => [...prev, line]);
+    setFocusKey(line.key);
+  }
+
+  // After an item is added, jump to its quantity box so a number can be typed straight away.
+  useEffect(() => {
+    if (!focusKey) return;
+    const el = document.getElementById(`bill-qty-${focusKey}`);
+    el?.scrollIntoView({ block: 'nearest' });
+    el?.focus();
+    el?.select?.();
+    setFocusKey(null);
+  }, [focusKey, lines]);
+
+  const updateField = useCallback((key, field, value) => {
+    setError('');
+    setLines((prev) => prev.map((l) => (l.key === key ? { ...l, [field]: value } : l)));
+  }, []);
+
+  const updateUnit = useCallback(
+    async (key, unitId) => {
+      const line = linesRef.current.find((l) => l.key === key);
+      const unit = line?.units.find((u) => u.id === unitId);
+      if (!unit) return;
+      const price = isPurchase
+        ? unit.costPrice
+        : (await window.api.sales.resolvePrice({ productUnitId: unitId, customerId: partyRef.current?.id || null })).price;
+      setLines((prev) =>
+        prev.map((l) => (l.key === key ? { ...l, unitId, conversionFactor: unit.conversionFactor, unitPrice: price, costPrice: unit.costPrice } : l))
+      );
+    },
+    [isPurchase]
+  );
+
+  const removeLine = useCallback((key) => setLines((prev) => prev.filter((l) => l.key !== key)), []);
+
+  // ---------------- derived values ----------------
+  const totals = useMemo(() => computeTotals({ lines, discountMode, discountInput, paidInput }), [lines, discountMode, discountInput, paidInput]);
+
+  // Sold + free units of one item, across all its lines, against what is on the shelf.
+  const stockIssues = useMemo(() => {
+    if (isPurchase) return {};
+    const perVariant = {};
+    for (const l of lines) perVariant[l.variantId] = (perVariant[l.variantId] || 0) + lineUnits(l) * l.conversionFactor;
+    const issues = {};
+    for (const l of lines) if (perVariant[l.variantId] > l.stockQty) issues[l.key] = true;
+    return issues;
+  }, [isPurchase, lines]);
+
+  const effectiveCap = isPurchase ? null : getPermissionValue('max_discount_percentage') ?? discountCap;
+  const discountExceedsCap = effectiveCap !== null && effectiveCap !== undefined && totals.discountPercent > Number(effectiveCap) + 0.0001;
+
+  // Their account before this bill, and after it. Nothing counts as paid until a payment is typed.
+  const newBalance = previousBalance !== null ? round2(previousBalance + totals.total - totals.paid) : null;
+
+  // Show the balance on the receipt by default whenever the customer will still owe something.
+  useEffect(() => {
+    if (isPurchase || !party || duesTouched) return;
+    setShowDues((previousBalance || 0) + totals.balanceDue !== 0);
+  }, [isPurchase, party, previousBalance, totals.balanceDue, duesTouched]);
+
+  // ---------------- saving ----------------
+  function validate() {
+    if (isPurchase && !party) return 'Choose a supplier first.';
+    if (lines.length === 0) return 'Add at least one item.';
+    for (const l of lines) {
+      if (!(Number(l.quantity) > 0)) return `Enter a quantity for ${l.productName}.`;
+      if (Number(l.focQuantity) < 0 || Number.isNaN(Number(l.focQuantity))) return `Free quantity for ${l.productName} isn't valid.`;
+      if (isPurchase && (l.unitPrice === '' || Number(l.unitPrice) < 0 || Number.isNaN(Number(l.unitPrice)))) return `Enter a buying price for ${l.productName}.`;
+    }
+    if (Object.keys(stockIssues).length) return 'Some items are over what you have in stock. Lower the quantity or the free units.';
+    if (!isPurchase && !party && totals.balanceDue > 0) return 'Choose a customer to leave a balance, or take the full payment.';
+    return null;
+  }
+
+  async function handleSave() {
+    if (savingRef.current || done) return;
+    setError('');
+    setDiscountError('');
+    if (discountExceedsCap) {
+      setDiscountError(`Discount exceeds your limit of ${effectiveCap}%.`);
+      return;
+    }
+    const problem = validate();
+    if (problem) {
+      setError(problem);
+      return;
+    }
+
+    savingRef.current = true;
+    try {
+      if (isPurchase) await savePurchase();
+      else await saveSale();
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  async function savePurchase() {
+    const ok = await confirm({
+      title: 'Save this purchase?',
+      message: `This adds stock for ${lines.length} item${lines.length === 1 ? '' : 's'} and adds ${formatCurrency(totals.total)} to your account with ${party.name}. Purchases can't be edited or deleted afterwards.`,
+      confirmLabel: 'Save purchase',
+      cancelLabel: 'Go back',
+    });
+    if (!ok) return;
+
+    setSaving(true);
+    let res;
+    try {
+      res = await window.api.purchases.create({
+        supplierId: party.id,
+        referenceNo: reference.trim() || null,
+        items: lines.map((l) => ({
+          productVariantId: l.variantId,
+          productUnitId: l.unitId,
+          quantity: Number(l.quantity),
+          focQuantity: Number(l.focQuantity) || 0,
+          unitCost: Number(l.unitPrice),
+        })),
+        discountAmount: totals.discountAmount,
+        paidAmount: totals.paid,
+        paymentMethod: method,
+        createdBy: user.id,
+      });
+    } catch {
+      res = { success: false };
+    }
+    if (!res.success) {
+      setError(res.reason || 'Could not complete purchase.');
+      toast.error(res.reason || 'Could not complete purchase.');
+      return;
+    }
+    toast.success('Purchase saved');
+    onSaved?.(res);
+    onClose?.();
+  }
+
+  async function saveSale() {
+    setSaving(true);
+    // A cashier's discount limit can change mid-shift — check it again right before saving.
+    try {
+      const capRes = await window.api.sales.getCashierDiscountCap({ userId: user.id });
+      const fresh = capRes?.capPercentage;
+      if (fresh !== null && fresh !== undefined && totals.discountPercent > Number(fresh) + 0.0001) {
+        setDiscountCap(fresh);
+        setDiscountError(`Discount exceeds your limit of ${fresh}%.`);
+        return;
+      }
+    } catch {
+      // Falls back to the limit already loaded.
+    }
+
+    const letterheads = await window.api.letterheads.list().catch(() => []);
+    const payload = {
+      saleType: party ? party.customer_type : 'retail',
+      customerId: party?.id || null,
+      cashierId: user.id,
+      letterheadId: resolveLetterheadId(letterheads || [], party),
+      items: lines.map((l) => ({
+        productVariantId: l.variantId,
+        productUnitId: l.unitId,
+        quantity: Number(l.quantity) || 0,
+        focQuantity: Number(l.focQuantity) || 0,
+        unitPrice: Number(l.unitPrice) || 0,
+        discountAmount: 0,
+        lineTotal: lineTotal(l),
+      })),
+      discountAmount: totals.discountAmount,
+      paidAmount: totals.paid,
+      paymentMethod: method,
+    };
+
+    const res = await window.api.sales.create(payload);
+    if (!res.success) {
+      setError(res.reason || 'Could not complete sale.');
+      return; // the bill stays as it is, so it can be fixed and retried
+    }
+    window.dispatchEvent(new CustomEvent(SALE_COMPLETED_EVENT));
+    onSaved?.(res);
+
+    const effectiveShowDues = showDues && !!party;
+    const printResult = await window.api.printing.printSale({ saleId: res.saleId, printType: printFormat, showDues: effectiveShowDues });
+    setDone({
+      invoiceNo: res.invoiceNo,
+      saleId: res.saleId,
+      totalAmount: totals.total,
+      changeDue: totals.changeDue,
+      balanceDue: totals.balanceDue,
+      printType: printFormat,
+      showDues: effectiveShowDues,
+      printSuccess: printResult.success,
+      printReason: printResult.reason,
+      pdfPath: printResult.pdfPath || null,
+    });
+  }
+
+  async function retryPrint() {
+    if (!done) return;
+    setRetrying(true);
+    const res = await window.api.printing.printSale({ saleId: done.saleId, printType: done.printType, showDues: done.showDues });
+    setRetrying(false);
+    setDone((d) => ({ ...d, printSuccess: res.success, printReason: res.reason, pdfPath: res.pdfPath || d.pdfPath }));
+  }
+
+  // Thermal receipts are previewed from the same data the printer uses; an A4 invoice embeds its merged PDF.
+  useEffect(() => {
+    if (!done || done.printType === 'wholesale-a4') {
+      setReceiptPreview(null);
+      return undefined;
+    }
+    let cancelled = false;
+    Promise.all([window.api.sales.getReceiptData({ saleId: done.saleId, showDues: done.showDues }), window.api.settings.getAll()])
+      .then(([data, settings]) => {
+        if (!cancelled) setReceiptPreview({ data, settings });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [done?.saleId, done?.showDues, done?.printType]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---------------- closing / keys ----------------
+  async function requestClose() {
+    if (saving) return;
+    if (done) {
+      onClose?.();
+      return;
+    }
+    if (lines.length > 0) {
+      const ok = await confirm({
+        title: isPurchase ? 'Discard this purchase?' : 'Discard this sale?',
+        message: 'The items you added will be lost.',
+        confirmLabel: 'Discard',
+        cancelLabel: 'Keep editing',
+        destructive: true,
+      });
+      if (!ok) return;
+    }
+    onClose?.();
+  }
+
+  const handlerRef = useRef(null);
+  handlerRef.current = (e) => {
+    if (done) {
+      if (e.key === 'Enter' || e.key === 'Escape') {
+        e.preventDefault();
+        onClose?.();
+      } else if ((e.key === 'r' || e.key === 'R') && !done.printSuccess) {
+        e.preventDefault();
+        retryPrint();
+      }
+      return;
+    }
+    if (e.key === 'Enter' && e.ctrlKey) {
+      e.preventDefault();
+      handleSave();
+    }
+  };
+  useEffect(() => {
+    const onKey = (e) => handlerRef.current(e);
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
+  // ---------------- render ----------------
+  const title = isPurchase ? 'New Purchase' : 'New Sale';
+
+  if (!allowed) {
+    return (
+      <BillOverlay title={title} onRequestClose={onClose}>
+        <Card>
+          <EmptyState
+            icon={Lock}
+            title={isPurchase ? 'Only the owner can record purchases' : "You don't have access to this"}
+            message={isPurchase ? 'Ask the shop owner to sign in to add stock you bought.' : 'Ask your admin to grant you the "make sale" permission.'}
+          />
+        </Card>
+      </BillOverlay>
+    );
+  }
+
+  const partyName = party ? party.name : isPurchase ? 'Not chosen yet' : 'Walk-in Customer';
+
+  return (
+    <BillOverlay
+      title={title}
+      subtitle={presetParty && party ? `For ${party.name}` : undefined}
+      onRequestClose={requestClose}
+    >
+      <div style={styles.layout}>
+        <div style={styles.left}>
+          <BillPartyCard
+            kind={kind}
+            party={party}
+            loading={partyLoading}
+            locked={!!presetParty}
+            onPick={(row) => choosePartyById(row.id)}
+            onClear={clearParty}
+          />
+          <Card padding={theme.spacing.smd} style={{ overflow: 'visible' }}>
+            <BillItemSearch onPick={addItem} disabled={saving || (isPurchase && !party)} autoFocus={!!presetParty || !isPurchase} />
+            {isPurchase && !party && (
+              <div style={{ ...theme.type.footnote, color: theme.colors.labelSecondary, marginTop: theme.spacing.xs }}>Choose a supplier above to start adding items.</div>
+            )}
+          </Card>
+          <BillLines
+            lines={lines}
+            kind={kind}
+            canSeeCost={isAdmin}
+            stockIssues={stockIssues}
+            onUnit={updateUnit}
+            onField={updateField}
+            onRemove={removeLine}
+          />
+        </div>
+        <BillSummary
+          kind={kind}
+          partyName={partyName}
+          partyBadge={!isPurchase ? <PartyTypeBadge type={party ? party.customer_type : 'retail'} /> : null}
+          totals={totals}
+          previousBalance={party ? previousBalance : null}
+          newBalance={newBalance}
+          discountMode={discountMode}
+          onDiscountMode={(m) => {
+            setDiscountMode(m);
+            setDiscountError('');
+          }}
+          discountInput={discountInput}
+          onDiscountInput={(v) => {
+            setDiscountInput(v);
+            setDiscountError('');
+          }}
+          discountCap={effectiveCap}
+          discountError={discountError || (discountExceedsCap ? `Discount exceeds your limit of ${effectiveCap}%.` : '')}
+          paidInput={paidInput}
+          onPaidInput={(v) => {
+            setPaidInput(v);
+            setError('');
+          }}
+          method={method}
+          onMethod={setMethod}
+          reference={reference}
+          onReference={setReference}
+          printFormat={printFormat}
+          onPrintFormat={(f) => {
+            setFormatTouched(true);
+            setPrintFormat(f);
+          }}
+          showDuesOption={!!party}
+          showDues={showDues}
+          onShowDues={(v) => {
+            setDuesTouched(true);
+            setShowDues(v);
+          }}
+          itemCount={lines.length}
+          error={error}
+          saving={saving}
+          canSave={lines.length > 0 && !partyLoading && (!isPurchase || !!party)}
+          onSave={handleSave}
+        />
+      </div>
+
+      {done && (
+        <SaleCompleteSheet
+          data={done}
+          receiptPreview={receiptPreview}
+          retrying={retrying}
+          onRetry={retryPrint}
+          onClose={() => onClose?.()}
+          closeLabel="Done"
+        />
+      )}
+    </BillOverlay>
+  );
+}
+
+const styles = {
+  layout: { flex: 1, minHeight: 0, display: 'flex', gap: theme.spacing.md },
+  left: { flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', gap: theme.spacing.smd },
+};

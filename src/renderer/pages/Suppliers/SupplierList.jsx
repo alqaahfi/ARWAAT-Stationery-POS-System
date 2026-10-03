@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../context/AuthContext';
 import { Card, DataTable, useToast } from '../../components/ui';
 import { formatCurrency } from '../../utils/format';
-import { NoSuppliers, SupplierToolbar, supplierColumns } from './parts/SupplierListParts';
+import { NoSuppliers, SupplierToolbar, supplierColumns, supplierSubline } from './parts/SupplierListParts';
+import { PartyCards, usePartyViewMode } from '../Parties/PartyViews';
 import { ListSummary, LoadError, NoMatch, RestrictedNotice } from '../Parties/PartyParts';
 
 export default function SupplierList({ onNavigate }) {
@@ -13,6 +14,7 @@ export default function SupplierList({ onNavigate }) {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [viewMode, setViewMode] = usePartyViewMode('pos_supplier_view_mode');
   const debounceRef = useRef(null);
   const searchRef = useRef('');
   const requestRef = useRef(0);
@@ -66,7 +68,7 @@ export default function SupplierList({ onNavigate }) {
     [load, toast]
   );
 
-  const columns = useMemo(() => supplierColumns({ onToggleActive: toggleActive }), [toggleActive]);
+  const columns = useMemo(() => supplierColumns({ onToggleActive: toggleActive, compact: viewMode === 'compact' }), [toggleActive, viewMode]);
 
   const summary = useMemo(() => {
     const owed = suppliers.reduce((sum, s) => (Number(s.balance_owed) > 0 ? sum + Number(s.balance_owed) : sum), 0);
@@ -85,7 +87,7 @@ export default function SupplierList({ onNavigate }) {
 
   return (
     <div style={{ paddingBottom: '48px' }}>
-      <SupplierToolbar search={search} onSearch={handleSearchChange} onAdd={goAdd} />
+      <SupplierToolbar search={search} onSearch={handleSearchChange} viewMode={viewMode} onViewMode={setViewMode} onAdd={goAdd} />
 
       <ListSummary>
         {loading
@@ -95,19 +97,30 @@ export default function SupplierList({ onNavigate }) {
             }`}
       </ListSummary>
 
-      <Card padding="0" style={{ overflow: 'hidden' }}>
-        {loadFailed ? (
+      {loadFailed ? (
+        <Card padding="0">
           <LoadError message="The supplier list couldn't be loaded." onRetry={() => load()} />
-        ) : (
+        </Card>
+      ) : viewMode === 'grid' && !loading && suppliers.length > 0 ? (
+        <PartyCards
+          rows={suppliers}
+          party="supplier"
+          subline={supplierSubline}
+          onOpen={(s) => onNavigate('/suppliers/edit', { id: s.id })}
+          onToggleActive={toggleActive}
+        />
+      ) : (
+        <Card padding="0" style={{ overflow: 'hidden' }}>
           <DataTable
             columns={columns}
             rows={suppliers}
             loading={loading}
+            dense={viewMode === 'compact'}
             onRowClick={(s) => onNavigate('/suppliers/edit', { id: s.id })}
             emptyState={search.trim() ? <NoMatch what="suppliers" onClear={clearFilters} /> : <NoSuppliers onAdd={goAdd} />}
           />
-        )}
-      </Card>
+        </Card>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, HandCoins } from 'lucide-react';
+import { HandCoins, ShoppingCart } from 'lucide-react';
 import glossary from '../../../config/glossary';
 import { Badge, Button, NumberInput, SegmentedControl, Select, TextInput, Textarea, Toggle } from '../../../components/ui';
 import { PRICE_LEVELS, priceLevelLabel } from '../../../utils/priceLevel';
@@ -14,7 +14,7 @@ const TYPE_OPTIONS = [
 
 const textareaStyle = { minHeight: '56px', height: '56px', resize: 'none' };
 
-export function CustomerHeader({ customer, balance, onOpenAccount, onReceivePayment }) {
+export function CustomerHeader({ customer, balance, onNewSale, onPayment }) {
   return (
     <PartyHeader
       bare
@@ -31,11 +31,11 @@ export function CustomerHeader({ customer, balance, onOpenAccount, onReceivePaym
       }
       actions={
         <>
-          <Button variant="plain" icon={BookOpen} onClick={onOpenAccount}>
-            {glossary.openAccount}
+          <Button variant="secondary" icon={HandCoins} onClick={onPayment}>
+            {glossary.payment}
           </Button>
-          <Button icon={HandCoins} onClick={onReceivePayment}>
-            {glossary.receivePayment}
+          <Button icon={ShoppingCart} onClick={onNewSale}>
+            {glossary.newSale}
           </Button>
         </>
       }

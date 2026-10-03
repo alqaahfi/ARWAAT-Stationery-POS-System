@@ -35,10 +35,7 @@ const navConfig = [
     group: null,
     route: '/customers',
     adminOnly: true,
-    tabs: [
-      { key: 'customers-all', label: g.allCustomers, route: '/customers' },
-      { key: 'customers-percentage-rules', label: g.specialMargins, route: '/customers/percentage-rules' },
-    ],
+    tabs: [{ key: 'customers-all', label: g.allCustomers, route: '/customers' }],
     pages: [
       { key: 'customers-receive-payment', label: g.receivePayment, route: '/payments/record', needsParams: true },
       { key: 'customers-new', label: g.addCustomer, route: '/customers/new' },
@@ -96,7 +93,7 @@ const navConfig = [
     group: null,
     route: '/products/purchases',
     adminOnly: true,
-    tabs: [{ key: 'purchase-new', label: g.purchases, route: '/products/purchases' }],
+    tabs: [{ key: 'purchase-history', label: g.purchases, route: '/products/purchases' }],
   }),
   section({
     key: 'ledgers',

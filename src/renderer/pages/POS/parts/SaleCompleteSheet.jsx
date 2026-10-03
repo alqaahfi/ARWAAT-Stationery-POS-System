@@ -16,7 +16,7 @@ function toFileUrl(p) {
 
 // Shown whether or not the physical print worked. Enter / Esc / R are
 // handled by Sale.jsx; the buttons here are the mouse fallback.
-export default function SaleCompleteSheet({ data, receiptPreview, retrying, onRetry, onClose }) {
+export default function SaleCompleteSheet({ data, receiptPreview, retrying, onRetry, onClose, closeLabel = 'New sale' }) {
   return (
     <Scrim labelledBy="pos-complete-title">
       <div style={styles.sheet}>
@@ -64,7 +64,7 @@ export default function SaleCompleteSheet({ data, receiptPreview, retrying, onRe
 
           <div style={{ marginTop: 'auto', paddingTop: theme.spacing.lg }} onMouseDown={keepFocus}>
             <Button size="lg" fullWidth tabIndex={-1} onClick={onClose} style={{ height: '48px' }}>
-              New sale <Kbd>Enter</Kbd>
+              {closeLabel} <Kbd>Enter</Kbd>
             </Button>
           </div>
         </div>

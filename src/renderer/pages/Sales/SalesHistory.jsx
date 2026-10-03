@@ -9,6 +9,7 @@ import { computeRange } from '../Reports/components/DateRangePicker';
 import { SalesToolbar } from './parts/SalesToolbar';
 import { SalesTable, SummaryStrip } from './parts/SalesTable';
 import { SaleDetailSheet } from './parts/SaleDetailSheet';
+import QuickSaleOverlay from '../../components/billing/QuickSaleOverlay';
 
 const c = theme.colors;
 const PAGE_SIZE = 50;
@@ -21,6 +22,7 @@ const todayRange = () => ({ preset: 'today', ...computeRange('today') });
 export default function SalesHistory({ onNavigate, saleId: initialSaleId }) {
   const { user, hasPermission } = useAuth();
   const isAdmin = user.role === 'admin';
+  const canSell = hasPermission('make_sale');
 
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
@@ -29,6 +31,9 @@ export default function SalesHistory({ onNavigate, saleId: initialSaleId }) {
   const [saleType, setSaleType] = useState('all');
   const [cashierId, setCashierId] = useState('');
   const [cashiers, setCashiers] = useState([]);
+  const [sortBy, setSortBy] = useState('date');
+  const [sortDir, setSortDir] = useState('desc');
+  const [newSaleOpen, setNewSaleOpen] = useState(false);
 
   const [result, setResult] = useState({ rows: [], total: 0, totals: { sumTotal: 0, sumBalanceDue: 0 }, hasMore: false });
   const [loading, setLoading] = useState(true);
@@ -60,10 +65,12 @@ export default function SalesHistory({ onNavigate, saleId: initialSaleId }) {
       status: status === 'all' ? undefined : status,
       saleType: saleType === 'all' ? undefined : saleType,
       cashierId: isAdmin && cashierId ? Number(cashierId) : undefined,
+      sortBy,
+      sortDir,
       limit: PAGE_SIZE,
       offset,
     }),
-    [user.id, search, range.dateFrom, range.dateTo, status, saleType, cashierId, isAdmin]
+    [user.id, search, range.dateFrom, range.dateTo, status, saleType, cashierId, isAdmin, sortBy, sortDir]
   );
 
   const load = useCallback(async () => {
@@ -151,7 +158,7 @@ export default function SalesHistory({ onNavigate, saleId: initialSaleId }) {
             {...appIcons.sales}
             title="No sales yet"
             message="Sales appear here as soon as you make one."
-            action={hasPermission('make_sale') && <Button onClick={() => onNavigate('/pos')}>{glossary.newSale}</Button>}
+            action={canSell && <Button onClick={() => setNewSaleOpen(true)}>{glossary.newSale}</Button>}
             style={{ padding: '56px 24px' }}
           />
         ) : (
@@ -214,8 +221,14 @@ export default function SalesHistory({ onNavigate, saleId: initialSaleId }) {
         onCashier={setCashierId}
         cashiers={cashiers}
         isAdmin={isAdmin}
+        sortBy={sortBy}
+        onSortBy={setSortBy}
+        sortDir={sortDir}
+        onSortDir={setSortDir}
+        onNewSale={canSell ? () => setNewSaleOpen(true) : undefined}
       />
       {content}
+      <QuickSaleOverlay open={newSaleOpen} onSaved={() => load()} onClose={() => setNewSaleOpen(false)} />
       {openSaleId && (
         <SaleDetailSheet
           saleId={openSaleId}

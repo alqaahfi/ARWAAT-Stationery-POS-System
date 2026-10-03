@@ -11,7 +11,7 @@ export function MoreOptionsSection({ isEdit, isAgencyItem, onIsAgencyItemChange,
     <Disclosure title="More options" summary={isEdit && !isActive ? 'Inactive' : undefined}>
       <OptionRow
         label={glossary.agencyItem}
-        hint="Turn on if this item can use Special Margins (percentage pricing rules)."
+        hint="Turn on for agency items (such as books) that are sold on a fixed margin over the buying price."
         checked={isAgencyItem}
         onChange={onIsAgencyItemChange}
       />

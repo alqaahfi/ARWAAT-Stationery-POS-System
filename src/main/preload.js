@@ -83,6 +83,8 @@ contextBridge.exposeInMainWorld('api', {
 
   purchases: {
     create: (data) => ipcRenderer.invoke('purchases:create', data),
+    list: (data) => ipcRenderer.invoke('purchases:list', data),
+    getDetail: (data) => ipcRenderer.invoke('purchases:get-detail', data),
   },
 
   customers: {
@@ -103,13 +105,6 @@ contextBridge.exposeInMainWorld('api', {
     listAdjustments: () => ipcRenderer.invoke('ledgers:list-adjustments'),
     createAdjustment: (data) => ipcRenderer.invoke('ledgers:create-adjustment', data),
     getPaymentById: (data) => ipcRenderer.invoke('ledgers:get-payment-by-id', data),
-  },
-
-  percentageRules: {
-    list: () => ipcRenderer.invoke('percentage-rules:list'),
-    listEligibleProducts: () => ipcRenderer.invoke('percentage-rules:list-eligible-products'),
-    create: (data) => ipcRenderer.invoke('percentage-rules:create', data),
-    delete: (data) => ipcRenderer.invoke('percentage-rules:delete', data),
   },
 
   payments: {

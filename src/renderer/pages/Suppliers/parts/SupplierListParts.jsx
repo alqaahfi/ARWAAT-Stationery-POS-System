@@ -5,8 +5,9 @@ import glossary from '../../../config/glossary';
 import { Button, EmptyState, SearchField } from '../../../components/ui';
 import BalanceChip from '../../../components/BalanceChip';
 import { PartyNameCell, RowChevron, RowToggle, listToolbar } from '../../Parties/PartyParts';
+import { PartyViewToggle } from '../../Parties/PartyViews';
 
-export function SupplierToolbar({ search, onSearch, onAdd }) {
+export function SupplierToolbar({ search, onSearch, viewMode, onViewMode, onAdd }) {
   return (
     <div style={listToolbar}>
       <SearchField
@@ -16,6 +17,7 @@ export function SupplierToolbar({ search, onSearch, onAdd }) {
         aria-label="Search suppliers"
         style={{ flex: '1 1 220px', maxWidth: '420px' }}
       />
+      <PartyViewToggle value={viewMode} onChange={onViewMode} />
       <Button icon={Plus} onClick={onAdd} style={{ marginLeft: 'auto' }}>
         {glossary.addSupplier}
       </Button>
@@ -23,7 +25,15 @@ export function SupplierToolbar({ search, onSearch, onAdd }) {
   );
 }
 
-export function supplierColumns({ onToggleActive }) {
+export function supplierColumns({ onToggleActive, compact = false }) {
+  if (compact) {
+    return [
+      { key: 'name', label: glossary.supplier, render: (r) => <span style={{ fontWeight: theme.font.weightSemibold, opacity: r.is_active ? 1 : 0.6 }}>{r.name}</span> },
+      { key: 'phone', label: 'Phone', width: '160px', render: (r) => (r.phone ? <span style={theme.font.numeric}>{r.phone}</span> : <span style={{ color: theme.colors.labelTertiary }}>—</span>) },
+      { key: 'balance', label: 'Balance', numeric: true, width: '200px', render: (r) => <BalanceChip amount={r.balance_owed} party="supplier" /> },
+      { key: 'go', label: '', width: '32px', align: 'right', render: () => <RowChevron /> },
+    ];
+  }
   return [
     {
       key: 'name',
@@ -52,6 +62,8 @@ export function supplierColumns({ onToggleActive }) {
     { key: 'go', label: '', width: '32px', align: 'right', render: () => <RowChevron /> },
   ];
 }
+
+export const supplierSubline = (r) => [r.phone, r.mobile].filter(Boolean).join(' · ') || r.contact_person || undefined;
 
 export function NoSuppliers({ onAdd }) {
   return (

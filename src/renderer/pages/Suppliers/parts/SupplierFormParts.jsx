@@ -1,5 +1,5 @@
 import React from 'react';
-import { PackagePlus, Send } from 'lucide-react';
+import { HandCoins, PackagePlus } from 'lucide-react';
 import glossary from '../../../config/glossary';
 import { Badge, Button, TextInput, Textarea, Toggle } from '../../../components/ui';
 import { PartyHeader, contactLine } from '../../Parties/PartyHeader';
@@ -7,7 +7,7 @@ import { FormRow } from '../../Parties/PartyParts';
 
 const textareaStyle = { minHeight: '56px', height: '56px', resize: 'none' };
 
-export function SupplierHeader({ supplier, balance, onPay, onNewPurchase }) {
+export function SupplierHeader({ supplier, balance, onPayment, onNewPurchase }) {
   return (
     <PartyHeader
       bare
@@ -18,11 +18,11 @@ export function SupplierHeader({ supplier, balance, onPay, onNewPurchase }) {
       badges={!supplier.isActive ? <Badge>{glossary.inactive}</Badge> : null}
       actions={
         <>
-          <Button variant="plain" icon={PackagePlus} onClick={onNewPurchase}>
-            {glossary.newPurchase}
+          <Button variant="secondary" icon={HandCoins} onClick={onPayment}>
+            {glossary.payment}
           </Button>
-          <Button icon={Send} onClick={onPay}>
-            {glossary.paySupplier}
+          <Button icon={PackagePlus} onClick={onNewPurchase}>
+            {glossary.newPurchase}
           </Button>
         </>
       }

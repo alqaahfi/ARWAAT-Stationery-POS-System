@@ -233,75 +233,6 @@ function getLedger(customerId) {
   };
 }
 
-// ---------------- Percentage Pricing Rules ----------------
-
-function listPercentageRules() {
-  const db = getDb();
-  return db
-    .prepare(
-      `SELECT ppr.id, ppr.percentage, ppr.customer_tier, p.name AS product_name,
-              c.name AS customer_name
-       FROM percentage_pricing_rules ppr
-       JOIN products p ON p.id = ppr.product_id
-       LEFT JOIN customers c ON c.id = ppr.customer_id
-       ORDER BY p.name`
-    )
-    .all();
-}
-
-// Only products actually eligible for a percentage-style rule — plain
-// fixed-price items don't need one.
-function listEligibleProducts() {
-  const db = getDb();
-  return db
-    .prepare(
-      `SELECT id, name FROM products
-       WHERE is_active = 1 AND (pricing_type = 'percentage' OR is_agency_item = 1)
-       ORDER BY name`
-    )
-    .all();
-}
-
-function createPercentageRule({ productId, targetType, customerId, customerTier, percentage }) {
-  const db = getDb();
-
-  if (!productId) return { success: false, reason: 'Select a product.' };
-  if (percentage === undefined || percentage === null || Number.isNaN(Number(percentage))) {
-    return { success: false, reason: 'Enter a valid percentage.' };
-  }
-  if (Number(percentage) <= 0) return { success: false, reason: 'Margin must be greater than 0%' };
-
-  const duplicateReason = 'A margin already exists for this item and this customer/level';
-
-  if (targetType === 'customer') {
-    if (!customerId) return { success: false, reason: 'Select a customer.' };
-    if (db.prepare('SELECT 1 FROM percentage_pricing_rules WHERE product_id = ? AND customer_id = ?').get(productId, customerId)) {
-      return { success: false, reason: duplicateReason };
-    }
-    db.prepare(
-      'INSERT INTO percentage_pricing_rules (product_id, customer_id, customer_tier, percentage) VALUES (?, ?, NULL, ?)'
-    ).run(productId, customerId, Number(percentage));
-  } else if (targetType === 'tier') {
-    if (!isValidTier(customerTier) || !customerTier) return { success: false, reason: 'Select a tier.' };
-    if (db.prepare('SELECT 1 FROM percentage_pricing_rules WHERE product_id = ? AND customer_tier = ?').get(productId, customerTier)) {
-      return { success: false, reason: duplicateReason };
-    }
-    db.prepare(
-      'INSERT INTO percentage_pricing_rules (product_id, customer_id, customer_tier, percentage) VALUES (?, NULL, ?, ?)'
-    ).run(productId, customerTier, Number(percentage));
-  } else {
-    return { success: false, reason: 'Choose a target: specific customer or whole tier.' };
-  }
-
-  return { success: true };
-}
-
-function deletePercentageRule({ id }) {
-  const db = getDb();
-  db.prepare('DELETE FROM percentage_pricing_rules WHERE id = ?').run(id);
-  return { success: true };
-}
-
 function registerCustomersIpc() {
   ipcMain.handle('customers:list', (event, payload) => list(payload || {}));
   ipcMain.handle('customers:get-by-id', (event, { id } = {}) => getById(id));
@@ -311,10 +242,6 @@ function registerCustomersIpc() {
   ipcMain.handle('customers:search-minimal', (event, payload) => searchMinimal(payload || {}));
   ipcMain.handle('customers:get-ledger', (event, { id } = {}) => getLedger(id));
 
-  ipcMain.handle('percentage-rules:list', () => listPercentageRules());
-  ipcMain.handle('percentage-rules:list-eligible-products', () => listEligibleProducts());
-  ipcMain.handle('percentage-rules:create', (event, payload) => createPercentageRule(payload || {}));
-  ipcMain.handle('percentage-rules:delete', (event, payload) => deletePercentageRule(payload || {}));
 }
 
 module.exports = { registerCustomersIpc };

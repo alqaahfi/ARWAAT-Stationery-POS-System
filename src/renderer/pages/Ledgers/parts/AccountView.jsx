@@ -6,7 +6,7 @@ import appIcons from '../../../config/appIcons';
 import { Button, Card, Modal } from '../../../components/ui';
 import { PartyHeader } from '../../Parties/PartyHeader';
 import { LoadError } from '../../Parties/PartyParts';
-import PartyPicker from './PartyPicker';
+import AccountList from './AccountList';
 import TransactionTimeline from './TransactionTimeline';
 import { AccountSkeleton, ledgerPage } from './LedgerParts';
 
@@ -21,7 +21,7 @@ export function AccountView({ party, picking, onPick, loading, error, onRetry, d
   if (picking) {
     return (
       <div style={ledgerPage}>
-        <PartyPicker party={party} onPick={onPick} />
+        <AccountList party={party} onPick={onPick} />
       </div>
     );
   }

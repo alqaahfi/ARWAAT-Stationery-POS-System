@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../context/AuthContext';
 import { Card, DataTable, useToast } from '../../components/ui';
 import { formatCurrency } from '../../utils/format';
-import { CustomerToolbar, NoCustomers, customerColumns } from './parts/CustomerListParts';
+import { CustomerToolbar, NoCustomers, customerBadges, customerColumns, customerSubline } from './parts/CustomerListParts';
+import { PartyCards, usePartyViewMode } from '../Parties/PartyViews';
 import { ListSummary, LoadError, NoMatch, RestrictedNotice } from '../Parties/PartyParts';
 
 export default function CustomerList({ onNavigate }) {
@@ -15,6 +16,7 @@ export default function CustomerList({ onNavigate }) {
   const [typeFilter, setTypeFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [viewMode, setViewMode] = usePartyViewMode('pos_customer_view_mode');
   const debounceRef = useRef(null);
   const searchRef = useRef('');
   const requestRef = useRef(0);
@@ -79,7 +81,7 @@ export default function CustomerList({ onNavigate }) {
     [load, toast]
   );
 
-  const columns = useMemo(() => customerColumns({ onToggleActive: toggleActive }), [toggleActive]);
+  const columns = useMemo(() => customerColumns({ onToggleActive: toggleActive, compact: viewMode === 'compact' }), [toggleActive, viewMode]);
 
   const summary = useMemo(() => {
     const owed = customers.reduce((sum, c) => (Number(c.balance_owed) > 0 ? sum + Number(c.balance_owed) : sum), 0);
@@ -108,6 +110,8 @@ export default function CustomerList({ onNavigate }) {
         onTypeFilter={setTypeFilter}
         tierFilter={tierFilter}
         onTierFilter={setTierFilter}
+        viewMode={viewMode}
+        onViewMode={setViewMode}
         onAdd={goAdd}
       />
 
@@ -119,19 +123,31 @@ export default function CustomerList({ onNavigate }) {
             }`}
       </ListSummary>
 
-      <Card padding="0" style={{ overflow: 'hidden' }}>
-        {loadFailed ? (
+      {loadFailed ? (
+        <Card padding="0">
           <LoadError message="The customer list couldn't be loaded." onRetry={() => load()} />
-        ) : (
+        </Card>
+      ) : viewMode === 'grid' && !loading && customers.length > 0 ? (
+        <PartyCards
+          rows={customers}
+          party="customer"
+          badges={customerBadges}
+          subline={customerSubline}
+          onOpen={(c) => onNavigate('/customers/edit', { id: c.id })}
+          onToggleActive={toggleActive}
+        />
+      ) : (
+        <Card padding="0" style={{ overflow: 'hidden' }}>
           <DataTable
             columns={columns}
             rows={customers}
             loading={loading}
+            dense={viewMode === 'compact'}
             onRowClick={(c) => onNavigate('/customers/edit', { id: c.id })}
             emptyState={filtered ? <NoMatch what="customers" onClear={clearFilters} /> : <NoCustomers onAdd={goAdd} />}
           />
-        )}
-      </Card>
+        </Card>
+      )}
     </div>
   );
 }

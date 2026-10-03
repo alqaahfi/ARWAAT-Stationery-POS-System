@@ -14,13 +14,12 @@ import ProductForm from '../Products/ProductForm';
 import LowStock from '../Products/LowStock';
 import DeadStock from '../Products/DeadStock';
 import BulkImport from '../Products/BulkImport';
-import PurchaseEntry from '../Products/PurchaseEntry';
+import PurchaseHistory from '../Purchases/PurchaseHistory';
 import StockAdjustment from '../Products/StockAdjustment';
 import MovementHistory from '../Products/MovementHistory';
 import Sale, { isPosSaleInProgress } from '../POS/Sale';
 import CustomerList from '../Customers/CustomerList';
 import CustomerForm from '../Customers/CustomerForm';
-import PercentageRules from '../Customers/PercentageRules';
 import SupplierList from '../Suppliers/SupplierList';
 import SupplierForm from '../Suppliers/SupplierForm';
 import LedgersOverview from '../Ledgers/Overview';
@@ -143,7 +142,7 @@ export default function AdminDashboard() {
       case '/products/bulk-import':
         return <BulkImport onNavigate={navigate} onDone={() => navigate('/products')} />;
       case '/products/purchases':
-        return <PurchaseEntry onNavigate={navigate} />;
+        return <PurchaseHistory onNavigate={navigate} />;
       case '/products/stock-adjustments':
         return <StockAdjustment productId={nav.params.productId} />;
       case '/products/stock-movements':
@@ -162,8 +161,6 @@ export default function AdminDashboard() {
             onCancel={() => navigate('/customers')}
           />
         );
-      case '/customers/percentage-rules':
-        return <PercentageRules />;
 
       case '/suppliers':
         return <SupplierList onNavigate={navigate} />;

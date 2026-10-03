@@ -1,7 +1,8 @@
 import React from 'react';
+import { ArrowDown, ArrowUp, Plus } from 'lucide-react';
 import theme from '../../../config/theme';
 import glossary from '../../../config/glossary';
-import { ChipGroup, SearchField, Select } from '../../../components/ui';
+import { Button, ChipGroup, IconButton, SearchField, Select } from '../../../components/ui';
 import DateRangePicker from '../../Reports/components/DateRangePicker';
 
 const STATUS_OPTIONS = [
@@ -11,7 +12,15 @@ const STATUS_OPTIONS = [
   { value: 'unpaid', label: glossary.notPaid },
 ];
 
-export function SalesToolbar({ search, onSearch, range, onRange, status, onStatus, saleType, onSaleType, cashierId, onCashier, cashiers, isAdmin }) {
+export const SALE_SORT_OPTIONS = [
+  { key: 'date', label: 'Date' },
+  { key: 'total', label: 'Total' },
+  { key: 'due', label: 'Unpaid amount' },
+  { key: 'customer', label: 'Customer (A–Z)' },
+  { key: 'invoice', label: 'Invoice number' },
+];
+
+export function SalesToolbar({ search, onSearch, range, onRange, status, onStatus, saleType, onSaleType, cashierId, onCashier, cashiers, isAdmin, sortBy, onSortBy, sortDir, onSortDir, onNewSale }) {
   return (
     <div style={styles.wrap}>
       <div style={styles.row}>
@@ -39,7 +48,28 @@ export function SalesToolbar({ search, onSearch, range, onRange, status, onStatu
           </Select>
         )}
       </div>
-      <DateRangePicker value={range} onChange={onRange} />
+      <div style={styles.row}>
+        <DateRangePicker value={range} onChange={onRange} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+          <Select aria-label="Sort by" value={sortBy} onChange={(e) => onSortBy(e.target.value)} style={{ width: '190px' }}>
+            {SALE_SORT_OPTIONS.map((o) => (
+              <option key={o.key} value={o.key}>
+                Sort: {o.label}
+              </option>
+            ))}
+          </Select>
+          <IconButton
+            icon={sortDir === 'asc' ? ArrowUp : ArrowDown}
+            label={sortDir === 'asc' ? 'Sorted low to high — click to reverse' : 'Sorted high to low — click to reverse'}
+            onClick={() => onSortDir(sortDir === 'asc' ? 'desc' : 'asc')}
+          />
+        </div>
+        {onNewSale && (
+          <Button icon={Plus} onClick={onNewSale} style={{ marginLeft: 'auto' }}>
+            {glossary.newSale}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

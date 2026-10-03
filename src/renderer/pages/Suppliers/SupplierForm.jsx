@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { UserX } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { Button, Card, EmptyState, useToast } from "../../components/ui";
+import QuickPaymentModal from "../../components/billing/QuickPaymentModal";
+import QuickPurchaseOverlay from "../../components/billing/QuickPurchaseOverlay";
 import { StickyActions } from "../Products/form/StickyActions";
 import { StartingBalanceField } from "../Parties/StartingBalanceField";
 import {
@@ -34,7 +36,6 @@ export default function SupplierForm({
   supplierId,
   onDone,
   onCancel,
-  onNavigate,
 }) {
   const { user } = useAuth();
   const toast = useToast();
@@ -60,6 +61,8 @@ export default function SupplierForm({
     error: false,
     data: null,
   });
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [purchaseOpen, setPurchaseOpen] = useState(false);
   const savingRef = useRef(false);
   const [pageRef, pageHeight] = useFitHeight();
 
@@ -199,15 +202,6 @@ export default function SupplierForm({
 
   if (!loaded) return <FormSkeleton />;
 
-  // The supplier's account page holds the existing payment form.
-  const openAccount = onNavigate
-    ? () =>
-        onNavigate("/ledgers/suppliers", { id: supplierId, name: saved?.name })
-    : undefined;
-  const newPurchase = onNavigate
-    ? () => onNavigate("/products/purchases")
-    : undefined;
-
   return (
     <div ref={pageRef} style={fixedPage(pageHeight)}>
       <div style={formStage}>
@@ -216,8 +210,8 @@ export default function SupplierForm({
             <SupplierHeader
               supplier={saved}
               balance={ledger.data?.balance}
-              onPay={openAccount}
-              onNewPurchase={newPurchase}
+              onPayment={() => setPaymentOpen(true)}
+              onNewPurchase={() => setPurchaseOpen(true)}
             />
           )}
 
@@ -277,6 +271,26 @@ export default function SupplierForm({
         saving={saving}
         saveLabel={isEdit ? "Save changes" : "Save supplier"}
       />
+
+      {isEdit && (
+        <>
+          <QuickPaymentModal
+            open={paymentOpen}
+            party="supplier"
+            partyId={supplierId}
+            partyName={saved?.name}
+            balance={ledger.data?.balance}
+            onClose={() => setPaymentOpen(false)}
+            onSaved={() => loadLedger()}
+          />
+          <QuickPurchaseOverlay
+            open={purchaseOpen}
+            supplierId={supplierId}
+            onSaved={() => loadLedger()}
+            onClose={() => setPurchaseOpen(false)}
+          />
+        </>
+      )}
     </div>
   );
 }

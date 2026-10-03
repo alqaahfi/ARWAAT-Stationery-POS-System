@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { UserX } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { Button, Card, EmptyState, useToast } from "../../components/ui";
+import QuickPaymentModal from "../../components/billing/QuickPaymentModal";
+import QuickSaleOverlay from "../../components/billing/QuickSaleOverlay";
 import { StickyActions } from "../Products/form/StickyActions";
 import { StartingBalanceField } from "../Parties/StartingBalanceField";
 import {
@@ -36,7 +38,6 @@ export default function CustomerForm({
   customerId,
   onDone,
   onCancel,
-  onNavigate,
 }) {
   const { user } = useAuth();
   const toast = useToast();
@@ -67,6 +68,8 @@ export default function CustomerForm({
     error: false,
     data: null,
   });
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [saleOpen, setSaleOpen] = useState(false);
   const savingRef = useRef(false);
   const [pageRef, pageHeight] = useFitHeight();
 
@@ -226,15 +229,6 @@ export default function CustomerForm({
     return <FormSkeleton />;
   }
 
-  const openAccount = onNavigate
-    ? () =>
-        onNavigate("/ledgers/customers", { id: customerId, name: saved?.name })
-    : undefined;
-  const receivePayment = onNavigate
-    ? () =>
-        onNavigate("/payments/record", { id: customerId, name: saved?.name })
-    : undefined;
-
   return (
     <div ref={pageRef} style={fixedPage(pageHeight)}>
       <div style={formStage}>
@@ -243,8 +237,8 @@ export default function CustomerForm({
             <CustomerHeader
               customer={saved}
               balance={ledger.data?.balance}
-              onOpenAccount={openAccount}
-              onReceivePayment={receivePayment}
+              onNewSale={() => setSaleOpen(true)}
+              onPayment={() => setPaymentOpen(true)}
             />
           )}
 
@@ -313,6 +307,26 @@ export default function CustomerForm({
         saving={saving}
         saveLabel={isEdit ? "Save changes" : "Save customer"}
       />
+
+      {isEdit && (
+        <>
+          <QuickPaymentModal
+            open={paymentOpen}
+            party="customer"
+            partyId={customerId}
+            partyName={saved?.name}
+            balance={ledger.data?.balance}
+            onClose={() => setPaymentOpen(false)}
+            onSaved={() => loadLedger()}
+          />
+          <QuickSaleOverlay
+            open={saleOpen}
+            customerId={customerId}
+            onSaved={() => loadLedger()}
+            onClose={() => setSaleOpen(false)}
+          />
+        </>
+      )}
     </div>
   );
 }

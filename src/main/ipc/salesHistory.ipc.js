@@ -23,6 +23,14 @@ const RETURN_STATUS_SQL = `
     ELSE 'partial'
   END`;
 
+const SORTS = {
+  date: 's.created_at',
+  invoice: 's.invoice_no',
+  customer: 'c.name COLLATE NOCASE',
+  total: 's.total_amount',
+  due: 's.balance_due',
+};
+
 function resolveAccess(db, requestingUserId) {
   if (!requestingUserId) return { ok: false };
   const user = db.prepare('SELECT id, role FROM users WHERE id = ?').get(requestingUserId);
@@ -79,6 +87,8 @@ function listSales(input = {}) {
     ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
   `;
 
+  const orderCol = SORTS[input.sortBy] || SORTS.date;
+  const orderDir = input.sortDir === 'asc' ? 'ASC' : 'DESC';
   const limit = Math.min(Math.max(Number(input.limit) || 50, 1), MAX_LIMIT);
   const offset = Math.max(Number(input.offset) || 0, 0);
 
@@ -95,7 +105,7 @@ function listSales(input = {}) {
               ${RETURNED_AMOUNT_SQL} AS returned_amount,
               ${RETURN_STATUS_SQL} AS return_status
        ${fromSql}
-       ORDER BY s.created_at DESC, s.id DESC
+       ORDER BY ${orderCol} ${orderDir}, s.id DESC
        LIMIT ? OFFSET ?`
     )
     .all(...params, limit, offset);
