@@ -20,7 +20,7 @@ src/
     preload.js                  contextBridge: window.api.<area>.<method>() → ipcRenderer.invoke('<area>:<action>')
     db/connection.js            Opens userData/pos.db (WAL, foreign_keys ON), runs every migrations/*.sql not yet
                                 in the _migrations table, in filename order
-    db/migrations/001–026       Schema (see §3)
+    db/migrations/001–029       Schema (see §3)
     db/models/Product.js        getLowStock / getDeadStock / getProductStockStatus — the ONE definition of stock status
     ipc/*.ipc.js                One file per area; each exports register<Area>Ipc()
     pricing/priceEngine.js      resolveUnitPrice() — the only price logic (§6.2)
@@ -75,7 +75,7 @@ tests/                          exists but there is no test runner (npm test is 
 
 ---
 
-## 3. Data model (migrations `001`–`026`)
+## 3. Data model (migrations `001`–`029`)
 
 All timestamps written with `datetime('now')` are **UTC text**; user-entered calendar dates (`expenses.expense_date`, `recurring_expenses.*_date`) are local `YYYY-MM-DD`. Soft delete via `is_active` on products, variants, units, customers, suppliers, users (sales/purchases reference them).
 
@@ -92,7 +92,7 @@ All timestamps written with `datetime('now')` are **UTC text**; user-entered cal
 - `suppliers(name, contact_person, phone, mobile, email, joining_date 'YYYY-MM-DD' (defaults to today on create), address, notes, opening_balance, is_active, origin_station, uuid)`. mobile/email/joining_date added in migration **028**; they sync via the generic column copy.
 - `products(name, sku UNIQUE, company_name, category_id, supplier_id, base_unit_name, min_stock_alert, dead_stock_days, pricing_type 'fixed'|'percentage', default_percentage, is_agency_item, notes, is_active, origin_station, uuid)`.
 - `product_variants` ("Types": `product_id, variant_name` default 'Standard', `stock_qty` in base units, `barcode` unique-if-set, `last_purchased_at, last_sold_at, is_active, uuid`). Every product has ≥1 variant; stock lives on variants.
-- `product_units` ("Pack sizes": `unit_name, conversion_factor` to base unit, `retail_price, wholesale_price, cost_price` — all **per this unit**, `is_default_sale_unit, is_active, net_rate_c1..c5` (NULL = no override), `uuid`).
+- `product_units` ("Pack sizes": `unit_name, conversion_factor` to base unit, `retail_price, wholesale_price, cost_price` — all **per this unit**, `is_default_sale_unit, is_active, net_rate_c1..c5` (NULL = no override), `uuid`; migration **029** adds `pricing_method` TEXT NOT NULL default `'simple'` (`'simple'`|`'trade'`) and nullable `trade_price, purchase_discount` (%), `extra_discount` (amount), `sale_discount_c1..c5` (%) — see §6.4 "Trade Price pricing"; they sync via the generic column copy).
 - `stock_movements(product_variant_id, movement_type 'purchase'|'sale'|'return_in'|'return_out'|'adjustment', quantity ± base units, reference_type 'sale'|'purchase'|'return'|NULL, reference_id, note, created_by, created_at, uuid)`.
 
 **Customers / pricing**
@@ -199,7 +199,8 @@ Rounded to 2 dp. `productId` is taken from the unit row, never the caller. Speci
 
 ### 6.4 Products & stock — `pages/Products/`
 - **All Products** (`ProductList` + `list/`): filters/sort/counts in SQL (`products:list`), status badges from `getProductStockStatus` (out of stock / Running Low / Not Selling — a product can be low and dead at once), detail panel, bulk bar (activate/deactivate, move category). Rows show brand · item code.
-- **Product form** (`form/`): Basics (name, item code/SKU, brand = `company_name`, category, supplier), Types (variants with barcode; no Types = single "Standard" variant with top-level barcode/starting stock), Pack sizes (units with conversion factor + buying/wholesale/retail price), Special prices (C1–C5 net rates; blank = no override), More options (warn-below, not-selling days, pricing type/percentage, agency item, notes, active). Editing never changes stock; removed variants/units are soft-deleted. SKU/barcode uniqueness checked live.
+- **Product form** (`form/`): Basics (name, item code/SKU, brand = `company_name`, category, supplier), Types (variants with barcode; no Types = single "Standard" variant with top-level barcode/starting stock), Pack sizes (units with conversion factor + Simple or Trade Price pricing), Special prices (C1–C5 net rates, or C1–C5 discount % for Trade Price units; blank = no override), More options (warn-below, not-selling days, pricing type/percentage, agency item, notes, active). Editing never changes stock; removed variants/units are soft-deleted. SKU/barcode uniqueness checked live.
+- **Trade Price pricing (per pack size).** Each pack size card has a Simple | Trade Price segmented control (`pricing_method`). *Simple* = the manual fields above. *Trade Price* hides Buying/Retail/Wholesale and shows Trade price, Purchase discount % and Extra discount (amount) in the card, and five Sale discount % boxes in the Special prices table (replacing the C1–C5 net-rate boxes; the computed net rate shows under each). `ProductForm.jsx` `withTradePrices()` runs on every unit edit and **overwrites the standard fields**: `cost_price = trade − trade×purchase% − extra` (min 0), `retail_price = wholesale_price = trade`, `net_rate_cN = trade − trade×saleDiscountCN%` (blank discount → NULL, no override). Those derived values are what is saved, so `priceEngine`, POS, reports and purchases are unchanged and never read the trade columns. `products:create/update` persist the trade fields via `tradeFields()` (non-trade units store `'simple'` and NULL trade columns). Bulk import always creates Simple units. Switching to Trade seeds Trade price from the current retail price.
 - **Import spreadsheet** (`BulkImport` + `import/`): CSV, one row per product×type×pack size, grouped client-side; categories must already exist; all-or-nothing preview; `products:bulk-import` runs every product through the same `create()` in one transaction.
 - **Running Low / Not Selling** and the Stock Report all use `db/models/Product.js` (`total_stock ≤ min_stock_alert`; days since last sale (or creation) ≥ `dead_stock_days`).
 - **Categories:** one-level parent/child, unique names, delete blocked while products use it; only direct self-parenting is prevented.

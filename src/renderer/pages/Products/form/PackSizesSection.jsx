@@ -2,7 +2,8 @@ import React from 'react';
 import { Check, Plus, X } from 'lucide-react';
 import theme from '../../../config/theme';
 import glossary from '../../../config/glossary';
-import { Button, Field, FieldError, Icon, IconButton, TextInput } from '../../../components/ui';
+import { Button, Field, FieldError, Icon, IconButton, SegmentedControl, TextInput } from '../../../components/ui';
+import { formatCurrency } from '../../../utils/format';
 import { NumInput, SectionCard, grid } from './fields';
 
 const c = theme.colors;
@@ -119,6 +120,7 @@ function PackSizeCard({ unit: u, index, baseUnitName, canRemove, showErrors, onU
   const name = u.unitName.trim() || 'This pack size';
   const helper = factor > 0 ? `1 ${name} = ${factor} ${baseUnitName}` : `How many ${baseUnitName} are in one ${name}?`;
   const radioId = `default-unit-${index}`;
+  const isTrade = u.pricingMethod === 'trade';
 
   return (
     <div
@@ -151,19 +153,47 @@ function PackSizeCard({ unit: u, index, baseUnitName, canRemove, showErrors, onU
         </label>
         <IconButton icon={X} label={`Remove ${name}`} tone="danger" onClick={() => onRemove(index)} disabled={!canRemove} />
       </div>
+      <div style={{ marginBottom: theme.spacing.smd }}>
+        <SegmentedControl
+          size="sm"
+          label="Pricing method"
+          value={u.pricingMethod || 'simple'}
+          onChange={(v) => onUpdate(index, v === 'trade' && !u.tradePrice && u.retailPrice ? { pricingMethod: v, tradePrice: u.retailPrice } : { pricingMethod: v })}
+          options={[
+            { value: 'simple', label: 'Simple' },
+            { value: 'trade', label: 'Trade Price' },
+          ]}
+        />
+      </div>
       <div style={grid(150)}>
         <Field label={glossary.contains} hint={helper}>
           <NumInput value={u.conversionFactor} onChange={(v) => onUpdate(index, { conversionFactor: v })} />
         </Field>
-        <Field label={glossary.retailPrice}>
-          <NumInput value={u.retailPrice} onChange={(v) => onUpdate(index, { retailPrice: v })} />
-        </Field>
-        <Field label={glossary.wholesalePrice}>
-          <NumInput value={u.wholesalePrice} onChange={(v) => onUpdate(index, { wholesalePrice: v })} />
-        </Field>
-        <Field label={glossary.buyingPrice}>
-          <NumInput value={u.costPrice} onChange={(v) => onUpdate(index, { costPrice: v })} />
-        </Field>
+        {isTrade ? (
+          <>
+            <Field label="Trade price">
+              <NumInput value={u.tradePrice} onChange={(v) => onUpdate(index, { tradePrice: v })} />
+            </Field>
+            <Field label="Purchase discount %">
+              <NumInput value={u.purchaseDiscount} placeholder="0" onChange={(v) => onUpdate(index, { purchaseDiscount: v })} />
+            </Field>
+            <Field label="Extra discount" hint={`${glossary.buyingPrice}: ${formatCurrency(u.costPrice)}`}>
+              <NumInput value={u.extraDiscount} placeholder="0" onChange={(v) => onUpdate(index, { extraDiscount: v })} />
+            </Field>
+          </>
+        ) : (
+          <>
+            <Field label={glossary.retailPrice}>
+              <NumInput value={u.retailPrice} onChange={(v) => onUpdate(index, { retailPrice: v })} />
+            </Field>
+            <Field label={glossary.wholesalePrice}>
+              <NumInput value={u.wholesalePrice} onChange={(v) => onUpdate(index, { wholesalePrice: v })} />
+            </Field>
+            <Field label={glossary.buyingPrice}>
+              <NumInput value={u.costPrice} onChange={(v) => onUpdate(index, { costPrice: v })} />
+            </Field>
+          </>
+        )}
       </div>
     </div>
   );

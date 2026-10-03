@@ -12,7 +12,29 @@ import { StickyActions } from './form/StickyActions';
 const emptyUnit = (isDefault) => ({
   unitName: '', conversionFactor: 1, retailPrice: 0, wholesalePrice: 0, costPrice: 0, isDefaultSaleUnit: isDefault,
   netRateC1: '', netRateC2: '', netRateC3: '', netRateC4: '', netRateC5: '',
+  pricingMethod: 'simple', tradePrice: '', purchaseDiscount: '', extraDiscount: '',
+  saleDiscountC1: '', saleDiscountC2: '', saleDiscountC3: '', saleDiscountC4: '', saleDiscountC5: '',
 });
+
+const blank = (v) => v === '' || v === null || v === undefined;
+const round2 = (n) => String(Math.round(n * 100) / 100);
+
+// Trade Price method: derives the standard price fields the price engine and POS read.
+// cost = trade - purchase % - extra amount; retail = wholesale = trade; C1..C5 = trade - sale %.
+// A blank sale discount leaves that Price Level without an override.
+function withTradePrices(u) {
+  if (u.pricingMethod !== 'trade') return u;
+  const trade = Number(u.tradePrice) || 0;
+  const off = (pct) => round2(Math.max(0, trade - (trade * (Number(pct) || 0)) / 100));
+  const next = {
+    ...u,
+    costPrice: round2(Math.max(0, trade - (trade * (Number(u.purchaseDiscount) || 0)) / 100 - (Number(u.extraDiscount) || 0))),
+    retailPrice: round2(trade),
+    wholesalePrice: round2(trade),
+  };
+  for (let i = 1; i <= 5; i++) next[`netRateC${i}`] = blank(u[`saleDiscountC${i}`]) ? '' : off(u[`saleDiscountC${i}`]);
+  return next;
+}
 const emptyType = () => ({ variantName: '', barcode: '', barcodeError: '', startingStock: 0 });
 
 const BARCODE_TAKEN = 'This barcode is already used by another item.';
@@ -119,6 +141,15 @@ export default function ProductForm({ productId, onDone, onCancel, onNavigate })
               netRateC3: u.net_rate_c3 ?? '',
               netRateC4: u.net_rate_c4 ?? '',
               netRateC5: u.net_rate_c5 ?? '',
+              pricingMethod: u.pricing_method === 'trade' ? 'trade' : 'simple',
+              tradePrice: u.trade_price ?? '',
+              purchaseDiscount: u.purchase_discount ?? '',
+              extraDiscount: u.extra_discount ?? '',
+              saleDiscountC1: u.sale_discount_c1 ?? '',
+              saleDiscountC2: u.sale_discount_c2 ?? '',
+              saleDiscountC3: u.sale_discount_c3 ?? '',
+              saleDiscountC4: u.sale_discount_c4 ?? '',
+              saleDiscountC5: u.sale_discount_c5 ?? '',
             }))
           );
           setLoading(false);
@@ -240,7 +271,7 @@ export default function ProductForm({ productId, onDone, onCancel, onNavigate })
   }
 
   function updateUnit(index, patch) {
-    setUnits((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+    setUnits((prev) => prev.map((row, i) => (i === index ? withTradePrices({ ...row, ...patch }) : row)));
   }
 
   async function removeUnit(index) {
@@ -367,6 +398,15 @@ export default function ProductForm({ productId, onDone, onCancel, onNavigate })
           netRateC3: u.netRateC3 === '' ? null : Number(u.netRateC3),
           netRateC4: u.netRateC4 === '' ? null : Number(u.netRateC4),
           netRateC5: u.netRateC5 === '' ? null : Number(u.netRateC5),
+          pricingMethod: u.pricingMethod,
+          tradePrice: blank(u.tradePrice) ? null : Number(u.tradePrice),
+          purchaseDiscount: blank(u.purchaseDiscount) ? null : Number(u.purchaseDiscount),
+          extraDiscount: blank(u.extraDiscount) ? null : Number(u.extraDiscount),
+          saleDiscountC1: blank(u.saleDiscountC1) ? null : Number(u.saleDiscountC1),
+          saleDiscountC2: blank(u.saleDiscountC2) ? null : Number(u.saleDiscountC2),
+          saleDiscountC3: blank(u.saleDiscountC3) ? null : Number(u.saleDiscountC3),
+          saleDiscountC4: blank(u.saleDiscountC4) ? null : Number(u.saleDiscountC4),
+          saleDiscountC5: blank(u.saleDiscountC5) ? null : Number(u.saleDiscountC5),
         })),
         standardStartingStock: hasTypes ? 0 : Number(standardStartingStock) || 0,
         standardBarcode: hasTypes ? null : topVariant.barcode.trim() || null,

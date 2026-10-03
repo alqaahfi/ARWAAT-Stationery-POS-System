@@ -53,6 +53,7 @@ const SYNC_TABLES = {
   },
   product_units: {
     kind: 'upsert',
+    // pricing_method, trade_price, purchase_discount, extra_discount, sale_discount_c1..c5 sync like any other column.
     fks: { product_id: { table: 'products' } },
   },
   customers: {

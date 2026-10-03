@@ -44,6 +44,23 @@ function netRateOrNull(value) {
   return Number.isNaN(n) ? null : n;
 }
 
+// Trade Price pricing: the form sends the typed trade fields alongside the derived standard
+// prices. Anything but 'trade' is stored as 'simple' with the trade fields cleared.
+function tradeFields(u) {
+  if (u.pricingMethod !== 'trade') return ['simple', null, null, null, null, null, null, null, null];
+  return [
+    'trade',
+    netRateOrNull(u.tradePrice),
+    netRateOrNull(u.purchaseDiscount),
+    netRateOrNull(u.extraDiscount),
+    netRateOrNull(u.saleDiscountC1),
+    netRateOrNull(u.saleDiscountC2),
+    netRateOrNull(u.saleDiscountC3),
+    netRateOrNull(u.saleDiscountC4),
+    netRateOrNull(u.saleDiscountC5),
+  ];
+}
+
 function isSkuTaken(db, sku, excludeId) {
   if (!sku) return false;
   const row = excludeId
@@ -236,8 +253,10 @@ function create(payload) {
     const insertUnit = db.prepare(
       `INSERT INTO product_units
          (product_id, unit_name, conversion_factor, retail_price, wholesale_price, cost_price, is_default_sale_unit,
-          net_rate_c1, net_rate_c2, net_rate_c3, net_rate_c4, net_rate_c5)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          net_rate_c1, net_rate_c2, net_rate_c3, net_rate_c4, net_rate_c5,
+          pricing_method, trade_price, purchase_discount, extra_discount,
+          sale_discount_c1, sale_discount_c2, sale_discount_c3, sale_discount_c4, sale_discount_c5)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     for (const u of normalized.units) {
       insertUnit.run(
@@ -252,7 +271,8 @@ function create(payload) {
         netRateOrNull(u.netRateC2),
         netRateOrNull(u.netRateC3),
         netRateOrNull(u.netRateC4),
-        netRateOrNull(u.netRateC5)
+        netRateOrNull(u.netRateC5),
+        ...tradeFields(u)
       );
     }
 
@@ -366,13 +386,18 @@ function update(payload) {
     const updateUnit = db.prepare(
       `UPDATE product_units SET unit_name = ?, conversion_factor = ?, retail_price = ?, wholesale_price = ?,
          cost_price = ?, is_default_sale_unit = ?,
-         net_rate_c1 = ?, net_rate_c2 = ?, net_rate_c3 = ?, net_rate_c4 = ?, net_rate_c5 = ? WHERE id = ?`
+         net_rate_c1 = ?, net_rate_c2 = ?, net_rate_c3 = ?, net_rate_c4 = ?, net_rate_c5 = ?,
+         pricing_method = ?, trade_price = ?, purchase_discount = ?, extra_discount = ?,
+         sale_discount_c1 = ?, sale_discount_c2 = ?, sale_discount_c3 = ?, sale_discount_c4 = ?, sale_discount_c5 = ?
+       WHERE id = ?`
     );
     const insertUnit = db.prepare(
       `INSERT INTO product_units
          (product_id, unit_name, conversion_factor, retail_price, wholesale_price, cost_price, is_default_sale_unit,
-          net_rate_c1, net_rate_c2, net_rate_c3, net_rate_c4, net_rate_c5)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          net_rate_c1, net_rate_c2, net_rate_c3, net_rate_c4, net_rate_c5,
+          pricing_method, trade_price, purchase_discount, extra_discount,
+          sale_discount_c1, sale_discount_c2, sale_discount_c3, sale_discount_c4, sale_discount_c5)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const deactivateUnit = db.prepare('UPDATE product_units SET is_active = 0 WHERE id = ?');
 
@@ -389,6 +414,7 @@ function update(payload) {
         netRateOrNull(u.netRateC3),
         netRateOrNull(u.netRateC4),
         netRateOrNull(u.netRateC5),
+        ...tradeFields(u),
       ];
       if (u.id) updateUnit.run(...args, u.id);
       else insertUnit.run(id, ...args);
