@@ -1,6 +1,8 @@
 import React, { useId } from 'react';
 import { ArrowLeftRight } from 'lucide-react';
 import theme from '../../../config/theme';
+import glossary from '../../../config/glossary';
+import { LedgerBackBar } from './LedgerNav';
 import appIcons from '../../../config/appIcons';
 import { Button, Card, Modal } from '../../../components/ui';
 import { PartyHeader } from '../../Parties/PartyHeader';
@@ -13,13 +15,16 @@ const c = theme.colors;
 
 // One layout for Customer Accounts and Supplier Accounts. No party chosen ->
 // the picker; otherwise the account header and its full timeline.
-export function AccountView({ party, picking, onPick, loading, error, onRetry, data, name, badges, contact, onPay, onChooseAnother }) {
+export function AccountView({ party, picking, onPick, loading, error, onRetry, data, name, badges, contact, onPay, onChooseAnother, onNavigate }) {
   const isSupplier = party === 'supplier';
   const noun = isSupplier ? 'supplier' : 'customer';
+  const listLabel = isSupplier ? glossary.supplierAccounts : glossary.customerAccounts;
+  const toLedgers = () => onNavigate?.('/ledgers');
 
   if (picking) {
     return (
       <div style={ledgerPage}>
+        <LedgerBackBar crumbs={[{ label: glossary.ledgers, onClick: toLedgers }]} current={listLabel} />
         <AccountList party={party} onPick={onPick} />
       </div>
     );
@@ -61,7 +66,18 @@ export function AccountView({ party, picking, onPick, loading, error, onRetry, d
     );
   }
 
-  return <div style={ledgerPage}>{body}</div>;
+  return (
+    <div style={ledgerPage}>
+      <LedgerBackBar
+        crumbs={[
+          { label: glossary.ledgers, onClick: toLedgers },
+          { label: listLabel, onClick: onChooseAnother },
+        ]}
+        current={name || (isSupplier ? glossary.supplier : glossary.customer)}
+      />
+      {body}
+    </div>
+  );
 }
 
 // Modal shell around PaymentFormFields. Enter in any field submits.

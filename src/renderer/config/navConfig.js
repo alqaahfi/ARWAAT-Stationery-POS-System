@@ -117,10 +117,12 @@ const navConfig = [
     group: null,
     route: '/ledgers',
     adminOnly: true,
-    tabs: [
-      { key: 'ledgers-overview', label: g.overview, route: '/ledgers' },
+    // No tabs: /ledgers is a landing page (Customers / Suppliers / More); every
+    // other Ledgers route is a page with a "‹ Ledgers" back button.
+    pages: [
       { key: 'ledgers-customers', label: g.customerAccounts, route: '/ledgers/customers' },
       { key: 'ledgers-suppliers', label: g.supplierAccounts, route: '/ledgers/suppliers' },
+      { key: 'ledgers-more', label: 'More', route: '/ledgers/more' },
       { key: 'ledgers-payments', label: g.payments, route: '/ledgers/payments' },
       { key: 'ledgers-advances', label: g.paidInAdvance, route: '/ledgers/advances' },
       { key: 'ledgers-aging', label: g.overduePayments, route: '/ledgers/aging' },

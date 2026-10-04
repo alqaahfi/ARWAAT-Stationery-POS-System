@@ -2,12 +2,16 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, SearchX, Users } from 'lucide-react';
 import theme from '../../../config/theme';
 import glossary from '../../../config/glossary';
-import { Badge, Card, ChipGroup, DataTable, EmptyState, IconButton, SearchField, Select } from '../../../components/ui';
+import { Card, ChipGroup, DataTable, EmptyState, IconButton, SearchField, Select } from '../../../components/ui';
 import BalanceChip from '../../../components/BalanceChip';
 import { formatCurrency } from '../../../utils/format';
 import { PartyNameCell, RowChevron, LoadError, NoMatch, ListSummary, listToolbar } from '../../Parties/PartyParts';
+import { PartyCards, PartyViewToggle, usePartyViewMode } from '../../Parties/PartyViews';
+import { TypeBadge } from '../../Customers/parts/CustomerListParts';
 
 const c = theme.colors;
+
+const accountSubline = (r, isSupplier) => [r.phone, r.mobile].filter(Boolean).join(' · ') || (isSupplier ? r.contact_person : undefined) || undefined;
 
 const SORTS = [
   { key: 'name', label: 'Name (A–Z)' },
@@ -28,6 +32,7 @@ export default function AccountList({ party, onPick }) {
   const [filter, setFilter] = useState('all');
   const [sortBy, setSortBy] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
+  const [viewMode, setViewMode] = usePartyViewMode(isSupplier ? 'pos_supplier_account_view_mode' : 'pos_customer_account_view_mode');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,22 +80,21 @@ export default function AccountList({ party, onPick }) {
 
   const totalOwed = useMemo(() => visible.reduce((sum, r) => (Number(r.balance_owed) > 0 ? sum + Number(r.balance_owed) : sum), 0), [visible]);
 
+  const compact = viewMode === 'compact';
   const columns = useMemo(
     () => [
       {
         key: 'name',
         label: isSupplier ? glossary.supplier : glossary.customer,
-        render: (r) => (
-          <PartyNameCell name={r.name} sub={[r.phone, r.mobile].filter(Boolean).join(' · ') || (isSupplier ? r.contact_person : undefined)} inactive={!r.is_active} />
-        ),
+        render: compact
+          ? (r) => <span style={{ fontWeight: theme.font.weightSemibold, opacity: r.is_active ? 1 : 0.6 }}>{r.name}</span>
+          : (r) => <PartyNameCell name={r.name} sub={accountSubline(r, isSupplier)} inactive={!r.is_active} />,
       },
-      ...(isSupplier
-        ? []
-        : [{ key: 'type', label: 'Type', width: '110px', render: (r) => (r.customer_type === 'wholesale' ? <Badge tone="purple">Wholesale</Badge> : <Badge tone="blue">Retail</Badge>) }]),
+      ...(isSupplier ? [] : [{ key: 'type', label: 'Type', width: '110px', render: (r) => <TypeBadge type={r.customer_type} /> }]),
       { key: 'balance', label: 'Balance', numeric: true, width: '220px', render: (r) => <BalanceChip amount={r.balance_owed} party={party} /> },
       { key: 'go', label: '', width: '32px', align: 'right', render: () => <RowChevron /> },
     ],
-    [isSupplier, party]
+    [isSupplier, party, compact]
   );
 
   function clearFilters() {
@@ -118,6 +122,7 @@ export default function AccountList({ party, onPick }) {
           style={{ flex: '1 1 220px', maxWidth: '420px' }}
         />
         <ChipGroup options={filterOptions} value={filter} onChange={setFilter} size="sm" aria-label="Show accounts" />
+        <PartyViewToggle value={viewMode} onChange={setViewMode} />
         <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginLeft: 'auto' }}>
           <Select aria-label="Sort by" value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ width: '180px' }}>
             {SORTS.map((o) => (
@@ -142,21 +147,32 @@ export default function AccountList({ party, onPick }) {
             }`}
       </ListSummary>
 
-      <Card padding="0" style={{ overflow: 'hidden' }}>
-        <DataTable
-          columns={columns}
+      {viewMode === 'grid' && !loading && visible.length > 0 ? (
+        <PartyCards
           rows={visible}
-          loading={loading}
-          onRowClick={onPick}
-          emptyState={
-            filtered ? (
-              <NoMatch what={`${noun} accounts`} onClear={clearFilters} />
-            ) : (
-              <EmptyState icon={isSupplier ? SearchX : Users} title={`No ${noun}s yet`} message={`Add a ${noun} first, then their account shows up here.`} />
-            )
-          }
+          party={party}
+          badges={isSupplier ? undefined : (r) => <TypeBadge type={r.customer_type} />}
+          subline={(r) => accountSubline(r, isSupplier)}
+          onOpen={onPick}
         />
-      </Card>
+      ) : (
+        <Card padding="0" style={{ overflow: 'hidden' }}>
+          <DataTable
+            columns={columns}
+            rows={visible}
+            loading={loading}
+            dense={compact}
+            onRowClick={onPick}
+            emptyState={
+              filtered ? (
+                <NoMatch what={`${noun} accounts`} onClear={clearFilters} />
+              ) : (
+                <EmptyState icon={isSupplier ? SearchX : Users} title={`No ${noun}s yet`} message={`Add a ${noun} first, then their account shows up here.`} />
+              )
+            }
+          />
+        </Card>
+      )}
       <div style={{ ...theme.type.footnote, color: c.labelSecondary, marginTop: theme.spacing.sm }}>Pick an account to see everything that went on it.</div>
     </div>
   );

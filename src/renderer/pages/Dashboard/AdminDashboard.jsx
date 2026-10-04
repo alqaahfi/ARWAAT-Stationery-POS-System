@@ -27,7 +27,8 @@ import CustomerList from '../Customers/CustomerList';
 import CustomerForm from '../Customers/CustomerForm';
 import SupplierList from '../Suppliers/SupplierList';
 import SupplierForm from '../Suppliers/SupplierForm';
-import LedgersOverview from '../Ledgers/Overview';
+import LedgersHome from '../Ledgers/LedgersHome';
+import LedgersMore, { MoreSubPage } from '../Ledgers/LedgersMore';
 import CustomerLedger from '../Ledgers/CustomerLedger';
 import SupplierLedger from '../Ledgers/SupplierLedger';
 import PaymentHistory from '../Ledgers/PaymentHistory';
@@ -191,19 +192,21 @@ export default function AdminDashboard() {
           />
         );
       case '/ledgers':
-        return <LedgersOverview onNavigate={navigate} />;
+        return <LedgersHome onNavigate={navigate} />;
       case '/ledgers/customers':
         return <CustomerLedger customerId={nav.params.id} onNavigate={navigate} />;
       case '/ledgers/suppliers':
         return <SupplierLedger supplierId={nav.params.id} onNavigate={navigate} />;
+      case '/ledgers/more':
+        return <LedgersMore onNavigate={navigate} />;
       case '/ledgers/payments':
-        return <PaymentHistory onNavigate={navigate} />;
+        return <MoreSubPage route={nav.route} onNavigate={navigate}><PaymentHistory onNavigate={navigate} /></MoreSubPage>;
       case '/ledgers/advances':
-        return <AdvancesAndCredits onNavigate={navigate} />;
+        return <MoreSubPage route={nav.route} onNavigate={navigate}><AdvancesAndCredits onNavigate={navigate} /></MoreSubPage>;
       case '/ledgers/aging':
-        return <AgingReport onNavigate={navigate} />;
+        return <MoreSubPage route={nav.route} onNavigate={navigate}><AgingReport onNavigate={navigate} /></MoreSubPage>;
       case '/ledgers/adjustments':
-        return <LedgerAdjustments />;
+        return <MoreSubPage route={nav.route} onNavigate={navigate}><LedgerAdjustments /></MoreSubPage>;
 
       case '/sales':
         return <SalesHistory onNavigate={navigate} saleId={nav.params.saleId} />;

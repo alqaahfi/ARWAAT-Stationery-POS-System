@@ -12,7 +12,7 @@ import QuickPaymentModal from '../../components/billing/QuickPaymentModal';
 // is picker mode (reached from the nav item), an id from the Customer list,
 // profile or search is preselected mode. "Choose another customer" goes back
 // to the picker without navigating away.
-export default function CustomerLedger({ customerId }) {
+export default function CustomerLedger({ customerId, onNavigate }) {
   const { user } = useAuth();
   const toast = useToast();
 
@@ -108,6 +108,7 @@ export default function CustomerLedger({ customerId }) {
         contact={customer && contactLine(customer.phone, customer.mobile, customer.address)}
         onPay={openPayment}
         onChooseAnother={() => setSelectedId(null)}
+        onNavigate={onNavigate}
       />
 
       <QuickPaymentModal

@@ -91,7 +91,7 @@ const PartyCard = memo(function PartyCard({ row, party, badges, subline, onOpen,
       </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing.sm, marginTop: theme.spacing.smd }}>
         <BalanceChip amount={row.balance_owed} party={party} />
-        <RowToggle checked={!!row.is_active} onChange={() => onToggleActive(row)} label={`${row.name} is active`} />
+        {onToggleActive && <RowToggle checked={!!row.is_active} onChange={() => onToggleActive(row)} label={`${row.name} is active`} />}
       </div>
     </div>
   );

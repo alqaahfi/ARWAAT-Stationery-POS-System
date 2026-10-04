@@ -10,7 +10,7 @@ import QuickPaymentModal from '../../components/billing/QuickPaymentModal';
 // is picker mode (reached from the nav item), an id from the Supplier list,
 // profile or search is preselected mode. "Choose another supplier" goes back
 // to the picker without navigating away.
-export default function SupplierLedger({ supplierId }) {
+export default function SupplierLedger({ supplierId, onNavigate }) {
   const { user } = useAuth();
   const toast = useToast();
 
@@ -97,6 +97,7 @@ export default function SupplierLedger({ supplierId }) {
         contact={supplier && contactLine(supplier.contact_person, supplier.phone, supplier.address)}
         onPay={openPayment}
         onChooseAnother={() => setSelectedId(null)}
+        onNavigate={onNavigate}
       />
 
       <QuickPaymentModal
