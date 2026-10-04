@@ -53,7 +53,7 @@ export function getKeyHints(stage, ctx) {
       if (partialBlocked) return [[['C', 'B', 'O'], 'Method'], [['Esc'], 'Choose a customer']];
       return [[['Enter'], amountTyped ? 'Finish sale' : 'Exact payment'], [['C', 'B', 'O'], 'Method'], [['Esc'], 'Cancel sale']];
     case 'confirm':
-      return [[['Enter'], 'New sale'], [['Esc'], 'Close'], ...(printFailed ? [[['R'], 'Retry print']] : [])];
+      return [[['Enter'], 'New sale'], [['Esc'], 'Close'], ...(printFailed ? [[['R'], 'Print']] : [])];
     default:
       return [];
   }

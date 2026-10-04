@@ -26,7 +26,11 @@ function receiptsDir() {
 // confirm popup in Sale.jsx can embed this exact same file afterwards
 // regardless of whether the physical print below succeeds) and then printed
 // via Chromium's own built-in PDF viewer.
-async function printInvoice({ saleId, showDues }) {
+// Builds the letterhead-merged invoice PDF without printing it — shared by
+// the print path below and the print preview (previewDocument.js). Returns
+// { success: true, pdfBytes } or { success: true, fallback: true } when the
+// sale has no letterhead (caller renders the HTML fallback instead).
+async function buildInvoicePdf({ saleId, showDues }) {
   const data = buildReceiptData(saleId, { showDues });
   if (!data) return { success: false, reason: 'Sale not found.' };
 
@@ -34,26 +38,31 @@ async function printInvoice({ saleId, showDues }) {
   // No letterhead assigned to the customer AND no default letterhead exists
   // — fall back to a plain-text A4 invoice instead of failing outright, using
   // receipt_header_text as the header (see ReceiptContent.jsx / Step 3).
-  if (!sale.letterhead_pdf_path) {
-    return printInvoiceFallback({ saleId, showDues });
-  }
+  if (!sale.letterhead_pdf_path) return { success: true, fallback: true, sale };
   if (!fs.existsSync(sale.letterhead_pdf_path)) {
     return { success: false, reason: 'The letterhead PDF file is missing — re-upload it in Settings > Letterheads.' };
   }
 
-  let pdfBytes;
   try {
-    pdfBytes = await buildMergedInvoicePdf({
+    const pdfBytes = await buildMergedInvoicePdf({
       templatePath: sale.letterhead_pdf_path,
       data,
       settings: getSettingsMap(),
       marginTopMm: sale.letterhead_margin_top_mm,
       marginBottomMm: sale.letterhead_margin_bottom_mm,
     });
+    return { success: true, pdfBytes, sale };
   } catch (err) {
     return { success: false, reason: err.message || 'Could not build the invoice PDF.' };
   }
+}
 
+async function printInvoice({ saleId, showDues }) {
+  const built = await buildInvoicePdf({ saleId, showDues });
+  if (!built.success) return built;
+  if (built.fallback) return printInvoiceFallback({ saleId, showDues });
+
+  const { sale, pdfBytes } = built;
   const pdfPath = path.join(receiptsDir(), `invoice_${sale.id}_${Date.now()}.pdf`);
   fs.writeFileSync(pdfPath, pdfBytes);
 
@@ -168,4 +177,4 @@ async function printPaymentReceipt({ paymentId }) {
   }
 }
 
-module.exports = { printInvoice, printPaymentReceipt };
+module.exports = { printInvoice, printPaymentReceipt, buildInvoicePdf };

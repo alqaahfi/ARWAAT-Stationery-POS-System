@@ -2,9 +2,10 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CircleAlert, Printer, SearchX, Undo2 } from 'lucide-react';
 import theme from '../../../config/theme';
 import glossary from '../../../config/glossary';
-import { Avatar, Badge, Button, Checkbox, DataTable, EmptyState, Icon, Modal, Skeleton, useToast } from '../../../components/ui';
+import { Avatar, Badge, Button, Checkbox, DataTable, EmptyState, Icon, Modal, Skeleton } from '../../../components/ui';
 import { formatCurrencyExact, formatDateTime } from '../../../utils/format';
 import { methodLabel } from '../../Ledgers/parts/ledgerUtils';
+import PrintPreviewModal from '../../../components/receipt/PrintPreviewModal';
 import { RETURN_STATUS, SALE_TYPE, STATUS, formatLocalDateTime } from './saleLabels';
 
 const c = theme.colors;
@@ -12,11 +13,9 @@ const c = theme.colors;
 // Read-only view of one sale, with reprint. No void/edit here; an Admin can
 // start a return, which happens on the Returns page.
 export function SaleDetailSheet({ saleId, userId, isAdmin, onClose, onOpenCustomer, onReturnItems, onOpenReturn }) {
-  const toast = useToast();
   const [state, setState] = useState({ loading: true, error: null, data: null });
   const [showDues, setShowDues] = useState(false);
-  const [printing, setPrinting] = useState(null); // printType in flight
-  const [printError, setPrintError] = useState(null); // { printType, reason }
+  const [preview, setPreview] = useState(null); // { printType } while the print preview is open
 
   const load = useCallback(async () => {
     setState({ loading: true, error: null, data: null });
@@ -37,22 +36,10 @@ export function SaleDetailSheet({ saleId, userId, isAdmin, onClose, onOpenCustom
     load();
   }, [load]);
 
-  async function print(printType) {
-    const { sale, customer } = state.data;
-    setPrinting(printType);
-    setPrintError(null);
-    try {
-      const res = await window.api.printing.printSale({ saleId: sale.id, printType, showDues: showDues && !!customer });
-      if (res?.success) {
-        const preview = import.meta.env.DEV && printType === 'retail-thermal';
-        toast.success(preview ? 'Receipt preview opened' : 'Sent to the printer');
-      } else {
-        setPrintError({ printType, reason: res?.reason || 'The printer did not respond.' });
-      }
-    } catch (err) {
-      setPrintError({ printType, reason: err?.message || 'The printer did not respond.' });
-    }
-    setPrinting(null);
+  // Reprints go through the print preview too — nothing reaches the printer
+  // until Print is pressed inside it.
+  function print(printType) {
+    setPreview({ printType });
   }
 
   const { data } = state;
@@ -94,16 +81,12 @@ export function SaleDetailSheet({ saleId, userId, isAdmin, onClose, onOpenCustom
           <Button
             variant="tinted"
             icon={Printer}
-            loading={printing === (isRetail ? 'wholesale-a4' : 'retail-thermal')}
-            disabled={!!printing}
             onClick={() => print(isRetail ? 'wholesale-a4' : 'retail-thermal')}
           >
             {isRetail ? glossary.a4Invoice : glossary.smallReceipt}
           </Button>
           <Button
             icon={Printer}
-            loading={printing === (isRetail ? 'retail-thermal' : 'wholesale-a4')}
-            disabled={!!printing}
             onClick={() => print(isRetail ? 'retail-thermal' : 'wholesale-a4')}
           >
             {isRetail ? 'Print receipt' : 'Print A4 invoice'}
@@ -137,9 +120,6 @@ export function SaleDetailSheet({ saleId, userId, isAdmin, onClose, onOpenCustom
         onOpenReturn={onOpenReturn}
         showDues={showDues}
         onShowDues={setShowDues}
-        printError={printError}
-        onRetryPrint={() => print(printError.printType)}
-        retrying={!!printing}
       />
     );
   }
@@ -147,11 +127,19 @@ export function SaleDetailSheet({ saleId, userId, isAdmin, onClose, onOpenCustom
   return (
     <Modal open onClose={onClose} title={title} subtitle={subtitle} width={720} footer={footer}>
       {body}
+      {preview && sale && (
+        <PrintPreviewModal
+          saleId={sale.id}
+          printType={preview.printType}
+          showDues={showDues && !!data.customer}
+          onClose={() => setPreview(null)}
+        />
+      )}
     </Modal>
   );
 }
 
-function SaleBody({ data, isAdmin, onOpenCustomer, onOpenReturn, showDues, onShowDues, printError, onRetryPrint, retrying }) {
+function SaleBody({ data, isAdmin, onOpenCustomer, onOpenReturn, showDues, onShowDues }) {
   const { sale, customer, lines, payments, returns = [] } = data;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
@@ -162,15 +150,6 @@ function SaleBody({ data, isAdmin, onOpenCustomer, onOpenReturn, showDues, onSho
       {returns.length > 0 && <ReturnsList returns={returns} onOpenReturn={isAdmin ? onOpenReturn : null} />}
       {customer && (
         <Checkbox id="sale-show-dues" label={glossary.showDuesOnReceipt} checked={showDues} onChange={(e) => onShowDues(e.target.checked)} />
-      )}
-      {printError && (
-        <div role="alert" style={styles.errorBox}>
-          <Icon icon={CircleAlert} size={18} />
-          <span style={{ flex: 1 }}>Couldn't print: {printError.reason}</span>
-          <Button size="sm" variant="tinted" onClick={onRetryPrint} loading={retrying}>
-            Retry
-          </Button>
-        </div>
       )}
     </div>
   );

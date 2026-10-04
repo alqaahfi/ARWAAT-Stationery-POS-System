@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, RotateCw } from 'lucide-react';
+import { Check, Printer } from 'lucide-react';
 import theme from '../../../config/theme';
 import { formatCurrency } from '../../../utils/format';
 import { Badge, Button, IconTile, Kbd, Spinner } from '../../../components/ui';
@@ -14,9 +14,9 @@ function toFileUrl(p) {
   return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`;
 }
 
-// Shown whether or not the physical print worked. Enter / Esc / R are
+// Shown after the sale is saved, whether or not the receipt was printed. Enter / Esc / R are
 // handled by Sale.jsx; the buttons here are the mouse fallback.
-export default function SaleCompleteSheet({ data, receiptPreview, retrying, onRetry, onClose, closeLabel = 'New sale' }) {
+export default function SaleCompleteSheet({ data, receiptPreview, onRetry, onClose, closeLabel = 'New sale' }) {
   return (
     <Scrim labelledBy="pos-complete-title">
       <div style={styles.sheet}>
@@ -49,14 +49,14 @@ export default function SaleCompleteSheet({ data, receiptPreview, retrying, onRe
               </Badge>
             ) : (
               <>
-                <div role="alert" style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0 }}>
-                  <Badge tone="red" dot style={{ alignSelf: 'flex-start' }}>
-                    Print failed
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0 }}>
+                  <Badge tone="neutral" dot style={{ alignSelf: 'flex-start' }}>
+                    Not printed
                   </Badge>
-                  <span style={{ ...theme.type.footnote, color: c.labelSecondary }}>{data.printReason || 'Could not print — check the printer.'}</span>
+                  <span style={{ ...theme.type.footnote, color: c.labelSecondary }}>The sale is saved. Print or save the receipt if you need it.</span>
                 </div>
-                <Button variant="secondary" size="sm" icon={retrying ? undefined : RotateCw} loading={retrying} tabIndex={-1} onClick={onRetry}>
-                  Retry <Kbd>R</Kbd>
+                <Button variant="secondary" size="sm" icon={Printer} tabIndex={-1} onClick={onRetry}>
+                  Print <Kbd>R</Kbd>
                 </Button>
               </>
             )}
@@ -80,7 +80,7 @@ function ReceiptPreview({ data, receiptPreview }) {
     return data.pdfPath ? (
       <embed src={toFileUrl(data.pdfPath)} type="application/pdf" style={styles.pdf} />
     ) : (
-      <div style={styles.previewNote}>No invoice preview available.</div>
+      <div style={styles.previewNote}>Press Print to preview the invoice.</div>
     );
   }
   if (!receiptPreview) {

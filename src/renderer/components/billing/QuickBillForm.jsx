@@ -5,6 +5,7 @@ import theme from '../../config/theme';
 import { Button, Card, EmptyState, Modal, useConfirm, useToast } from '../ui';
 import { formatCurrency } from '../../utils/format';
 import SaleCompleteSheet from '../../pages/POS/parts/SaleCompleteSheet';
+import PrintPreviewModal from '../receipt/PrintPreviewModal';
 import { SALE_COMPLETED_EVENT } from '../../pages/POS/Sale';
 import BillOverlay from './BillOverlay';
 import BillPartyCard from './BillPartyCard';
@@ -51,7 +52,7 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(null);
-  const [retrying, setRetrying] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [receiptPreview, setReceiptPreview] = useState(null);
   const [focusKey, setFocusKey] = useState(null);
   // Product with several Types picked: { detail, unit, price, types } while its quantities are being typed.
@@ -388,7 +389,9 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
     onSaved?.(res);
 
     const effectiveShowDues = showDues && !!party;
-    const printResult = await window.api.printing.printSale({ saleId: res.saleId, printType: printFormat, showDues: effectiveShowDues });
+    // Nothing goes to the printer automatically: the print preview opens
+    // first and its Print button does the physical print. The sale is already
+    // saved, so closing the preview never affects it.
     setDone({
       invoiceNo: res.invoiceNo,
       saleId: res.saleId,
@@ -397,18 +400,15 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
       balanceDue: totals.balanceDue,
       printType: printFormat,
       showDues: effectiveShowDues,
-      printSuccess: printResult.success,
-      printReason: printResult.reason,
-      pdfPath: printResult.pdfPath || null,
+      printSuccess: null,
+      printReason: null,
+      pdfPath: null,
     });
+    setShowPreview(true);
   }
 
-  async function retryPrint() {
-    if (!done) return;
-    setRetrying(true);
-    const res = await window.api.printing.printSale({ saleId: done.saleId, printType: done.printType, showDues: done.showDues });
-    setRetrying(false);
-    setDone((d) => ({ ...d, printSuccess: res.success, printReason: res.reason, pdfPath: res.pdfPath || d.pdfPath }));
+  function onPrinted(res) {
+    setDone((d) => ({ ...d, printSuccess: true, printReason: null, pdfPath: res.pdfPath || d.pdfPath }));
   }
 
   // Thermal receipts are previewed from the same data the printer uses; an A4 invoice embeds its merged PDF.
@@ -450,13 +450,14 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
 
   const handlerRef = useRef(null);
   handlerRef.current = (e) => {
+    if (showPreview) return; // the print preview window owns the keyboard
     if (done) {
       if (e.key === 'Enter' || e.key === 'Escape') {
         e.preventDefault();
         onClose?.();
       } else if ((e.key === 'r' || e.key === 'R') && !done.printSuccess) {
         e.preventDefault();
-        retryPrint();
+        setShowPreview(true);
       }
       return;
     }
@@ -571,10 +572,18 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
         <SaleCompleteSheet
           data={done}
           receiptPreview={receiptPreview}
-          retrying={retrying}
-          onRetry={retryPrint}
+          onRetry={() => setShowPreview(true)}
           onClose={() => onClose?.()}
           closeLabel="Done"
+        />
+      )}
+      {done && showPreview && (
+        <PrintPreviewModal
+          saleId={done.saleId}
+          printType={done.printType}
+          showDues={done.showDues}
+          onPrinted={onPrinted}
+          onClose={() => setShowPreview(false)}
         />
       )}
       <Modal

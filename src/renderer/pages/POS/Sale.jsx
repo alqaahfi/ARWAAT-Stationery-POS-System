@@ -22,6 +22,7 @@ import RecentBillsPanel from './parts/RecentBillsPanel';
 import HeldBillsPanel from './parts/HeldBillsPanel';
 import CancelSaleDialog from './parts/CancelSaleDialog';
 import SaleCompleteSheet from './parts/SaleCompleteSheet';
+import PrintPreviewModal from '../../components/receipt/PrintPreviewModal';
 import { InlineMessage, PanelTitle, packSizeName } from './parts/common';
 
 // Cashier Mode is 100% keyboard-operable — see the build prompt for the full
@@ -113,7 +114,7 @@ export function getStageLegend(stage, ctx = {}) {
     case 'payment':
       return partialBlockedNoCustomer ? 'C/B/O Payment Method · Esc Select a Customer' : 'Enter Exact Payment · C/B/O Method · Esc Cancel Sale';
     case 'confirm':
-      return confirmData && !confirmData.printSuccess ? 'Enter / Esc Close · R Retry Print' : 'Enter / Esc Close';
+      return confirmData && !confirmData.printSuccess ? 'Enter / Esc Close · R Print' : 'Enter / Esc Close';
     default:
       return '';
   }
@@ -207,7 +208,7 @@ export default function Sale() {
   // ---------------- finalize ----------------
   const [completing, setCompleting] = useState(false);
   const [confirmData, setConfirmData] = useState(null);
-  const [retryingPrint, setRetryingPrint] = useState(false);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
   // The on-screen receipt/invoice preview shown alongside the confirmation —
   // always fetched and shown regardless of whether the physical print
   // succeeded, via the same buildReceiptData() shape the print paths use.
@@ -978,12 +979,9 @@ export default function Sale() {
     window.dispatchEvent(new CustomEvent(SALE_COMPLETED_EVENT));
 
     const effectiveShowDues = showDues && !!customer;
-    const printResult = await window.api.printing.printSale({
-      saleId: res.saleId,
-      printType: printFormat,
-      showDues: effectiveShowDues,
-    });
-
+    // Nothing goes to the printer automatically: the print preview opens
+    // first and its Print button does the physical print. The sale is already
+    // saved, so closing the preview never affects it.
     const finishedTotal = totalAmount;
     const finishedChange = changeDue;
     const finishedBalance = balanceDue;
@@ -998,26 +996,18 @@ export default function Sale() {
       balanceDue: finishedBalance,
       printType: printFormat,
       showDues: effectiveShowDues,
-      printSuccess: printResult.success,
-      printReason: printResult.reason,
-      // For wholesale-a4, printA4Invoice.js writes the merged PDF out and
-      // returns its path even when the physical print itself failed — the
-      // on-screen preview below embeds this directly rather than re-fetching.
-      pdfPath: printResult.pdfPath || null,
+      printSuccess: null,
+      printReason: null,
+      // Set once the A4 invoice is physically printed (printInvoice returns
+      // the merged PDF's path); the confirm sheet embeds it from then on.
+      pdfPath: null,
     });
     setStage('confirm');
+    setShowPrintPreview(true);
   }
 
-  async function retryPrint() {
-    if (!confirmData) return;
-    setRetryingPrint(true);
-    const res = await window.api.printing.printSale({
-      saleId: confirmData.saleId,
-      printType: confirmData.printType,
-      showDues: confirmData.showDues,
-    });
-    setRetryingPrint(false);
-    setConfirmData((d) => ({ ...d, printSuccess: res.success, printReason: res.reason, pdfPath: res.pdfPath || d.pdfPath }));
+  function onPrinted(res) {
+    setConfirmData((d) => ({ ...d, printSuccess: true, printReason: null, pdfPath: res.pdfPath || d.pdfPath }));
   }
 
   function dismissConfirm() {
@@ -1043,6 +1033,9 @@ export default function Sale() {
   // ---------------- central keyboard handler ----------------
 
   function handleKeyDown(e) {
+    // The print preview window owns the keyboard while it is open.
+    if (showPrintPreview) return;
+
     // The Today's bills and Held bills panels run their own keys while open.
     if (showRecent || showRecall) return;
 
@@ -1072,7 +1065,7 @@ export default function Sale() {
         dismissConfirm();
       } else if ((e.key === 'r' || e.key === 'R') && confirmData && !confirmData.printSuccess) {
         e.preventDefault();
-        retryPrint();
+        setShowPrintPreview(true);
       }
       return;
     }
@@ -1591,9 +1584,18 @@ export default function Sale() {
         <SaleCompleteSheet
           data={confirmData}
           receiptPreview={receiptPreview}
-          retrying={retryingPrint}
-          onRetry={retryPrint}
+          onRetry={() => setShowPrintPreview(true)}
           onClose={dismissConfirm}
+        />
+      )}
+
+      {stage === 'confirm' && confirmData && showPrintPreview && (
+        <PrintPreviewModal
+          saleId={confirmData.saleId}
+          printType={confirmData.printType}
+          showDues={confirmData.showDues}
+          onPrinted={onPrinted}
+          onClose={() => setShowPrintPreview(false)}
         />
       )}
     </div>

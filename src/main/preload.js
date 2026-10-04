@@ -195,7 +195,8 @@ contextBridge.exposeInMainWorld('api', {
 
   printing: {
     printSale: (data) => ipcRenderer.invoke('printing:print-sale', data),
-    captureReceiptImage: (rect) => ipcRenderer.invoke('printing:capture-receipt-image', rect),
+    previewSale: (data) => ipcRenderer.invoke('printing:preview-sale', data),
+    savePdf: (data) => ipcRenderer.invoke('printing:save-pdf', data),
     printPaymentReceipt: (data) => ipcRenderer.invoke('printing:print-payment-receipt', data),
   },
 
