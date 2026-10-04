@@ -48,7 +48,7 @@ async function print(saleId, { showDues } = {}) {
   const db = getDb();
   const data = buildReceiptData(saleId, { showDues });
   if (!data) return { success: false, reason: 'Sale not found.' };
-  const { sale, items, showDues: applyDues, outstandingBalance } = data;
+  const { sale, groups, showDues: applyDues, outstandingBalance } = data;
 
   const settings = getSettingsMap(db);
   const printerName = settings.thermal_printer_name;
@@ -88,11 +88,10 @@ async function print(saleId, { showDues } = {}) {
     if (sale.customer_name) printerDevice.println(`Customer: ${sale.customer_name}`);
     printerDevice.drawLine();
 
-    for (const item of items) {
-      const label =
-        item.variant_name && item.variant_name !== 'Standard' ? `${item.product_name} (${item.variant_name})` : item.product_name;
-      printerDevice.println(label);
-      printerDevice.leftRight(`  ${item.quantity} ${item.unit_name} x ${money(currency, item.unit_price)}`, money(currency, item.line_total));
+    for (const group of groups) {
+      printerDevice.println(group.product_name);
+      if (group.variantText) printerDevice.println(`  ${group.variantText}`);
+      printerDevice.leftRight(`  ${group.quantity} ${group.unit_name} x ${money(currency, group.unit_price)}`, money(currency, group.line_total));
     }
     printerDevice.drawLine();
 

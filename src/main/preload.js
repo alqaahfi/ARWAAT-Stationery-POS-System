@@ -180,6 +180,7 @@ contextBridge.exposeInMainWorld('api', {
     listRecent: (data) => ipcRenderer.invoke('sales:list-recent', data),
     getForEdit: (data) => ipcRenderer.invoke('sales:get-for-edit', data),
     getSaleDetail: (data) => ipcRenderer.invoke('sales:get-sale-detail', data),
+    getProductTypes: (data) => ipcRenderer.invoke('sales:get-product-types', data),
     getReceiptData: (data) => ipcRenderer.invoke('sales:get-receipt-data', data),
     list: (data) => ipcRenderer.invoke('sales:list', data),
     getDetail: (data) => ipcRenderer.invoke('sales:get-detail', data),

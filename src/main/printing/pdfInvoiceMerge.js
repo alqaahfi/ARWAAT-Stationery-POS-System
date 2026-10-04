@@ -23,7 +23,7 @@ function formatDate(sqliteDateTime) {
 // `data` is the shared buildReceiptData() shape: { sale, items, showDues,
 // outstandingBalance }. Returns the merged PDF as a Uint8Array.
 async function buildMergedInvoicePdf({ templatePath, data, settings, marginTopMm, marginBottomMm }) {
-  const { sale, items, showDues, outstandingBalance } = data;
+  const { sale, showDues, outstandingBalance } = data;
   const currency = settings.currency_symbol || 'Rs.';
   const money = (n) => `${currency}${Number(n || 0).toFixed(2)}`;
 
@@ -87,13 +87,6 @@ async function buildMergedInvoicePdf({ templatePath, data, settings, marginTopMm
     }
     const drawX = align === 'right' ? x - activeFont.widthOfTextAtSize(value, size) : x;
     page.drawText(value, { x: drawX, y: yPos, size, font: activeFont, color });
-  }
-
-  function centerText(str, yPos, { size = 9, bold = false, color = MUTED_COLOR } = {}) {
-    const activeFont = bold ? fontBold : font;
-    const value = String(str);
-    const textWidth = activeFont.widthOfTextAtSize(value, size);
-    page.drawText(value, { x: pageWidth / 2 - textWidth / 2, y: yPos, size, font: activeFont, color });
   }
 
   function hLine(x1, x2, yPos, thickness = 0.75) {
@@ -171,23 +164,30 @@ async function buildMergedInvoicePdf({ templatePath, data, settings, marginTopMm
   }
 
   // -------- one bordered item row: [Item | Qty | Unit Price | Total] --------
-  function drawItemRow(item) {
-    const [x0, x1, x2, x3, x4] = colBounds;
-    const rowTop = y;
-    const rowBottom = y - rowHeight;
+  // A grouped row: product name on the first line, the "Type-qty / Type-qty"
+  // sub-line beneath it (when the product has Types), qty column = total.
+  const subLineExtra = 11;
+  const heightFor = (group) => (group.variantText ? rowHeight + subLineExtra : rowHeight);
 
-    page.drawRectangle({ x: x0, y: rowBottom, width: x4 - x0, height: rowHeight, borderColor: BORDER_COLOR, borderWidth: 0.75 });
+  function drawItemRow(group) {
+    const [x0, x1, x2, x3, x4] = colBounds;
+    const height = heightFor(group);
+    const rowTop = y;
+    const rowBottom = y - height;
+
+    page.drawRectangle({ x: x0, y: rowBottom, width: x4 - x0, height, borderColor: BORDER_COLOR, borderWidth: 0.75 });
     vLine(x1, rowTop, rowBottom);
     vLine(x2, rowTop, rowBottom);
     vLine(x3, rowTop, rowBottom);
 
-    const label =
-      item.variant_name && item.variant_name !== 'Standard' ? `${item.product_name} (${item.variant_name})` : item.product_name;
-    const textY = rowBottom + 5;
-    text(label, x0 + 6, textY, { size: 9, maxWidth: x1 - x0 - 10 });
-    text(`${item.quantity} ${item.unit_name}`, x1 + 6, textY, { size: 9, maxWidth: x2 - x1 - 10 });
-    text(money(item.unit_price), x3 - 6, textY, { size: 9, align: 'right' });
-    text(money(item.line_total), x4 - 6, textY, { size: 9, align: 'right' });
+    const firstLineY = rowTop - 13;
+    text(group.product_name, x0 + 6, firstLineY, { size: 9, maxWidth: x1 - x0 - 10 });
+    if (group.variantText) {
+      text(group.variantText, x0 + 6, firstLineY - subLineExtra, { size: 8, color: MUTED_COLOR, maxWidth: x1 - x0 - 10 });
+    }
+    text(`${group.quantity} ${group.unit_name}`, x1 + 6, firstLineY, { size: 9, maxWidth: x2 - x1 - 10 });
+    text(money(group.unit_price), x3 - 6, firstLineY, { size: 9, align: 'right' });
+    text(money(group.line_total), x4 - 6, firstLineY, { size: 9, align: 'right' });
 
     y = rowBottom;
   }
@@ -197,12 +197,12 @@ async function buildMergedInvoicePdf({ templatePath, data, settings, marginTopMm
   drawTableHeaderRow();
 
   // -------- item rows, paginating onto a fresh copy of the template as needed --------
-  for (const item of items) {
-    if (y - rowHeight < marginBottom) {
+  for (const group of data.groups) {
+    if (y - heightFor(group) < marginBottom) {
       await startNewPage();
       drawTableHeaderRow();
     }
-    drawItemRow(item);
+    drawItemRow(group);
   }
 
   // -------- totals block — bordered mini-table, kept together, pushed to a fresh page if it wouldn't fit --------
@@ -261,20 +261,7 @@ async function buildMergedInvoicePdf({ templatePath, data, settings, marginTopMm
     text(money(row.value), totalsX + totalsWidth - 8, textY, { size, bold: row.bold, color: row.color || TEXT_COLOR, align: 'right' });
   });
 
-  // Footer applies independently of whichever header this invoice used — the
-  // letterhead image (if any) only ever covers the header area, so this runs
-  // the same way whether or not a letterhead is set.
-  const footerLines = (settings.receipt_footer_text || '').split('\n').map((l) => l.trim()).filter(Boolean);
-  if (footerLines.length > 0) {
-    const footerLineHeight = 13;
-    const footerHeight = footerLines.length * footerLineHeight + 20;
-    if (y - footerHeight < marginBottom) {
-      await startNewPage();
-    }
-    y -= 20;
-    footerLines.forEach((line, i) => centerText(line, y - i * footerLineHeight));
-  }
-
+  // No footer text on A4 invoices (it overlapped the bill content).
   return outputDoc.save();
 }
 

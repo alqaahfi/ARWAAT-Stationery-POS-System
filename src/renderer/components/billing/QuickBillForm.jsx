@@ -2,13 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Lock } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import theme from '../../config/theme';
-import { Card, EmptyState, useConfirm, useToast } from '../ui';
+import { Button, Card, EmptyState, Modal, useConfirm, useToast } from '../ui';
 import { formatCurrency } from '../../utils/format';
 import SaleCompleteSheet from '../../pages/POS/parts/SaleCompleteSheet';
 import { SALE_COMPLETED_EVENT } from '../../pages/POS/Sale';
 import BillOverlay from './BillOverlay';
 import BillPartyCard from './BillPartyCard';
 import BillItemSearch from './BillItemSearch';
+import MultiTypeQtyPanel, { entriesFromValues } from './MultiTypeQtyPanel';
 import BillLines from './BillLines';
 import BillSummary, { PartyTypeBadge } from './BillSummary';
 import { buildLine, computeTotals, lineTotal, lineUnits, purchasePriceFields, resolveLetterheadId, round2, tradeUnitCost } from './billingUtils';
@@ -53,6 +54,10 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
   const [retrying, setRetrying] = useState(false);
   const [receiptPreview, setReceiptPreview] = useState(null);
   const [focusKey, setFocusKey] = useState(null);
+  // Product with several Types picked: { detail, unit, price, types } while its quantities are being typed.
+  const [multi, setMulti] = useState(null);
+  const [multiValues, setMultiValues] = useState({});
+  const [multiError, setMultiError] = useState('');
 
   const linesRef = useRef(lines);
   linesRef.current = lines;
@@ -145,18 +150,49 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
       return;
     }
     const unit = detail.units.find((u) => u.id === detail.defaultUnitId);
-    const existing = linesRef.current.find((l) => l.variantId === detail.variant.id && l.unitId === unit.id);
-    if (existing) {
-      setLines((prev) => prev.map((l) => (l.key === existing.key ? { ...l, quantity: round2((Number(l.quantity) || 0) + 1) } : l)));
-      setFocusKey(existing.key);
-      return;
-    }
     const price = isPurchase
       ? unit.costPrice
       : (await window.api.sales.resolvePrice({ productUnitId: unit.id, customerId: partyRef.current?.id || null })).price;
-    const line = buildLine(detail, unit, price, isPurchase ? purchasePriceFields(unit) : {});
+
+    // A product with several Types: ask for every Type's quantity at once.
+    const types = (await window.api.sales.getProductTypes({ productId: detail.product.id }).catch(() => [])) || [];
+    if (types.length > 1) {
+      setMultiValues({});
+      setMultiError('');
+      setMulti({ detail, unit, price, types });
+      return;
+    }
+    setFocusKey(addLineFor(detail, unit, price, 1));
+  }
+
+  // Adds `quantity` of one Type; an existing line for the same Type + pack size just grows.
+  function addLineFor(detail, unit, price, quantity) {
+    const existing = linesRef.current.find((l) => l.variantId === detail.variant.id && l.unitId === unit.id);
+    if (existing) {
+      setLines((prev) => prev.map((l) => (l.key === existing.key ? { ...l, quantity: round2((Number(l.quantity) || 0) + quantity) } : l)));
+      return existing.key;
+    }
+    const line = { ...buildLine(detail, unit, price, isPurchase ? purchasePriceFields(unit) : {}), quantity };
+    // Lines added in one go are appended to linesRef right away so a repeat Type merges instead of duplicating.
+    linesRef.current = [...linesRef.current, line];
     setLines((prev) => [...prev, line]);
-    setFocusKey(line.key);
+    return line.key;
+  }
+
+  function confirmMulti() {
+    if (!multi) return;
+    const entries = entriesFromValues(multi.types, multiValues);
+    if (entries.length === 0) {
+      setMultiError('Type a quantity for at least one Type.');
+      return;
+    }
+    let lastKey = null;
+    for (const { type, quantity } of entries) {
+      const detail = { ...multi.detail, variant: { ...multi.detail.variant, id: type.variantId, variantName: type.variantName, stockQty: type.stockQty } };
+      lastKey = addLineFor(detail, multi.unit, multi.price, quantity);
+    }
+    setMulti(null);
+    setFocusKey(lastKey);
   }
 
   // After an item is added, jump to its quantity box so a number can be typed straight away.
@@ -541,6 +577,37 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
           closeLabel="Done"
         />
       )}
+      <Modal
+        open={!!multi}
+        onClose={() => setMulti(null)}
+        title="How many of each?"
+        width={560}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setMulti(null)}>
+              Cancel
+            </Button>
+            <Button onClick={confirmMulti}>Add to {isPurchase ? 'purchase' : 'sale'}</Button>
+          </>
+        }
+      >
+        {multi && (
+          <MultiTypeQtyPanel
+            productName={multi.detail.product.name}
+            unitLabel={multi.unit.unitName}
+            types={multi.types}
+            values={multiValues}
+            onChange={(id, v) => {
+              setMultiError('');
+              setMultiValues((prev) => ({ ...prev, [id]: v }));
+            }}
+            onConfirm={confirmMulti}
+            onCancel={() => setMulti(null)}
+            stockOf={isPurchase ? undefined : (t) => t.stockQty / multi.unit.conversionFactor}
+            error={multiError}
+          />
+        )}
+      </Modal>
     </BillOverlay>
   );
 }

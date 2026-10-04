@@ -487,6 +487,15 @@ function registerSalesIpc() {
   ipcMain.handle('sales:search-products', (event, { query } = {}) => (query && query.trim() ? searchProducts(query.trim()) : []));
   ipcMain.handle('sales:search-products-grouped', (event, { query } = {}) => (query && query.trim() ? searchProductsGrouped(query.trim()) : []));
   ipcMain.handle('sales:get-variant-by-barcode', (event, { barcode } = {}) => getVariantByBarcode(barcode));
+  ipcMain.handle('sales:get-product-types', (event, { productId } = {}) =>
+    getDb()
+      .prepare(
+        `SELECT pv.id AS variantId, pv.variant_name AS variantName, pv.stock_qty AS stockQty
+         FROM product_variants pv JOIN products p ON p.id = pv.product_id
+         WHERE pv.product_id = ? AND pv.is_active = 1 AND p.is_active = 1 ORDER BY pv.id`
+      )
+      .all(productId)
+  );
   ipcMain.handle('sales:get-variant-for-cart', (event, { variantId } = {}) => getVariantForCart(variantId));
   ipcMain.handle('sales:resolve-price', (event, { productUnitId, customerId } = {}) => ({
     price: resolveUnitPrice({ db: getDb(), productUnitId, customerId }),

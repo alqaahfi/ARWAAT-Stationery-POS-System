@@ -7,8 +7,7 @@ import { formatCurrencyExact, formatDateTime } from '../../utils/format';
 // between this HTML page and the letterhead-PDF-merge path). Same hidden
 // BrowserWindow + webContents.print() pattern as PrintPaymentReceipt.jsx.
 // Plain-text header from receipt_header_text stands in for the letterhead
-// image; receipt_footer_text applies here exactly as it does on the merged
-// path, since the footer is independent of which header a given invoice used.
+// image. A4 invoices carry no footer text (removed on the merged path too).
 export default function PrintInvoice({ saleId, showDues }) {
   const [data, setData] = useState(null);
   const [settings, setSettings] = useState(null);
@@ -25,12 +24,11 @@ export default function PrintInvoice({ saleId, showDues }) {
   if (notFound) return <div style={styles.page}>Sale not found.</div>;
   if (!data || !settings) return <div style={styles.page}>Loading…</div>;
 
-  const { sale, items, showDues: applyDues, outstandingBalance } = data;
+  const { sale, groups, showDues: applyDues, outstandingBalance } = data;
   const currency = settings.currency_symbol || 'Rs.';
   const money = (n) => `${currency}${Number(n || 0).toFixed(2)}`;
 
   const headerLines = (settings.receipt_header_text || '').split('\n').map((l) => l.trim()).filter(Boolean);
-  const footerLines = (settings.receipt_footer_text || '').split('\n').map((l) => l.trim()).filter(Boolean);
 
   return (
     <div style={styles.page}>
@@ -73,20 +71,19 @@ export default function PrintInvoice({ saleId, showDues }) {
           </tr>
         </thead>
         <tbody>
-          {items.map((item) => {
-            const label =
-              item.variant_name && item.variant_name !== 'Standard' ? `${item.product_name} (${item.variant_name})` : item.product_name;
-            return (
-              <tr key={item.id}>
-                <td style={styles.td}>{label}</td>
-                <td style={styles.td}>
-                  {item.quantity} {item.unit_name}
-                </td>
-                <td style={{ ...styles.td, textAlign: 'right' }}>{money(item.unit_price)}</td>
-                <td style={{ ...styles.td, textAlign: 'right' }}>{money(item.line_total)}</td>
-              </tr>
-            );
-          })}
+          {groups.map((group, i) => (
+            <tr key={i}>
+              <td style={styles.td}>
+                <div>{group.product_name}</div>
+                {group.variantText && <div style={styles.variantText}>{group.variantText}</div>}
+              </td>
+              <td style={styles.td}>
+                {group.quantity} {group.unit_name}
+              </td>
+              <td style={{ ...styles.td, textAlign: 'right' }}>{money(group.unit_price)}</td>
+              <td style={{ ...styles.td, textAlign: 'right' }}>{money(group.line_total)}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
 
@@ -101,13 +98,6 @@ export default function PrintInvoice({ saleId, showDues }) {
         </div>
       </div>
 
-      {footerLines.length > 0 && (
-        <div style={styles.footer}>
-          {footerLines.map((line, i) => (
-            <div key={i}>{line}</div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -140,5 +130,5 @@ const styles = {
   totalsBox: { width: '320px', border: '1px solid #111827' },
   totalRow: { display: 'flex', justifyContent: 'space-between', padding: '7px 10px', fontSize: theme.font.sizeSm, borderBottom: '1px solid #111827' },
   totalRowShaded: { backgroundColor: '#e5e7eb' },
-  footer: { marginTop: '32px', textAlign: 'center', color: '#6b7280', fontSize: theme.font.sizeXs },
+  variantText: { color: '#4b5563', fontSize: theme.font.sizeXs, marginTop: '2px' },
 };

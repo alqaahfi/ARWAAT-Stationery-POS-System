@@ -10,6 +10,7 @@ import IdlePanel from './parts/IdlePanel';
 import CustomerPanel from './parts/CustomerPanel';
 import ItemSearchPanel from './parts/ItemSearchPanel';
 import QtyPanel from './parts/QtyPanel';
+import MultiTypeQtyPanel, { entriesFromValues } from '../../components/billing/MultiTypeQtyPanel';
 import DiscountPanel from './parts/DiscountPanel';
 import FormatPanel from './parts/FormatPanel';
 import PaymentPanel from './parts/PaymentPanel';
@@ -21,7 +22,7 @@ import RecentBillsPanel from './parts/RecentBillsPanel';
 import HeldBillsPanel from './parts/HeldBillsPanel';
 import CancelSaleDialog from './parts/CancelSaleDialog';
 import SaleCompleteSheet from './parts/SaleCompleteSheet';
-import { InlineMessage } from './parts/common';
+import { InlineMessage, PanelTitle, packSizeName } from './parts/common';
 
 // Cashier Mode is 100% keyboard-operable — see the build prompt for the full
 // stage-by-stage spec. Built as one component on purpose: a keyboard state
@@ -186,6 +187,10 @@ export default function Sale() {
   const [pendingItem, setPendingItem] = useState(null);
   const [qtyValue, setQtyValue] = useState('1');
   const [focValue, setFocValue] = useState('');
+  // Product with several Types: quantities for all Types are typed on one panel.
+  const [multiTypes, setMultiTypes] = useState(null); // [{ variantId, variantName, stockQty }] | null
+  const [multiValues, setMultiValues] = useState({});
+  const [multiError, setMultiError] = useState('');
 
   // ---------------- stage 4: cart-edit ----------------
   const [cartHighlight, setCartHighlight] = useState(0);
@@ -706,6 +711,10 @@ export default function Sale() {
     const unit = group.units[uIdx] || group.units[0];
     if (!type || !unit) return;
     const priceRes = await window.api.sales.resolvePrice({ productUnitId: unit.id, customerId: customer?.id || null });
+    const allTypes = (await window.api.sales.getProductTypes({ productId: group.productId }).catch(() => [])) || [];
+    setMultiTypes(allTypes.length > 1 ? allTypes : null);
+    setMultiValues({});
+    setMultiError('');
     setPendingItem({
       variantId: type.variantId,
       variantName: type.variantName,
@@ -737,6 +746,7 @@ export default function Sale() {
         if (detail && detail.defaultUnitId) {
           const unit = detail.units.find((u) => u.id === detail.defaultUnitId);
           const priceRes = await window.api.sales.resolvePrice({ productUnitId: detail.defaultUnitId, customerId: customer?.id || null });
+          setMultiTypes(null); // a scanned barcode is one specific Type
           setPendingItem({
             variantId: detail.variant.id,
             variantName: detail.variant.variantName,
@@ -781,6 +791,24 @@ export default function Sale() {
     });
   }
 
+  function confirmMultiQty() {
+    if (!pendingItem || !multiTypes) return;
+    const entries = entriesFromValues(multiTypes, multiValues);
+    if (entries.length === 0) {
+      setMultiError('Type a quantity for at least one Type.');
+      return;
+    }
+    const over = entries.find((e) => e.quantity * pendingItem.conversionFactor > e.type.stockQty);
+    if (over) {
+      setMultiError(`Only ${formatCount(over.type.stockQty / pendingItem.conversionFactor)} of ${over.type.variantName} in stock.`);
+      return;
+    }
+    for (const { type, quantity } of entries) {
+      addOrMergeCartLine({ ...pendingItem, variantId: type.variantId, variantName: type.variantName, stockQty: type.stockQty, quantity, focQuantity: 0 });
+    }
+    cancelPendingItem();
+  }
+
   function confirmQty() {
     if (!pendingItem || qtyNumber <= 0 || qtyStockError) return;
     addOrMergeCartLine({ ...pendingItem, quantity: qtyNumber, focQuantity: focNumber });
@@ -793,6 +821,9 @@ export default function Sale() {
   }
 
   function cancelPendingItem() {
+    setMultiTypes(null);
+    setMultiValues({});
+    setMultiError('');
     setPendingItem(null);
     setQtyValue('1');
     setFocValue('');
@@ -1146,6 +1177,7 @@ export default function Sale() {
     }
 
     if (stage === 'qty') {
+      if (multiTypes) return; // MultiTypeQtyPanel handles its own keys (Tab walks the Types)
       if (e.key === 'Tab') {
         e.preventDefault();
         const next = document.activeElement === focInputRef.current ? qtyInputRef : focInputRef;
@@ -1382,6 +1414,27 @@ export default function Sale() {
           />
         );
       case 'qty':
+        if (pendingItem && multiTypes) {
+          return (
+            <>
+              <PanelTitle title="How many of each?" hint="Enter adds them all. Press Esc to pick a different item." />
+              <MultiTypeQtyPanel
+                productName={pendingItem.productName}
+                unitLabel={packSizeName(pendingItem)}
+                types={multiTypes}
+                values={multiValues}
+                onChange={(id, v) => {
+                  setMultiError('');
+                  setMultiValues((prev) => ({ ...prev, [id]: v }));
+                }}
+                onConfirm={confirmMultiQty}
+                onCancel={cancelPendingItem}
+                stockOf={(t) => t.stockQty / pendingItem.conversionFactor}
+                error={multiError}
+              />
+            </>
+          );
+        }
         return pendingItem ? (
           <QtyPanel
             inputRef={qtyInputRef}

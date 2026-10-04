@@ -10,7 +10,7 @@ import { formatDateTime } from '../../utils/format';
 // buildReceiptData() shape this does. `data` is that shape:
 // { sale, items, showDues, outstandingBalance }.
 export default function ThermalContent({ data, settings }) {
-  const { sale, items, showDues, outstandingBalance } = data;
+  const { sale, groups, showDues, outstandingBalance } = data;
   const currency = settings.currency_symbol || 'Rs.';
   const money = (n) => `${currency}${Number(n || 0).toFixed(2)}`;
 
@@ -34,21 +34,18 @@ export default function ThermalContent({ data, settings }) {
       {sale.customer_name && <div>Customer: {sale.customer_name}</div>}
       <div style={styles.hr} />
 
-      {items.map((item) => {
-        const label =
-          item.variant_name && item.variant_name !== 'Standard' ? `${item.product_name} (${item.variant_name})` : item.product_name;
-        return (
-          <div key={item.id} style={{ marginBottom: '4px' }}>
-            <div>{label}</div>
-            <div style={styles.lr}>
-              <span>
-                &nbsp;&nbsp;{item.quantity} {item.unit_name} x {money(item.unit_price)}
-              </span>
-              <span>{money(item.line_total)}</span>
-            </div>
+      {groups.map((group, i) => (
+        <div key={i} style={{ marginBottom: '4px' }}>
+          <div>{group.product_name}</div>
+          {group.variantText && <div>&nbsp;&nbsp;{group.variantText}</div>}
+          <div style={styles.lr}>
+            <span>
+              &nbsp;&nbsp;{group.quantity} {group.unit_name} x {money(group.unit_price)}
+            </span>
+            <span>{money(group.line_total)}</span>
           </div>
-        );
-      })}
+        </div>
+      ))}
       <div style={styles.hr} />
 
       <div style={styles.lr}>
