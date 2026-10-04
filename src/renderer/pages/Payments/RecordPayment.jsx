@@ -106,7 +106,7 @@ export default function RecordPayment({ params, onNavigate }) {
 
       if (onNavigate && params?.id) {
         toast.success('Payment recorded.');
-        onNavigate('/customers/edit', { id: params.id, name: params.name });
+        onNavigate('/customers/profile', { id: params.id, name: params.name });
         return;
       }
 

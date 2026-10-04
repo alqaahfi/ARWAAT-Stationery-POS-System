@@ -1,11 +1,8 @@
 import React from 'react';
-import { HandCoins, ShoppingCart } from 'lucide-react';
 import glossary from '../../../config/glossary';
-import { Badge, Button, NumberInput, SegmentedControl, Select, TextInput, Textarea, Toggle } from '../../../components/ui';
+import { NumberInput, SegmentedControl, Select, TextInput, Textarea, Toggle } from '../../../components/ui';
 import { PRICE_LEVELS, priceLevelLabel } from '../../../utils/priceLevel';
-import { PartyHeader, contactLine } from '../../Parties/PartyHeader';
 import { FormRow } from '../../Parties/PartyParts';
-import { TypeBadge } from './CustomerListParts';
 
 const TYPE_OPTIONS = [
   { value: 'retail', label: 'Retail' },
@@ -13,35 +10,6 @@ const TYPE_OPTIONS = [
 ];
 
 const textareaStyle = { minHeight: '56px', height: '56px', resize: 'none' };
-
-export function CustomerHeader({ customer, balance, onNewSale, onPayment }) {
-  return (
-    <PartyHeader
-      bare
-      name={customer.name}
-      party="customer"
-      balance={balance}
-      contact={contactLine(customer.phone, customer.mobile, customer.address)}
-      badges={
-        <>
-          <TypeBadge type={customer.customerType} />
-          {customer.tier && <Badge>{priceLevelLabel(customer.tier)}</Badge>}
-          {!customer.isActive && <Badge>{glossary.inactive}</Badge>}
-        </>
-      }
-      actions={
-        <>
-          <Button variant="secondary" icon={HandCoins} onClick={onPayment}>
-            {glossary.payment}
-          </Button>
-          <Button icon={ShoppingCart} onClick={onNewSale}>
-            {glossary.newSale}
-          </Button>
-        </>
-      }
-    />
-  );
-}
 
 export function NameRow({ name, onName, nameError, autoFocus }) {
   return (

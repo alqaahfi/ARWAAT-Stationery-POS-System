@@ -2,7 +2,7 @@ import React from 'react';
 import { Banknote, Building2, Ellipsis } from 'lucide-react';
 import theme from '../../config/theme';
 import { formatCurrency } from '../../utils/format';
-import { Badge, Banner, Button, Card, Checkbox, Field, NumberInput, SegmentedControl, TextInput } from '../ui';
+import { Badge, Banner, Button, Card, Checkbox, NumberInput, SegmentedControl } from '../ui';
 
 const c = theme.colors;
 
@@ -40,8 +40,6 @@ export default function BillSummary({
   onPaidInput,
   method,
   onMethod,
-  reference,
-  onReference,
   printFormat,
   onPrintFormat,
   showDuesOption,
@@ -69,12 +67,6 @@ export default function BillSummary({
           <BalanceBox label="Previous balance" value={previousBalance} isPurchase={isPurchase} />
           <BalanceBox label="New balance" value={newBalance} isPurchase={isPurchase} emphasis />
         </div>
-      )}
-
-      {isPurchase && (
-        <Field label="Supplier's bill number (optional)" style={{ marginTop: theme.spacing.smd, marginBottom: 0 }}>
-          <TextInput value={reference} onChange={(e) => onReference(e.target.value)} placeholder="e.g. INV-1042" autoComplete="off" />
-        </Field>
       )}
 
       <div style={styles.divider} />

@@ -261,7 +261,7 @@ export default function PurchaseHistory({ onNavigate }) {
           onClose={() => setOpenId(null)}
           onOpenSupplier={(s) => {
             setOpenId(null);
-            onNavigate('/suppliers/edit', { id: s.id, name: s.name });
+            onNavigate('/suppliers/profile', { id: s.id, name: s.name });
           }}
         />
       )}

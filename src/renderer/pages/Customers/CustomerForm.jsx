@@ -2,13 +2,13 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { UserX } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { Button, Card, EmptyState, useToast } from "../../components/ui";
-import QuickPaymentModal from "../../components/billing/QuickPaymentModal";
-import QuickSaleOverlay from "../../components/billing/QuickSaleOverlay";
 import { StickyActions } from "../Products/form/StickyActions";
 import { StartingBalanceField } from "../Parties/StartingBalanceField";
 import {
   FormSkeleton,
+  IdRow,
   RestrictedNotice,
+  StayOnPageCheck,
   fixedPage,
   formBox,
   formColumns,
@@ -21,7 +21,6 @@ import {
   AddressRow,
   ContactRows,
   CreditRows,
-  CustomerHeader,
   NameRow,
   NotesRow,
   PricingRows,
@@ -63,15 +62,40 @@ export default function CustomerForm({
   const [loadFailed, setLoadFailed] = useState(false);
   // The record as last loaded — drives the header, so it doesn't change while typing.
   const [saved, setSaved] = useState(null);
-  const [ledger, setLedger] = useState({
-    loading: false,
-    error: false,
-    data: null,
-  });
-  const [paymentOpen, setPaymentOpen] = useState(false);
-  const [saleOpen, setSaleOpen] = useState(false);
+  const [nextId, setNextId] = useState(null);
+  const [stayOnPage, setStayOnPage] = useState(false);
   const savingRef = useRef(false);
   const [pageRef, pageHeight] = useFitHeight();
+
+  const loadNextId = useCallback(() => {
+    if (isEdit) return;
+    window.api.customers
+      .getNextId()
+      .then((res) => setNextId(res?.success ? res.id : null))
+      .catch(() => setNextId(null));
+  }, [isEdit]);
+
+  useEffect(() => {
+    loadNextId();
+  }, [loadNextId]);
+
+  function resetForm() {
+    setName("");
+    setCustomerType("retail");
+    setTier("");
+    setAssignedLetterheadId("");
+    setPhone("");
+    setMobile("");
+    setEmail("");
+    setAddress("");
+    setCreditLimit(0);
+    setJoiningDate(todayLocal());
+    setNotes("");
+    setOpeningBalance(0);
+    setNameError("");
+    loadNextId();
+    focusName();
+  }
 
   useEffect(() => {
     window.api.letterheads
@@ -79,23 +103,6 @@ export default function CustomerForm({
       .then((rows) => setLetterheads(rows || []))
       .catch(() => setLetterheads([]));
   }, []);
-
-  // Balance + recent activity come from one ledger call. A failure here never
-  // blocks editing.
-  const loadLedger = useCallback(async () => {
-    if (!customerId) return;
-    setLedger((l) => ({ ...l, loading: true, error: false }));
-    try {
-      const res = await window.api.customers.getLedger({ id: customerId });
-      setLedger({
-        loading: false,
-        error: !res?.success,
-        data: res?.success ? res : null,
-      });
-    } catch {
-      setLedger({ loading: false, error: true, data: null });
-    }
-  }, [customerId]);
 
   useEffect(() => {
     if (!isEdit) return;
@@ -131,7 +138,6 @@ export default function CustomerForm({
           isActive: !!c.is_active,
         });
         setLoaded(true);
-        loadLedger();
       })
       .catch(() => !cancelled && setLoadFailed(true));
     return () => {
@@ -198,7 +204,8 @@ export default function CustomerForm({
         });
       }
       toast.success("Customer saved");
-      onDone();
+      if (!isEdit && stayOnPage) resetForm();
+      else onDone();
     } catch {
       toast.error("Could not save customer. Please try again.");
     } finally {
@@ -233,15 +240,7 @@ export default function CustomerForm({
     <div ref={pageRef} style={fixedPage(pageHeight)}>
       <div style={formStage}>
         <div style={formBox}>
-          {isEdit && saved && (
-            <CustomerHeader
-              customer={saved}
-              balance={ledger.data?.balance}
-              onNewSale={() => setSaleOpen(true)}
-              onPayment={() => setPaymentOpen(true)}
-            />
-          )}
-
+          <IdRow id={isEdit ? customerId : nextId} />
           <NameRow
             name={name}
             onName={(v) => {
@@ -306,27 +305,16 @@ export default function CustomerForm({
         onSave={handleSave}
         saving={saving}
         saveLabel={isEdit ? "Save changes" : "Save customer"}
+        extra={
+          !isEdit && (
+            <StayOnPageCheck
+              checked={stayOnPage}
+              onChange={setStayOnPage}
+              disabled={saving}
+            />
+          )
+        }
       />
-
-      {isEdit && (
-        <>
-          <QuickPaymentModal
-            open={paymentOpen}
-            party="customer"
-            partyId={customerId}
-            partyName={saved?.name}
-            balance={ledger.data?.balance}
-            onClose={() => setPaymentOpen(false)}
-            onSaved={() => loadLedger()}
-          />
-          <QuickSaleOverlay
-            open={saleOpen}
-            customerId={customerId}
-            onSaved={() => loadLedger()}
-            onClose={() => setSaleOpen(false)}
-          />
-        </>
-      )}
     </div>
   );
 }

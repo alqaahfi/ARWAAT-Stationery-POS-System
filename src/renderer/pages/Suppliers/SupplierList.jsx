@@ -106,7 +106,7 @@ export default function SupplierList({ onNavigate }) {
           rows={suppliers}
           party="supplier"
           subline={supplierSubline}
-          onOpen={(s) => onNavigate('/suppliers/edit', { id: s.id })}
+          onOpen={(s) => onNavigate('/suppliers/profile', { id: s.id })}
           onToggleActive={toggleActive}
         />
       ) : (
@@ -116,7 +116,7 @@ export default function SupplierList({ onNavigate }) {
             rows={suppliers}
             loading={loading}
             dense={viewMode === 'compact'}
-            onRowClick={(s) => onNavigate('/suppliers/edit', { id: s.id })}
+            onRowClick={(s) => onNavigate('/suppliers/profile', { id: s.id })}
             emptyState={search.trim() ? <NoMatch what="suppliers" onClear={clearFilters} /> : <NoSuppliers onAdd={goAdd} />}
           />
         </Card>

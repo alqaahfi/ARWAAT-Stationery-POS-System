@@ -59,7 +59,7 @@ export default function DeadStock({ onNavigate }) {
         error={error}
         onRetry={load}
         footnote={rows.length > 0 && `${formatCount(rows.length)} items`}
-        onRowClick={(r) => onNavigate('/products/edit', { id: r.id })}
+        onRowClick={(r) => onNavigate('/products/profile', { id: r.id })}
         emptyState={
           <EmptyState
             icon={CircleCheck}

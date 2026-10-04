@@ -11,8 +11,8 @@ const PAGE = 50;
 const KINDS = {
   sale: { icon: Receipt, color: 'blue', title: (r) => (r.reference ? `Sale · ${r.reference}` : 'Sale') },
   purchase: { icon: PackagePlus, color: 'teal', title: (r) => (r.reference ? `Purchase · ${r.reference}` : 'Purchase') },
-  payment: { icon: Wallet, color: 'green', title: (r) => `Payment · ${methodLabel(r.reference)}` },
-  adjustment: { icon: SlidersHorizontal, color: 'gray', title: () => 'Correction' },
+  payment: { icon: Wallet, color: 'green', title: (r) => `${r.label || 'Payment'} · ${methodLabel(r.reference)}` },
+  adjustment: { icon: SlidersHorizontal, color: 'gray', title: (r) => r.label || 'Correction' },
   opening: { icon: Landmark, color: 'gray', title: () => 'Starting balance' },
   return: { icon: Undo2, color: 'gray', title: (r) => (r.reference ? `Return · ${r.reference}` : 'Return') },
 };

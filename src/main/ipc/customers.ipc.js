@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
+const { getNextId } = require('../db/nextId');
 const { getCustomerBalance, getBalancesForCustomers } = require('../ledger/balanceEngine');
 const { getAdjustmentRows } = require('../ledger/adjustmentRows');
 const { getReturnRows } = require('../ledger/returnRows');
@@ -193,6 +194,7 @@ function getLedger(customerId) {
     ...payments.map((p) => ({
       date: p.created_at,
       type: 'payment',
+      label: 'Received',
       reference: p.payment_method,
       note: p.note,
       debit: 0,
@@ -240,6 +242,7 @@ function registerCustomersIpc() {
   ipcMain.handle('customers:update', (event, payload) => update(payload || {}));
   ipcMain.handle('customers:set-active', (event, payload) => setActive(payload || {}));
   ipcMain.handle('customers:search-minimal', (event, payload) => searchMinimal(payload || {}));
+  ipcMain.handle('customers:get-next-id', () => ({ success: true, id: getNextId(getDb(), 'customers') }));
   ipcMain.handle('customers:get-ledger', (event, { id } = {}) => getLedger(id));
 
 }

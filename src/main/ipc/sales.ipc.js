@@ -55,7 +55,7 @@ function searchProductsGrouped(query) {
   const placeholders = productIds.map(() => '?').join(',');
   const unitRows = db
     .prepare(
-      `SELECT id, product_id, unit_name, conversion_factor, retail_price, wholesale_price, cost_price, is_default_sale_unit
+      `SELECT id, product_id, unit_name, conversion_factor, retail_price, wholesale_price, cost_price, pricing_method, trade_price, purchase_discount, extra_discount, is_default_sale_unit
        FROM product_units WHERE product_id IN (${placeholders}) AND is_active = 1
        ORDER BY id`
     )
@@ -70,6 +70,10 @@ function searchProductsGrouped(query) {
       retailPrice: u.retail_price,
       wholesalePrice: u.wholesale_price,
       costPrice: u.cost_price,
+      pricingMethod: u.pricing_method || 'simple',
+      tradePrice: u.trade_price,
+      purchaseDiscount: u.purchase_discount,
+      extraDiscount: u.extra_discount,
       isDefaultSaleUnit: !!u.is_default_sale_unit,
     });
   }
@@ -139,6 +143,10 @@ function getVariantForCart(variantId) {
       retailPrice: u.retail_price,
       wholesalePrice: u.wholesale_price,
       costPrice: u.cost_price,
+      pricingMethod: u.pricing_method || 'simple',
+      tradePrice: u.trade_price,
+      purchaseDiscount: u.purchase_discount,
+      extraDiscount: u.extra_discount,
       isDefaultSaleUnit: !!u.is_default_sale_unit,
     })),
     defaultUnitId: defaultUnit ? defaultUnit.id : null,

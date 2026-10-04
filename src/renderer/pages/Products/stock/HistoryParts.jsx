@@ -72,6 +72,7 @@ function details(r) {
   if (r.reference_type === 'sale') return r.sale_invoice_no ? `Invoice ${r.sale_invoice_no}` : `Sale #${r.reference_id}`;
   if (r.reference_type === 'return') return r.return_no ? `Return ${r.return_no}` : r.note || `Return #${r.reference_id}`;
   if (r.reference_type === 'initial_stock') return r.note || 'Starting stock';
+  if (r.reference_type === 'stock_in' || r.reference_type === 'stock_out') return r.note || '—';
   if (r.reference_type === 'adjustment') return r.note || 'Fixed by hand';
   return r.note || '—';
 }

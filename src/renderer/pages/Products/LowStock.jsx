@@ -63,7 +63,7 @@ export default function LowStock({ onNavigate }) {
         error={error}
         onRetry={load}
         footnote={rows.length > 0 && `${formatCount(rows.length)} items · ${formatCount(outCount)} out of stock`}
-        onRowClick={user.role === 'admin' ? (r) => onNavigate('/products/edit', { id: r.id }) : undefined}
+        onRowClick={(r) => onNavigate('/products/profile', { id: r.id })}
         emptyState={<EmptyState icon={CircleCheck} color="green" title="Nothing is running low" message="All your items are above their warning level." />}
       />
     </div>

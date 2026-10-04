@@ -15,6 +15,8 @@ export const MOVE_TYPES = {
 };
 
 const STARTING = { label: 'Starting stock', tone: 'neutral' };
+// Written by the Stock module's Add Stock / Delete Stock forms.
+const REFERENCE_LOOK = { initial_stock: STARTING, stock_in: { label: 'Stock added', tone: 'green' }, stock_out: { label: 'Stock removed', tone: 'red' } };
 
 function prettify(raw) {
   const s = String(raw || '').replace(/_/g, ' ');
@@ -22,7 +24,7 @@ function prettify(raw) {
 }
 
 export function MoveBadge({ type, referenceType }) {
-  const m = referenceType === 'initial_stock' ? STARTING : MOVE_TYPES[type] || { label: prettify(type), tone: 'neutral' };
+  const m = REFERENCE_LOOK[referenceType] || MOVE_TYPES[type] || { label: prettify(type), tone: 'neutral' };
   // Badge has no teal tone; tint it from the palette directly.
   const style = m.tone === 'teal' ? { backgroundColor: c.tealTint, color: c.tealText } : undefined;
   return (

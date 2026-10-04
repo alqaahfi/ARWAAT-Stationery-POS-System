@@ -5,25 +5,28 @@ import { SegmentedControl, useToast } from '../ui';
 import { PaymentModal } from '../../pages/Ledgers/parts/AccountView';
 import PaymentFormFields from '../../pages/Payments/parts/PaymentFormFields';
 import PaymentDoneSheet from '../../pages/Payments/parts/PaymentDoneSheet';
-import { formatCurrency } from '../../utils/format';
 
 const c = theme.colors;
 
 const ADVANCE_NOTE = 'Advance payment';
+const OWED_NOTE = 'Owed amount';
 
-// Records a payment right on the profile page. The person picks whether it
-// clears money that is owed or is paid ahead (an advance). When it saves, the
-// modal closes, `onSaved` lets the page refresh its balance, and the usual
-// "print a receipt?" sheet follows.
+// Records an entry on the account right from the profile / ledger page. The
+// first control says what the entry is:
+//   Owed amount     the party has to give us (customer) / we have to give them
+//                   (supplier) this much more — it ADDS to what is owed. Saved as
+//                   a balance correction (no money changes hands).
+//   Advance payment money was handed over now (customer gave us / we gave the
+//                   supplier) — it reduces what is owed, or sits as credit.
+// `onSaved` lets the page refresh its balance; an advance then shows the usual
+// "print a receipt?" sheet. Keep this mounted and drive it with `open`.
 //
-//   party     'customer' (money comes in) | 'supplier' (money goes out)
+//   party     'customer' | 'supplier'
 //   balance   what the account stands at now (positive = owed)
-// Keep this mounted and drive it with `open`, so the receipt sheet can outlive the form.
 export default function QuickPaymentModal({ open, party, partyId, partyName, balance, onClose, onSaved }) {
   const { user } = useAuth();
   const toast = useToast();
   const isSupplier = party === 'supplier';
-  const owed = Number(balance) > 0 ? Number(balance) : 0;
 
   const [kind, setKind] = useState('owed'); // 'owed' | 'advance'
   const [amount, setAmount] = useState('');
@@ -34,26 +37,23 @@ export default function QuickPaymentModal({ open, party, partyId, partyName, bal
   const [done, setDone] = useState(null); // { paymentId, amount, newBalance }
   const savingRef = useRef(false);
 
-  // A fresh form each time it opens: clearing what is owed if anything is, otherwise an advance.
+  // A fresh form each time it opens.
   useEffect(() => {
     if (!open) return;
-    const startKind = owed > 0 ? 'owed' : 'advance';
-    setKind(startKind);
-    setAmount(startKind === 'owed' ? String(owed) : '');
+    setKind('owed');
+    setAmount('');
     setMethod('cash');
     setNote('');
     setError('');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   function chooseKind(next) {
     setKind(next);
     setError('');
-    setAmount(next === 'owed' && owed > 0 ? String(owed) : '');
   }
 
   const kindOptions = [
-    { value: 'owed', label: 'Owed amount', disabled: owed <= 0 },
+    { value: 'owed', label: 'Owed amount' },
     { value: 'advance', label: 'Advance payment' },
   ];
 
@@ -66,15 +66,36 @@ export default function QuickPaymentModal({ open, party, partyId, partyName, bal
       setError('Enter an amount greater than zero.');
       return;
     }
-    if (kind === 'owed' && amt > owed + 0.01) {
-      setError(
-        `That is more than the ${formatCurrency(owed)} ${isSupplier ? 'you owe' : 'they owe'}. Choose "Advance payment" to record the extra.`
-      );
-      return;
-    }
-
     const noteText = note.trim();
     const finalNote = kind === 'advance' ? (noteText ? `${ADVANCE_NOTE} — ${noteText}` : ADVANCE_NOTE) : noteText || null;
+
+    if (kind === 'owed') {
+      savingRef.current = true;
+      setSaving(true);
+      let adj;
+      try {
+        adj = await window.api.ledgers.createAdjustment({
+          partyType: party,
+          partyId,
+          amount: amt,
+          reason: noteText ? `${OWED_NOTE} — ${noteText}` : OWED_NOTE,
+          createdBy: user.id,
+          requestingUserId: user.id,
+        });
+      } catch {
+        adj = null;
+      }
+      savingRef.current = false;
+      setSaving(false);
+      if (!adj?.success) {
+        setError(adj?.reason || "The entry couldn't be saved. Please try again.");
+        return;
+      }
+      toast.success('Owed amount added');
+      onSaved?.(adj);
+      onClose?.();
+      return;
+    }
 
     savingRef.current = true;
     setSaving(true);
@@ -116,7 +137,7 @@ export default function QuickPaymentModal({ open, party, partyId, partyName, bal
     <>
       <PaymentModal
         open={open}
-        title={isSupplier ? `Pay ${partyName || 'supplier'}` : `Payment from ${partyName || 'customer'}`}
+        title={`Payment · ${partyName || (isSupplier ? 'supplier' : 'customer')}`}
         saving={saving}
         onSubmit={handleSave}
         onClose={onClose}
@@ -130,14 +151,16 @@ export default function QuickPaymentModal({ open, party, partyId, partyName, bal
             value={kind}
             onChange={chooseKind}
             fullWidth
-            options={kindOptions.filter((o) => !o.disabled || o.value === kind)}
+            options={kindOptions}
           />
           <div style={{ ...theme.type.footnote, color: c.labelSecondary, marginTop: '6px' }}>
             {kind === 'owed'
-              ? owed > 0
-                ? `Clears what ${isSupplier ? 'you owe' : 'they owe'}: ${formatCurrency(owed)} right now.`
-                : 'Nothing is owed right now.'
-              : `Paid ahead of time. It sits on the account as credit and is used up by ${isSupplier ? 'your next purchases' : 'their next sales'}.`}
+              ? isSupplier
+                ? 'You have to pay the supplier this amount. It is added to what you owe them.'
+                : 'The customer has to pay you this amount. It is added to what they owe you.'
+              : isSupplier
+                ? 'You have given the supplier this amount now. It is taken off what you owe them.'
+                : 'The customer has given you this amount now. It is taken off what they owe you.'}
           </div>
         </div>
         <PaymentFormFields
@@ -150,6 +173,9 @@ export default function QuickPaymentModal({ open, party, partyId, partyName, bal
           error={error}
           balance={balance}
           party={party}
+          previewSign={kind === 'owed' ? -1 : 1}
+          previewLabel={kind === 'owed' ? 'Preview · After adding this:' : 'Preview · After this payment:'}
+          hideMethod={kind === 'owed'}
         />
       </PaymentModal>
 

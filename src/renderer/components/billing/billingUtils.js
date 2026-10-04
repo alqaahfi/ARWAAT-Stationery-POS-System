@@ -11,6 +11,20 @@ export const lineUnits = (l) => (Number(l.quantity) || 0) + (Number(l.focQuantit
 // A free (FOC) quantity is never priced: line total is quantity x price only.
 export const lineTotal = (l) => round2((Number(l.quantity) || 0) * (Number(l.unitPrice) || 0));
 
+// Trade Price pack sizes: unit cost = trade price - purchase discount % - extra discount (flat), never below 0.
+export function tradeUnitCost({ tradePrice, purchaseDiscount, extraDiscount }) {
+  const trade = Number(tradePrice) || 0;
+  return Math.max(0, round2(trade - (trade * (Number(purchaseDiscount) || 0)) / 100 - (Number(extraDiscount) || 0)));
+}
+
+// Purchase-line price fields for a pack size: the trade inputs plus the unit
+// cost they work out to, or just the stored buying price for a simple unit.
+export function purchasePriceFields(unit) {
+  if (unit.pricingMethod !== 'trade') return { pricingMethod: 'simple', unitPrice: unit.costPrice };
+  const fields = { tradePrice: unit.tradePrice ?? 0, purchaseDiscount: unit.purchaseDiscount ?? 0, extraDiscount: unit.extraDiscount ?? 0 };
+  return { pricingMethod: 'trade', ...fields, unitPrice: tradeUnitCost(fields) };
+}
+
 export function computeTotals({ lines, discountMode, discountInput, paidInput }) {
   const subtotal = round2(lines.reduce((sum, l) => sum + (Number(l.quantity) || 0) * (Number(l.unitPrice) || 0), 0));
   const rawDiscount = discountMode === 'percentage' ? (subtotal * (Number(discountInput) || 0)) / 100 : Number(discountInput) || 0;

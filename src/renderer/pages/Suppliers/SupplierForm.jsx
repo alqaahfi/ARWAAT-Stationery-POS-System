@@ -2,13 +2,13 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { UserX } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { Button, Card, EmptyState, useToast } from "../../components/ui";
-import QuickPaymentModal from "../../components/billing/QuickPaymentModal";
-import QuickPurchaseOverlay from "../../components/billing/QuickPurchaseOverlay";
 import { StickyActions } from "../Products/form/StickyActions";
 import { StartingBalanceField } from "../Parties/StartingBalanceField";
 import {
   FormSkeleton,
+  IdRow,
   RestrictedNotice,
+  StayOnPageCheck,
   fixedPage,
   formBox,
   formColumns,
@@ -20,7 +20,6 @@ import {
   SupplierActiveRow,
   SupplierAddressRow,
   SupplierContactRows,
-  SupplierHeader,
   SupplierJoinedRow,
   SupplierNameRow,
   SupplierNotesRow,
@@ -56,30 +55,37 @@ export default function SupplierForm({
   const [loaded, setLoaded] = useState(!isEdit);
   const [loadFailed, setLoadFailed] = useState(false);
   const [saved, setSaved] = useState(null);
-  const [ledger, setLedger] = useState({
-    loading: false,
-    error: false,
-    data: null,
-  });
-  const [paymentOpen, setPaymentOpen] = useState(false);
-  const [purchaseOpen, setPurchaseOpen] = useState(false);
+  const [nextId, setNextId] = useState(null);
+  const [stayOnPage, setStayOnPage] = useState(false);
   const savingRef = useRef(false);
   const [pageRef, pageHeight] = useFitHeight();
 
-  const loadLedger = useCallback(async () => {
-    if (!supplierId) return;
-    setLedger((l) => ({ ...l, loading: true, error: false }));
-    try {
-      const res = await window.api.suppliers.getLedger({ id: supplierId });
-      setLedger({
-        loading: false,
-        error: !res?.success,
-        data: res?.success ? res : null,
-      });
-    } catch {
-      setLedger({ loading: false, error: true, data: null });
-    }
-  }, [supplierId]);
+  const loadNextId = useCallback(() => {
+    if (isEdit) return;
+    window.api.suppliers
+      .getNextId()
+      .then((res) => setNextId(res?.success ? res.id : null))
+      .catch(() => setNextId(null));
+  }, [isEdit]);
+
+  useEffect(() => {
+    loadNextId();
+  }, [loadNextId]);
+
+  function resetForm() {
+    setName("");
+    setContactPerson("");
+    setPhone("");
+    setMobile("");
+    setEmail("");
+    setJoiningDate(todayLocal());
+    setAddress("");
+    setNotes("");
+    setOpeningBalance(0);
+    setNameError("");
+    loadNextId();
+    focusName();
+  }
 
   useEffect(() => {
     if (!isEdit) return;
@@ -111,7 +117,6 @@ export default function SupplierForm({
           isActive: !!s.is_active,
         });
         setLoaded(true);
-        loadLedger();
       })
       .catch(() => !cancelled && setLoadFailed(true));
     return () => {
@@ -173,7 +178,8 @@ export default function SupplierForm({
         });
       }
       toast.success("Supplier saved");
-      onDone();
+      if (!isEdit && stayOnPage) resetForm();
+      else onDone();
     } catch {
       toast.error("Could not save supplier. Please try again.");
     } finally {
@@ -206,15 +212,7 @@ export default function SupplierForm({
     <div ref={pageRef} style={fixedPage(pageHeight)}>
       <div style={formStage}>
         <div style={formBox}>
-          {isEdit && saved && (
-            <SupplierHeader
-              supplier={saved}
-              balance={ledger.data?.balance}
-              onPayment={() => setPaymentOpen(true)}
-              onNewPurchase={() => setPurchaseOpen(true)}
-            />
-          )}
-
+          <IdRow id={isEdit ? supplierId : nextId} />
           <SupplierNameRow
             name={name}
             onName={(v) => {
@@ -270,27 +268,16 @@ export default function SupplierForm({
         onSave={handleSave}
         saving={saving}
         saveLabel={isEdit ? "Save changes" : "Save supplier"}
+        extra={
+          !isEdit && (
+            <StayOnPageCheck
+              checked={stayOnPage}
+              onChange={setStayOnPage}
+              disabled={saving}
+            />
+          )
+        }
       />
-
-      {isEdit && (
-        <>
-          <QuickPaymentModal
-            open={paymentOpen}
-            party="supplier"
-            partyId={supplierId}
-            partyName={saved?.name}
-            balance={ledger.data?.balance}
-            onClose={() => setPaymentOpen(false)}
-            onSaved={() => loadLedger()}
-          />
-          <QuickPurchaseOverlay
-            open={purchaseOpen}
-            supplierId={supplierId}
-            onSaved={() => loadLedger()}
-            onClose={() => setPurchaseOpen(false)}
-          />
-        </>
-      )}
     </div>
   );
 }

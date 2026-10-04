@@ -11,7 +11,7 @@ import BillPartyCard from './BillPartyCard';
 import BillItemSearch from './BillItemSearch';
 import BillLines from './BillLines';
 import BillSummary, { PartyTypeBadge } from './BillSummary';
-import { buildLine, computeTotals, lineTotal, lineUnits, resolveLetterheadId, round2 } from './billingUtils';
+import { buildLine, computeTotals, lineTotal, lineUnits, purchasePriceFields, resolveLetterheadId, round2, tradeUnitCost } from './billingUtils';
 
 // One billing form for both Sale and Purchase, so the two screens look and
 // behave the same: party → items (search / barcode, quantity, free units, pack
@@ -22,6 +22,8 @@ import { buildLine, computeTotals, lineTotal, lineUnits, resolveLetterheadId, ro
 //   presetParty { id } to lock the bill to a customer/supplier (opened from their profile)
 //   onSaved     called right after the bill is saved, so the page behind can refresh
 //   onClose     called when the overlay should go away
+const TRADE_FIELDS = ['tradePrice', 'purchaseDiscount', 'extraDiscount'];
+
 export default function QuickBillForm({ kind, presetParty = null, onSaved, onClose }) {
   const isPurchase = kind === 'purchase';
   const { user, hasPermission, getPermissionValue } = useAuth();
@@ -39,7 +41,6 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
   const [discountInput, setDiscountInput] = useState('');
   const [paidInput, setPaidInput] = useState('');
   const [method, setMethod] = useState('cash');
-  const [reference, setReference] = useState('');
   const [printFormat, setPrintFormat] = useState('retail-thermal');
   const [formatTouched, setFormatTouched] = useState(false);
   const [showDues, setShowDues] = useState(false);
@@ -153,7 +154,7 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
     const price = isPurchase
       ? unit.costPrice
       : (await window.api.sales.resolvePrice({ productUnitId: unit.id, customerId: partyRef.current?.id || null })).price;
-    const line = buildLine(detail, unit, price);
+    const line = buildLine(detail, unit, price, isPurchase ? purchasePriceFields(unit) : {});
     setLines((prev) => [...prev, line]);
     setFocusKey(line.key);
   }
@@ -170,7 +171,15 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
 
   const updateField = useCallback((key, field, value) => {
     setError('');
-    setLines((prev) => prev.map((l) => (l.key === key ? { ...l, [field]: value } : l)));
+    setLines((prev) =>
+      prev.map((l) => {
+        if (l.key !== key) return l;
+        const next = { ...l, [field]: value };
+        // Trade Price lines: the unit cost follows the three trade inputs.
+        if (l.pricingMethod === 'trade' && TRADE_FIELDS.includes(field)) next.unitPrice = tradeUnitCost(next);
+        return next;
+      })
+    );
   }, []);
 
   const updateUnit = useCallback(
@@ -181,8 +190,15 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
       const price = isPurchase
         ? unit.costPrice
         : (await window.api.sales.resolvePrice({ productUnitId: unitId, customerId: partyRef.current?.id || null })).price;
+      const priceFields = isPurchase ? purchasePriceFields(unit) : { unitPrice: price };
       setLines((prev) =>
-        prev.map((l) => (l.key === key ? { ...l, unitId, conversionFactor: unit.conversionFactor, unitPrice: price, costPrice: unit.costPrice } : l))
+        prev.map((l) => {
+          if (l.key !== key) return l;
+          const next = { ...l, unitId, conversionFactor: unit.conversionFactor, costPrice: unit.costPrice, ...priceFields };
+          // Leaving Trade Price behind: drop its inputs so nothing stale is shown.
+          if (isPurchase && priceFields.pricingMethod === 'simple') Object.assign(next, { tradePrice: undefined, purchaseDiscount: undefined, extraDiscount: undefined });
+          return next;
+        })
       );
     },
     [isPurchase]
@@ -267,7 +283,6 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
     try {
       res = await window.api.purchases.create({
         supplierId: party.id,
-        referenceNo: reference.trim() || null,
         items: lines.map((l) => ({
           productVariantId: l.variantId,
           productUnitId: l.unitId,
@@ -497,8 +512,6 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
           }}
           method={method}
           onMethod={setMethod}
-          reference={reference}
-          onReference={setReference}
           printFormat={printFormat}
           onPrintFormat={(f) => {
             setFormatTouched(true);

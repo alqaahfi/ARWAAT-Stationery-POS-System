@@ -1,7 +1,7 @@
 import React, { memo, useId, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronRight, CircleAlert, Lock, RotateCw, SearchX } from 'lucide-react';
 import theme from '../../config/theme';
-import { Avatar, Badge, Button, Card, EmptyState, Icon, Skeleton, Toggle } from '../../components/ui';
+import { Avatar, Badge, Button, Card, EmptyState, Checkbox, Icon, Skeleton, TextInput, Toggle } from '../../components/ui';
 
 const c = theme.colors;
 
@@ -190,3 +190,17 @@ export function FormRow({ label, required, error, hint, top, children }) {
 }
 
 export const listToolbar = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: theme.spacing.sm };
+
+// The system-assigned id, shown read-only at the top of the form.
+export function IdRow({ id }) {
+  return (
+    <FormRow label="ID">
+      <TextInput id="party-id" value={id ?? ''} readOnly disabled style={{ ...theme.font.numeric, fontWeight: theme.font.weightSemibold }} />
+    </FormRow>
+  );
+}
+
+// "Stay on page" tick shown in the save bar of create forms.
+export function StayOnPageCheck({ checked, onChange, disabled }) {
+  return <Checkbox label="Stay on page" checked={checked} onChange={(e) => onChange(e.target.checked)} disabled={disabled} style={{ marginTop: 0, marginRight: theme.spacing.sm }} />;
+}

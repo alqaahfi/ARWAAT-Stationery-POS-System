@@ -11,6 +11,9 @@ function getAdjustmentRows(db, partyType, partyId) {
       date: a.created_at,
       type: 'adjustment',
       reference: null,
+      // Entries made from the Payment dialog's "Owed amount" read as money direction, not "Correction":
+      // customer owes us more = we paid out; we owe a supplier more = we received.
+      label: /^Owed amount/.test(a.reason || '') ? (partyType === 'customer' ? 'Paid' : 'Received') : null,
       note: a.reason,
       reason: a.reason,
       amount: a.amount,

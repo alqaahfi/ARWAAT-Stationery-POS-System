@@ -1,7 +1,6 @@
 import React, { useId } from 'react';
 import { ArrowLeftRight } from 'lucide-react';
 import theme from '../../../config/theme';
-import glossary from '../../../config/glossary';
 import appIcons from '../../../config/appIcons';
 import { Button, Card, Modal } from '../../../components/ui';
 import { PartyHeader } from '../../Parties/PartyHeader';
@@ -49,7 +48,7 @@ export function AccountView({ party, picking, onPick, loading, error, onRetry, d
                 {`Choose another ${noun}`}
               </Button>
               <Button icon={isSupplier ? appIcons.paySupplier.icon : appIcons.receivePayment.icon} onClick={onPay}>
-                {isSupplier ? glossary.paySupplier : glossary.receivePayment}
+                Payment
               </Button>
             </>
           }

@@ -1,34 +1,8 @@
 import React from 'react';
-import { HandCoins, PackagePlus } from 'lucide-react';
-import glossary from '../../../config/glossary';
-import { Badge, Button, TextInput, Textarea, Toggle } from '../../../components/ui';
-import { PartyHeader, contactLine } from '../../Parties/PartyHeader';
+import { TextInput, Textarea, Toggle } from '../../../components/ui';
 import { FormRow } from '../../Parties/PartyParts';
 
 const textareaStyle = { minHeight: '56px', height: '56px', resize: 'none' };
-
-export function SupplierHeader({ supplier, balance, onPayment, onNewPurchase }) {
-  return (
-    <PartyHeader
-      bare
-      name={supplier.name}
-      party="supplier"
-      balance={balance}
-      contact={contactLine(supplier.contactPerson, supplier.phone, supplier.mobile, supplier.address)}
-      badges={!supplier.isActive ? <Badge>{glossary.inactive}</Badge> : null}
-      actions={
-        <>
-          <Button variant="secondary" icon={HandCoins} onClick={onPayment}>
-            {glossary.payment}
-          </Button>
-          <Button icon={PackagePlus} onClick={onNewPurchase}>
-            {glossary.newPurchase}
-          </Button>
-        </>
-      }
-    />
-  );
-}
 
 export function SupplierNameRow({ name, onName, nameError, autoFocus }) {
   return (

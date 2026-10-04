@@ -56,6 +56,7 @@ const BillRow = memo(function BillRow({ line, isPurchase, canSeeCost, stockIssue
   const type = line.variantName && line.variantName !== 'Standard' ? line.variantName : null;
   const qty = Number(line.quantity) || 0;
   const foc = Number(line.focQuantity) || 0;
+  const isTrade = isPurchase && line.pricingMethod === 'trade';
   const margin = lineTotal(line) - lineUnits(line) * (Number(line.costPrice) || 0);
 
   return (
@@ -98,7 +99,11 @@ const BillRow = memo(function BillRow({ line, isPurchase, canSeeCost, stockIssue
           onChange={(e) => onField(line.key, 'focQuantity', e.target.value)}
           onFocus={(e) => e.target.select()}
         />
-        {isPurchase ? (
+        {isPurchase && isTrade ? (
+          <span style={{ ...theme.type.body, ...theme.font.numeric, color: c.labelSecondary, textAlign: 'right' }} title="Worked out from the trade price and discounts below">
+            {formatCurrency(line.unitPrice)}
+          </span>
+        ) : isPurchase ? (
           <NumberInput
             aria-label={`Buying price for ${line.productName}`}
             value={line.unitPrice}
@@ -111,6 +116,16 @@ const BillRow = memo(function BillRow({ line, isPurchase, canSeeCost, stockIssue
         <span style={{ ...theme.type.headline, ...theme.font.numeric, color: c.label, textAlign: 'right' }}>{formatCurrency(lineTotal(line))}</span>
         <IconButton icon={Trash2} label={`Remove ${line.productName}`} tone="danger" onClick={() => onRemove(line.key)} />
       </div>
+      {isTrade && (
+        <div style={styles.tradeRow}>
+          <TradeInput label="Trade price" line={line} field="tradePrice" onField={onField} />
+          <TradeInput label="Purchase discount %" line={line} field="purchaseDiscount" onField={onField} />
+          <TradeInput label="Extra discount" line={line} field="extraDiscount" onField={onField} />
+          <span style={{ ...theme.type.footnote, color: c.labelSecondary }}>
+            Unit cost <span style={{ ...theme.font.numeric, color: c.label, fontWeight: theme.font.weightSemibold }}>{formatCurrency(line.unitPrice)}</span>
+          </span>
+        </div>
+      )}
       {foc > 0 && (
         <div style={{ ...theme.type.caption, color: c.greenText, padding: '0 8px 4px' }}>
           + {formatCount(foc)} free (not charged{isPurchase ? '' : ', still leaves your stock'})
@@ -125,7 +140,26 @@ const BillRow = memo(function BillRow({ line, isPurchase, canSeeCost, stockIssue
   );
 });
 
+// One labelled box of the Trade Price row under a purchase line.
+function TradeInput({ label, line, field, onField }) {
+  return (
+    <label style={styles.tradeField}>
+      <span style={{ ...theme.type.footnote, color: c.labelSecondary }}>{label}</span>
+      <NumberInput
+        aria-label={`${label} for ${line.productName}`}
+        value={line[field] === 0 ? '' : line[field] ?? ''}
+        placeholder="0"
+        onChange={(e) => onField(line.key, field, e.target.value)}
+        onFocus={(e) => e.target.select()}
+        style={{ width: '104px' }}
+      />
+    </label>
+  );
+}
+
 const styles = {
+  tradeRow: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: theme.spacing.smd, padding: '0 8px 8px' },
+  tradeField: { display: 'flex', alignItems: 'center', gap: theme.spacing.xs },
   card: { flex: 1, minHeight: '160px', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
   titleBar: { padding: '12px 16px', borderBottom: `1px solid ${c.separator}`, flexShrink: 0 },
   grid: { display: 'grid', gridTemplateColumns: GRID, columnGap: theme.spacing.sm, alignItems: 'center' },

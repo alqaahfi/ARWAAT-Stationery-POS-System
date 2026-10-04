@@ -69,6 +69,9 @@ contextBridge.exposeInMainWorld('api', {
     getAdjustmentReasons: () => ipcRenderer.invoke('stock:get-adjustment-reasons'),
     adjust: (data) => ipcRenderer.invoke('stock:adjust', data),
     getMovements: (data) => ipcRenderer.invoke('stock:get-movements', data),
+    add: (data) => ipcRenderer.invoke('stock:add', data),
+    remove: (data) => ipcRenderer.invoke('stock:remove', data),
+    getProductStats: (data) => ipcRenderer.invoke('stock:get-product-stats', data),
   },
 
   suppliers: {
@@ -79,6 +82,7 @@ contextBridge.exposeInMainWorld('api', {
     setActive: (data) => ipcRenderer.invoke('suppliers:set-active', data),
     searchMinimal: (data) => ipcRenderer.invoke('suppliers:search-minimal', data),
     getLedger: (data) => ipcRenderer.invoke('suppliers:get-ledger', data),
+    getNextId: () => ipcRenderer.invoke('suppliers:get-next-id'),
   },
 
   purchases: {
@@ -95,6 +99,7 @@ contextBridge.exposeInMainWorld('api', {
     setActive: (data) => ipcRenderer.invoke('customers:set-active', data),
     searchMinimal: (data) => ipcRenderer.invoke('customers:search-minimal', data),
     getLedger: (data) => ipcRenderer.invoke('customers:get-ledger', data),
+    getNextId: () => ipcRenderer.invoke('customers:get-next-id'),
   },
 
   ledgers: {

@@ -19,6 +19,9 @@ export default function PaymentFormFields({
   autoFocus = true,
   balance,
   party = 'customer',
+  previewSign = 1, // 1 = money paid (balance goes down), -1 = amount added to the account
+  previewLabel = 'Preview · After this payment:',
+  hideMethod = false,
 }) {
   const value = Number(amount);
   const hasBalance = balance !== undefined && balance !== null && !Number.isNaN(Number(balance));
@@ -43,17 +46,17 @@ export default function PaymentFormFields({
           aria-live="polite"
           style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px', margin: `-${theme.spacing.sm} 0 ${theme.spacing.md}`, ...theme.type.footnote, color: c.labelSecondary }}
         >
-          <span>Preview · After this payment:</span>
-          <BalanceChip amount={Number(balance) - value} party={party} />
+          <span>{previewLabel}</span>
+          <BalanceChip amount={Number(balance) - previewSign * value} party={party} />
         </div>
       )}
 
-      <div style={{ marginBottom: theme.spacing.md }}>
+      {!hideMethod && <div style={{ marginBottom: theme.spacing.md }}>
         <div aria-hidden="true" style={{ ...theme.type.subhead, fontWeight: theme.font.weightMedium, color: c.label, marginBottom: '6px' }}>
           Method
         </div>
         <ChipGroup options={METHOD_OPTIONS} value={method} onChange={onMethodChange} aria-label="Method" />
-      </div>
+      </div>}
 
       <Field label="Note (optional)" style={{ marginBottom: 0 }}>
         <Textarea value={note} onChange={(e) => onNoteChange(e.target.value)} placeholder="e.g. Part payment for last month" />

@@ -17,6 +17,11 @@ import BulkImport from '../Products/BulkImport';
 import PurchaseHistory from '../Purchases/PurchaseHistory';
 import StockAdjustment from '../Products/StockAdjustment';
 import MovementHistory from '../Products/MovementHistory';
+import ProductProfile from '../Products/ProductProfile';
+import StockList from '../Stock/StockList';
+import StockHistory from '../Stock/StockHistory';
+import CustomerProfile from '../Customers/CustomerProfile';
+import SupplierProfile from '../Suppliers/SupplierProfile';
 import Sale, { isPosSaleInProgress } from '../POS/Sale';
 import CustomerList from '../Customers/CustomerList';
 import CustomerForm from '../Customers/CustomerForm';
@@ -121,7 +126,13 @@ export default function AdminDashboard() {
         return <Sale />;
 
       case '/products':
-        return <ProductList onNavigate={navigate} focusProductId={nav.params.focusProductId} />;
+        return <ProductList onNavigate={navigate} />;
+      case '/products/profile':
+        return <ProductProfile key={nav.params.id} productId={nav.params.id} onNavigate={navigate} />;
+      case '/stock':
+        return <StockList onNavigate={navigate} />;
+      case '/stock/history':
+        return <StockHistory productId={nav.params.productId} />;
       case '/products/new':
         return <ProductForm onDone={() => navigate('/products')} onCancel={() => navigate('/products')} />;
       case '/products/edit':
@@ -129,8 +140,8 @@ export default function AdminDashboard() {
           <ProductForm
             productId={nav.params.id}
             onNavigate={navigate}
-            onDone={() => navigate('/products')}
-            onCancel={() => navigate('/products')}
+            onDone={() => navigate('/products/profile', { id: nav.params.id })}
+            onCancel={() => navigate('/products/profile', { id: nav.params.id })}
           />
         );
       case '/products/categories':
@@ -152,13 +163,15 @@ export default function AdminDashboard() {
         return <CustomerList onNavigate={navigate} />;
       case '/customers/new':
         return <CustomerForm onDone={() => navigate('/customers')} onCancel={() => navigate('/customers')} />;
+      case '/customers/profile':
+        return <CustomerProfile key={nav.params.id} customerId={nav.params.id} onNavigate={navigate} />;
       case '/customers/edit':
         return (
           <CustomerForm
             customerId={nav.params.id}
             onNavigate={navigate}
-            onDone={() => navigate('/customers')}
-            onCancel={() => navigate('/customers')}
+            onDone={() => navigate('/customers/profile', { id: nav.params.id })}
+            onCancel={() => navigate('/customers/profile', { id: nav.params.id })}
           />
         );
 
@@ -166,13 +179,15 @@ export default function AdminDashboard() {
         return <SupplierList onNavigate={navigate} />;
       case '/suppliers/new':
         return <SupplierForm onDone={() => navigate('/suppliers')} onCancel={() => navigate('/suppliers')} />;
+      case '/suppliers/profile':
+        return <SupplierProfile key={nav.params.id} supplierId={nav.params.id} onNavigate={navigate} />;
       case '/suppliers/edit':
         return (
           <SupplierForm
             supplierId={nav.params.id}
             onNavigate={navigate}
-            onDone={() => navigate('/suppliers')}
-            onCancel={() => navigate('/suppliers')}
+            onDone={() => navigate('/suppliers/profile', { id: nav.params.id })}
+            onCancel={() => navigate('/suppliers/profile', { id: nav.params.id })}
           />
         );
       case '/ledgers':

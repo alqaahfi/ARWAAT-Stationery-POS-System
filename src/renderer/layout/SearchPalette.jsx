@@ -106,7 +106,7 @@ function Palette({ onClose, onNavigate }) {
           label: p.name,
           hint: p.sku || p.category_name || null,
           tile: appIcons.products,
-          run: () => go('/products', { focusProductId: p.id }),
+          run: () => go('/products/profile', { id: p.id }),
         })),
       });
       list.push({

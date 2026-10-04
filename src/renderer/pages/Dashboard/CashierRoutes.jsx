@@ -11,6 +11,7 @@ import SalesHistory from '../Sales/SalesHistory';
 import ExpenseList from '../Expenses/ExpenseList';
 import ExpenseForm from '../Expenses/ExpenseForm';
 import ProductList from '../Products/ProductList';
+import ProductProfile from '../Products/ProductProfile';
 import LowStock from '../Products/LowStock';
 import SalesReport from '../Reports/SalesReport';
 
@@ -30,6 +31,7 @@ export const CASHIER_MENU = [
 const EXTRA_ROUTES = [
   { route: '/expenses/new', permissionKey: 'manage_expenses' },
   { route: '/expenses/edit', permissionKey: 'manage_expenses' },
+  { route: '/products/profile', permissionKey: 'view_products' },
 ];
 
 function routePermission(route) {
@@ -88,7 +90,9 @@ export default function CashierRoutes({ route, params = {}, onNavigate }) {
     case '/expenses/edit':
       return <ExpenseForm expenseId={params.id} onDone={() => onNavigate('/expenses')} onCancel={() => onNavigate('/expenses')} />;
     case '/products':
-      return <ProductList onNavigate={onNavigate} focusProductId={params.focusProductId} />;
+      return <ProductList onNavigate={onNavigate} />;
+    case '/products/profile':
+      return <ProductProfile key={params.id} productId={params.id} onNavigate={onNavigate} />;
     case '/products/low-stock':
       return <LowStock onNavigate={onNavigate} />;
     case '/reports/sales':

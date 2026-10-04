@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FileSpreadsheet, Plus, SearchX } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import theme from '../../config/theme';
@@ -22,22 +22,20 @@ function loadSortPrefs() {
   }
 }
 
-// Remembers expand/selection/scroll state across a full unmount (navigating
-// to Edit and back) — module-scope so it survives this component remounting,
+// Remembers selection/scroll state across a full unmount (opening a profile
+// and coming back) — module-scope so it survives this component remounting,
 // but resets on a real app restart since it's not persisted to storage.
 let rememberedState = null;
 
-// focusProductId (from the top utility bar's global search) pre-filters the
-// list down to that one product and expands it, same destination a search
-// result promises without needing its own separate detail view.
-export default function ProductList({ onNavigate, focusProductId }) {
+// Clicking a row opens that product's profile page (/products/profile).
+export default function ProductList({ onNavigate }) {
   const { user } = useAuth();
   const isAdmin = user.role === 'admin';
   const toast = useToast();
   const confirm = useConfirm();
 
   const containerRef = useRef(null);
-  const latestRef = useRef({ expandedIds: new Set(), selectedIds: new Set() });
+  const latestRef = useRef({ selectedIds: new Set() });
 
   const [viewMode, setViewMode] = useState(() => localStorage.getItem(VIEW_MODE_KEY) || 'list');
   const [sortPrefs, setSortPrefs] = useState(loadSortPrefs);
@@ -53,11 +51,7 @@ export default function ProductList({ onNavigate, focusProductId }) {
   const [data, setData] = useState({ rows: [], counts: { all: 0, lowStock: 0, deadStock: 0, outOfStock: 0 } });
   const [loading, setLoading] = useState(true);
 
-  const [expandedIds, setExpandedIds] = useState(() => rememberedState?.expandedIds || new Set());
   const [selectedIds, setSelectedIds] = useState(() => rememberedState?.selectedIds || new Set());
-  const [detailCache, setDetailCache] = useState({});
-  const [loadingDetailIds, setLoadingDetailIds] = useState(new Set());
-  const [detailErrorIds, setDetailErrorIds] = useState(new Set());
 
   const [exporting, setExporting] = useState(false);
 
@@ -73,35 +67,14 @@ export default function ProductList({ onNavigate, focusProductId }) {
     window.api.categories.list().then(setCategories);
   }, []);
 
-  useEffect(() => {
-    if (!focusProductId) return;
-    (async () => {
-      const full = await window.api.products.getById({ id: focusProductId });
-      if (!full) return;
-      // Reset filters so the search hit is actually visible in the filtered
-      // list, then expand it and seed the detail cache with what was just
-      // fetched instead of a redundant second fetch.
-      setSearch(full.name);
-      setCategoryId('');
-      setLowStockOnly(false);
-      setDeadStockOnly(false);
-      setOutOfStockOnly(false);
-      setActiveFilter('all');
-      setExpandedIds(new Set([focusProductId]));
-      setDetailCache((prev) => ({ ...prev, [focusProductId]: full }));
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusProductId]);
-
-  // Restore scroll position once on mount; remember it (plus expand/selection
-  // state) on unmount so navigating to Edit and back lands where you left off.
+  // Restore scroll position once on mount; remember it (plus selection state)
+  // on unmount so opening a profile and coming back lands where you left off.
   useEffect(() => {
     if (rememberedState?.scrollTop && containerRef.current) {
       containerRef.current.scrollTop = rememberedState.scrollTop;
     }
     return () => {
       rememberedState = {
-        expandedIds: latestRef.current.expandedIds,
         selectedIds: latestRef.current.selectedIds,
         scrollTop: containerRef.current ? containerRef.current.scrollTop : 0,
       };
@@ -110,8 +83,8 @@ export default function ProductList({ onNavigate, focusProductId }) {
   }, []);
 
   useEffect(() => {
-    latestRef.current = { expandedIds, selectedIds };
-  }, [expandedIds, selectedIds]);
+    latestRef.current = { selectedIds };
+  }, [selectedIds]);
 
   // One debounced effect for every filter/sort input — a plain function
   // recreated each render (closing over current state), so the timeout that
@@ -146,51 +119,13 @@ export default function ProductList({ onNavigate, focusProductId }) {
   // across renders; these refs let them read current values anyway.
   const loadRef = useRef(load);
   loadRef.current = load;
-  const viewModeRef = useRef(viewMode);
-  viewModeRef.current = viewMode;
-  const detailCacheRef = useRef(detailCache);
-  detailCacheRef.current = detailCache;
-  const expandedRef = useRef(expandedIds);
-  expandedRef.current = expandedIds;
   const navigateRef = useRef(onNavigate);
   navigateRef.current = onNavigate;
 
-  const fetchDetail = useCallback(async (id) => {
-    setLoadingDetailIds((prev) => new Set(prev).add(id));
-    setDetailErrorIds((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-    try {
-      const detail = await window.api.products.getById({ id });
-      if (!detail) throw new Error('not found');
-      setDetailCache((prev) => ({ ...prev, [id]: detail }));
-    } catch {
-      setDetailErrorIds((prev) => new Set(prev).add(id));
-    }
-    setLoadingDetailIds((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }, []);
-
   const actions = useMemo(
     () => ({
-      toggleExpand(id) {
-        const wasExpanded = expandedRef.current.has(id);
-        setExpandedIds((prev) => {
-          const next = new Set(prev);
-          if (wasExpanded) {
-            next.delete(id);
-          } else {
-            if (viewModeRef.current !== 'grid') next.clear(); // accordion outside Cards; Cards allows several at once
-            next.add(id);
-          }
-          return next;
-        });
-        if (!wasExpanded && !detailCacheRef.current[id]) fetchDetail(id);
+      open(id) {
+        navigateRef.current('/products/profile', { id });
       },
       toggleSelect(id) {
         setSelectedIds((prev) => {
@@ -204,12 +139,8 @@ export default function ProductList({ onNavigate, focusProductId }) {
         await window.api.products.setActive({ id: product.id, isActive: !product.is_active });
         loadRef.current();
       },
-      retryDetail: fetchDetail,
-      go(route, params) {
-        navigateRef.current(route, params);
-      },
     }),
-    [fetchDetail]
+    []
   );
 
   function clickChip(chip) {
@@ -324,12 +255,11 @@ export default function ProductList({ onNavigate, focusProductId }) {
       </Card>
     );
   } else {
-    const shared = { rows: data.rows, isAdmin, expandedIds, detailCache, loadingDetailIds, detailErrorIds, actions };
     content =
       viewMode === 'grid' ? (
-        <ProductCards {...shared} />
+        <ProductCards rows={data.rows} actions={actions} />
       ) : (
-        <ProductTable {...shared} compact={viewMode === 'compact'} selectedIds={selectedIds} />
+        <ProductTable rows={data.rows} isAdmin={isAdmin} actions={actions} compact={viewMode === 'compact'} selectedIds={selectedIds} />
       );
   }
 

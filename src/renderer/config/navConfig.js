@@ -38,6 +38,7 @@ const navConfig = [
     tabs: [{ key: 'customers-all', label: g.allCustomers, route: '/customers' }],
     pages: [
       { key: 'customers-receive-payment', label: g.receivePayment, route: '/payments/record', needsParams: true },
+      { key: 'customers-profile', label: g.customer, route: '/customers/profile', needsParams: true },
       { key: 'customers-new', label: g.addCustomer, route: '/customers/new' },
       { key: 'customers-edit', label: g.customer, route: '/customers/edit', needsParams: true },
     ],
@@ -51,6 +52,7 @@ const navConfig = [
     adminOnly: true,
     tabs: [{ key: 'suppliers-all', label: g.suppliers, route: '/suppliers' }],
     pages: [
+      { key: 'suppliers-profile', label: g.supplier, route: '/suppliers/profile', needsParams: true },
       { key: 'suppliers-new', label: g.addSupplier, route: '/suppliers/new' },
       { key: 'suppliers-edit', label: g.supplier, route: '/suppliers/edit', needsParams: true },
     ],
@@ -70,9 +72,22 @@ const navConfig = [
       { key: 'products-movements', label: g.stockHistory, route: '/products/stock-movements' },
     ],
     pages: [
+      { key: 'products-profile', label: 'Product', route: '/products/profile', needsParams: true },
       { key: 'products-new', label: g.addProduct, route: '/products/new' },
       { key: 'products-edit', label: g.editProduct, route: '/products/edit', needsParams: true },
       { key: 'products-bulk-import', label: g.importSpreadsheet, route: '/products/bulk-import' },
+    ],
+  }),
+  section({
+    key: 'stock',
+    label: g.stock,
+    icon: 'stock',
+    group: null,
+    route: '/stock',
+    adminOnly: true,
+    tabs: [
+      { key: 'stock-all', label: g.stock, route: '/stock' },
+      { key: 'stock-history', label: 'History', route: '/stock/history' },
     ],
   }),
   section({

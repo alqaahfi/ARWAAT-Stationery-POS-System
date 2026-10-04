@@ -16,7 +16,7 @@ function pretty(text) {
 }
 
 function describe(row) {
-  const kind = TYPE_LABELS[row.type] || pretty(row.type);
+  const kind = row.label || TYPE_LABELS[row.type] || pretty(row.type);
   const ref = row.type === 'payment' ? pretty(row.reference) : row.reference;
   return ref ? `${kind} · ${ref}` : kind;
 }

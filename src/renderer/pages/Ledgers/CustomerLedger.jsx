@@ -1,14 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { Badge, useConfirm, useToast } from '../../components/ui';
-import { formatCurrency } from '../../utils/format';
+import { Badge, useToast } from '../../components/ui';
 import { priceLevelLabel } from '../../utils/priceLevel';
 import { contactLine } from '../Parties/PartyHeader';
 import { RestrictedNotice } from '../Parties/PartyParts';
 import { TypeBadge } from '../Customers/parts/CustomerListParts';
-import { AccountView, PaymentModal } from './parts/AccountView';
-import PaymentFormFields from '../Payments/parts/PaymentFormFields';
-import PaymentDoneSheet from '../Payments/parts/PaymentDoneSheet';
+import { AccountView } from './parts/AccountView';
+import QuickPaymentModal from '../../components/billing/QuickPaymentModal';
 
 // Mounted at /ledgers/customers, with or without a customerId param — no id
 // is picker mode (reached from the nav item), an id from the Customer list,
@@ -17,7 +15,6 @@ import PaymentDoneSheet from '../Payments/parts/PaymentDoneSheet';
 export default function CustomerLedger({ customerId }) {
   const { user } = useAuth();
   const toast = useToast();
-  const confirm = useConfirm();
 
   const [selectedId, setSelectedId] = useState(customerId || null);
   const [data, setData] = useState(null);
@@ -27,13 +24,6 @@ export default function CustomerLedger({ customerId }) {
   const loadRef = useRef(0);
 
   const [payOpen, setPayOpen] = useState(false);
-  const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState('cash');
-  const [note, setNote] = useState('');
-  const [payError, setPayError] = useState('');
-  const [saving, setSaving] = useState(false);
-  const savingRef = useRef(false);
-  const [done, setDone] = useState(null); // { paymentId, amount }
 
   // A fresh row click passes a new customerId prop even while this component
   // stays mounted — keep the notion of "selected" in sync with it.
@@ -78,59 +68,7 @@ export default function CustomerLedger({ customerId }) {
   }
 
   function openPayment() {
-    setAmount('');
-    setMethod('cash');
-    setNote('');
-    setPayError('');
     setPayOpen(true);
-  }
-
-  async function handleSave(e) {
-    e?.preventDefault();
-    if (savingRef.current || !data) return;
-    setPayError('');
-    const amt = Number(amount);
-    if (!amt || amt <= 0) {
-      setPayError('Enter an amount greater than zero.');
-      return;
-    }
-
-    const balance = data.balance;
-    if (amt > balance + 0.01 && balance > 0) {
-      const proceed = await confirm({
-        title: 'This is more than they owe',
-        message: `They'll be shown as having paid ${formatCurrency(amt - balance)} in advance. Record it anyway?`,
-        confirmLabel: 'Record payment',
-        cancelLabel: 'Go back',
-      });
-      if (!proceed) return;
-    }
-
-    savingRef.current = true;
-    setSaving(true);
-    let res;
-    try {
-      res = await window.api.payments.createStandalone({
-        customerId: data.customer.id,
-        amount: amt,
-        paymentMethod: method,
-        note: note.trim() || null,
-        receivedBy: user.id,
-      });
-    } catch {
-      res = null;
-    }
-    savingRef.current = false;
-    setSaving(false);
-
-    if (!res?.success) {
-      setPayError(res?.reason || "The payment couldn't be saved. Please try again.");
-      return;
-    }
-    setPayOpen(false);
-    toast.success('Payment recorded');
-    setDone({ paymentId: res.paymentId, amount: amt });
-    load(data.customer.id, { quiet: true });
   }
 
   const view = useMemo(
@@ -172,35 +110,14 @@ export default function CustomerLedger({ customerId }) {
         onChooseAnother={() => setSelectedId(null)}
       />
 
-      <PaymentModal
+      <QuickPaymentModal
         open={payOpen && !!customer}
-        title={customer ? `Receive payment from ${customer.name}` : ''}
-        saving={saving}
-        onSubmit={handleSave}
-        onClose={() => setPayOpen(false)}
-      >
-        <PaymentFormFields
-          amount={amount}
-          onAmountChange={setAmount}
-          method={method}
-          onMethodChange={setMethod}
-          note={note}
-          onNoteChange={setNote}
-          error={payError}
-          balance={data?.balance}
-          party="customer"
-        />
-      </PaymentModal>
-
-      <PaymentDoneSheet
-        key={done?.paymentId}
-        open={!!done}
-        amount={done?.amount}
-        balance={data?.balance}
-        balanceLoading={refreshing}
         party="customer"
-        onPrint={(format) => window.api.printing.printPaymentReceipt({ paymentId: done.paymentId, format })}
-        onClose={() => setDone(null)}
+        partyId={customer?.id}
+        partyName={customer?.name}
+        balance={data?.balance}
+        onClose={() => setPayOpen(false)}
+        onSaved={() => load(customer.id, { quiet: true })}
       />
     </>
   );

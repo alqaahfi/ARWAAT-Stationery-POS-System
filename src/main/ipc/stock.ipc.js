@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
+const { getProductStockStatus } = require('../db/models/Product');
 
 // Shown next to whatever the admin types in the Note field — keeps a short,
 // consistent label on every adjustment row even when Note is left blank.
@@ -105,10 +106,178 @@ function getMovements(filters = {}) {
   return { rows, limit: MOVEMENT_ROW_LIMIT };
 }
 
+// ---------------- Add / Delete Stock (multi-line forms) ----------------
+// One transaction per submit: every line moves stock_qty and writes its own
+// stock_movements row (type 'adjustment'; the note says Stock added / removed).
+
+function round2(n) {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+function loadLine(db, line) {
+  const variant = db
+    .prepare(
+      `SELECT pv.id, pv.stock_qty, pv.variant_name, pv.product_id, p.name AS product_name
+       FROM product_variants pv JOIN products p ON p.id = pv.product_id WHERE pv.id = ?`
+    )
+    .get(line.variantId);
+  if (!variant) return { error: 'One of the products could not be found.' };
+  const unit = db.prepare('SELECT * FROM product_units WHERE id = ? AND product_id = ? AND is_active = 1').get(line.unitId, variant.product_id);
+  if (!unit) return { error: `Pack size not found for ${variant.product_name}.` };
+  const qty = Number(line.quantity);
+  if (!qty || qty <= 0) return { error: `Enter a quantity greater than zero for ${variant.product_name}.` };
+  return { variant, unit, qty, baseQty: qty * unit.conversion_factor };
+}
+
+// Buying-price changes typed on the form are written back to the pack size.
+// Trade Price packs keep retail / wholesale / special rates in step with the
+// trade price, exactly as the product form does.
+function applyPricing(db, unit, pricing) {
+  if (!pricing) return;
+  if (unit.pricing_method === 'trade') {
+    const trade = Math.max(0, Number(pricing.tradePrice) || 0);
+    const pct = Math.max(0, Number(pricing.purchaseDiscount) || 0);
+    const extra = Math.max(0, Number(pricing.extraDiscount) || 0);
+    const cost = Math.max(0, round2(trade - (trade * pct) / 100 - extra));
+    const sets = ['trade_price = ?', 'purchase_discount = ?', 'extra_discount = ?', 'cost_price = ?'];
+    const vals = [trade, pct, extra, cost];
+    if (trade !== unit.trade_price) {
+      sets.push('retail_price = ?', 'wholesale_price = ?');
+      vals.push(trade, trade);
+      for (let n = 1; n <= 5; n++) {
+        const d = unit[`sale_discount_c${n}`];
+        if (d !== null && d !== undefined) {
+          sets.push(`net_rate_c${n} = ?`);
+          vals.push(Math.max(0, round2(trade - (trade * d) / 100)));
+        }
+      }
+    }
+    db.prepare(`UPDATE product_units SET ${sets.join(', ')} WHERE id = ?`).run(...vals, unit.id);
+  } else {
+    const cost = Math.max(0, Number(pricing.unitPrice) || 0);
+    if (cost !== unit.cost_price) db.prepare('UPDATE product_units SET cost_price = ? WHERE id = ?').run(cost, unit.id);
+  }
+}
+
+function addStock({ lines, note, createdBy, updatePrices }) {
+  const db = getDb();
+  if (!Array.isArray(lines) || !lines.length) return { success: false, reason: 'Add at least one product.' };
+  const loaded = [];
+  for (const line of lines) {
+    const l = loadLine(db, line);
+    if (l.error) return { success: false, reason: l.error };
+    loaded.push({ ...l, pricing: line.pricing });
+  }
+
+  db.transaction(() => {
+    for (const l of loaded) {
+      db.prepare("UPDATE product_variants SET stock_qty = stock_qty + ?, last_purchased_at = datetime('now') WHERE id = ?").run(l.baseQty, l.variant.id);
+      const text = `Stock added: ${l.qty} × ${l.unit.unit_name}`;
+      db.prepare(
+        `INSERT INTO stock_movements (product_variant_id, movement_type, quantity, reference_type, note, created_by)
+         VALUES (?, 'adjustment', ?, 'stock_in', ?, ?)`
+      ).run(l.variant.id, l.baseQty, note && note.trim() ? `${text} — ${note.trim()}` : text, createdBy || null);
+      if (updatePrices !== false) applyPricing(db, l.unit, l.pricing);
+    }
+  })();
+  return { success: true, count: loaded.length };
+}
+
+function removeStock({ lines, reasonCode, note, createdBy }) {
+  const db = getDb();
+  if (!Array.isArray(lines) || !lines.length) return { success: false, reason: 'Add at least one product.' };
+  if (!REASON_LABELS[reasonCode]) return { success: false, reason: 'Select a reason.' };
+  const loaded = [];
+  const totals = new Map();
+  for (const line of lines) {
+    const l = loadLine(db, line);
+    if (l.error) return { success: false, reason: l.error };
+    loaded.push(l);
+    totals.set(l.variant.id, (totals.get(l.variant.id) || 0) + l.baseQty);
+  }
+  for (const l of loaded) {
+    if (totals.get(l.variant.id) > l.variant.stock_qty + 1e-9) {
+      return { success: false, reason: `Cannot remove that much — only ${l.variant.stock_qty} in stock for ${l.variant.product_name} (${l.variant.variant_name}).` };
+    }
+  }
+
+  const label = REASON_LABELS[reasonCode];
+  db.transaction(() => {
+    for (const l of loaded) {
+      db.prepare('UPDATE product_variants SET stock_qty = stock_qty - ? WHERE id = ?').run(l.baseQty, l.variant.id);
+      const text = `Stock removed (${label}): ${l.qty} × ${l.unit.unit_name}`;
+      db.prepare(
+        `INSERT INTO stock_movements (product_variant_id, movement_type, quantity, reference_type, note, created_by)
+         VALUES (?, 'adjustment', ?, 'stock_out', ?, ?)`
+      ).run(l.variant.id, -l.baseQty, note && note.trim() ? `${text} — ${note.trim()}` : text, createdBy || null);
+    }
+  })();
+  return { success: true, count: loaded.length };
+}
+
+// Sales figures for the Product Profile (quantities in base units).
+function getProductStats(productId) {
+  const db = getDb();
+  const sold = db
+    .prepare(
+      `SELECT COALESCE(SUM((si.quantity + si.foc_quantity) * pu.conversion_factor), 0) AS base_qty,
+              COALESCE(SUM(si.line_total), 0) AS revenue,
+              COALESCE(SUM((si.quantity + si.foc_quantity) * pu.cost_price), 0) AS cogs,
+              COUNT(DISTINCT si.sale_id) AS sales_count,
+              MAX(s.created_at) AS last_sold_at
+       FROM sale_items si
+       JOIN sales s ON s.id = si.sale_id
+       JOIN product_units pu ON pu.id = si.product_unit_id
+       WHERE si.product_id = ?`
+    )
+    .get(productId);
+  const last30 = db
+    .prepare(
+      `SELECT COALESCE(SUM((si.quantity + si.foc_quantity) * pu.conversion_factor), 0) AS base_qty,
+              COALESCE(SUM(si.line_total), 0) AS revenue
+       FROM sale_items si
+       JOIN sales s ON s.id = si.sale_id
+       JOIN product_units pu ON pu.id = si.product_unit_id
+       WHERE si.product_id = ? AND s.created_at >= datetime('now', '-30 days')`
+    )
+    .get(productId);
+  const lastPurchased = db.prepare('SELECT MAX(last_purchased_at) AS at FROM product_variants WHERE product_id = ?').get(productId);
+  const info = db
+    .prepare(
+      `SELECT p.min_stock_alert, p.dead_stock_days, c.name AS category_name, s.name AS supplier_name,
+              COALESCE(SUM(pv.stock_qty), 0) AS total_stock,
+              CAST(julianday('now') - julianday(COALESCE(MAX(pv.last_sold_at), p.created_at)) AS INTEGER) AS days_since_last_sale
+       FROM products p
+       LEFT JOIN categories c ON c.id = p.category_id
+       LEFT JOIN suppliers s ON s.id = p.supplier_id
+       LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1
+       WHERE p.id = ? GROUP BY p.id`
+    )
+    .get(productId);
+  return {
+    success: true,
+    categoryName: info?.category_name || null,
+    supplierName: info?.supplier_name || null,
+    totalStock: info?.total_stock || 0,
+    ...(info ? getProductStockStatus(info) : { isOutOfStock: false, isLow: false, isDead: false }),
+    soldBaseQty: sold.base_qty,
+    revenue: round2(sold.revenue),
+    profit: round2(sold.revenue - sold.cogs),
+    salesCount: sold.sales_count,
+    lastSoldAt: sold.last_sold_at,
+    last30BaseQty: last30.base_qty,
+    last30Revenue: round2(last30.revenue),
+    lastPurchasedAt: lastPurchased?.at || null,
+  };
+}
+
 function registerStockIpc() {
   ipcMain.handle('stock:get-adjustment-reasons', () =>
     Object.entries(REASON_LABELS).map(([code, label]) => ({ code, label }))
   );
+  ipcMain.handle('stock:add', (event, payload) => addStock(payload || {}));
+  ipcMain.handle('stock:remove', (event, payload) => removeStock(payload || {}));
+  ipcMain.handle('stock:get-product-stats', (event, { productId } = {}) => getProductStats(productId));
   ipcMain.handle('stock:adjust', (event, payload) => adjustStock(payload || {}));
   ipcMain.handle('stock:get-movements', (event, payload) => getMovements(payload || {}));
 }

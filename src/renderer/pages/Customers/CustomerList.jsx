@@ -133,7 +133,7 @@ export default function CustomerList({ onNavigate }) {
           party="customer"
           badges={customerBadges}
           subline={customerSubline}
-          onOpen={(c) => onNavigate('/customers/edit', { id: c.id })}
+          onOpen={(c) => onNavigate('/customers/profile', { id: c.id })}
           onToggleActive={toggleActive}
         />
       ) : (
@@ -143,7 +143,7 @@ export default function CustomerList({ onNavigate }) {
             rows={customers}
             loading={loading}
             dense={viewMode === 'compact'}
-            onRowClick={(c) => onNavigate('/customers/edit', { id: c.id })}
+            onRowClick={(c) => onNavigate('/customers/profile', { id: c.id })}
             emptyState={filtered ? <NoMatch what="customers" onClear={clearFilters} /> : <NoCustomers onAdd={goAdd} />}
           />
         </Card>

@@ -1,11 +1,10 @@
 import React, { memo } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import theme from '../../../config/theme';
 import { Card, Checkbox, Icon, Skeleton, Toggle } from '../../../components/ui';
 import useInteraction from '../../../components/kit/useInteraction';
 import { formatCount } from '../../../utils/format';
 import { StatusBadges, StatusDot } from './StatusBadges';
-import { ProductDetail } from './ProductDetail';
 
 const c = theme.colors;
 const srOnly = { position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' };
@@ -19,7 +18,7 @@ function columnsFor(compact, isAdmin) {
 
 const cellGap = theme.spacing.smd;
 
-// Stops a click on a control inside the row from also expanding the row.
+// Stops a click on a control inside the row from also opening the profile.
 function Stop({ children, style }) {
   return (
     <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', ...style }}>
@@ -28,8 +27,10 @@ function Stop({ children, style }) {
   );
 }
 
-// List + Compact views share one grid-based table.
-export function ProductTable({ rows, compact, isAdmin, expandedIds, selectedIds, detailCache, loadingDetailIds, detailErrorIds, actions }) {
+// List + Compact views share one grid-based table. Clicking a row opens that
+// product's profile page (`actions.open`). Admin rows also carry a select box
+// and an Active switch (the Stock page passes isAdmin={false} to hide them).
+export function ProductTable({ rows, compact, isAdmin, selectedIds, actions }) {
   const columns = columnsFor(compact, isAdmin);
   const head = { ...theme.type.footnote, fontWeight: theme.font.weightSemibold, color: c.labelSecondary };
 
@@ -56,25 +57,13 @@ export function ProductTable({ rows, compact, isAdmin, expandedIds, selectedIds,
         <span />
       </div>
       {rows.map((p) => (
-        <ProductRow
-          key={p.id}
-          product={p}
-          compact={compact}
-          columns={columns}
-          isAdmin={isAdmin}
-          expanded={expandedIds.has(p.id)}
-          selected={selectedIds.has(p.id)}
-          detail={detailCache[p.id]}
-          detailLoading={loadingDetailIds.has(p.id)}
-          detailError={detailErrorIds.has(p.id)}
-          actions={actions}
-        />
+        <ProductRow key={p.id} product={p} compact={compact} columns={columns} isAdmin={isAdmin} selected={selectedIds.has(p.id)} actions={actions} />
       ))}
     </Card>
   );
 }
 
-const ProductRow = memo(function ProductRow({ product: p, compact, columns, isAdmin, expanded, selected, detail, detailLoading, detailError, actions }) {
+const ProductRow = memo(function ProductRow({ product: p, compact, columns, isAdmin, selected, actions }) {
   const { hovered, handlers } = useInteraction(false);
   const subline = [p.company_name, p.sku].filter(Boolean).join(' · ');
 
@@ -83,13 +72,12 @@ const ProductRow = memo(function ProductRow({ product: p, compact, columns, isAd
       <div
         role="button"
         tabIndex={0}
-        aria-expanded={expanded}
-        onClick={() => actions.toggleExpand(p.id)}
+        onClick={() => actions.open(p.id)}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget) return;
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            actions.toggleExpand(p.id);
+            actions.open(p.id);
           }
         }}
         {...handlers}
@@ -101,7 +89,7 @@ const ProductRow = memo(function ProductRow({ product: p, compact, columns, isAd
           minHeight: compact ? '40px' : '56px',
           padding: `${compact ? 4 : 6}px ${theme.spacing.md}`,
           boxSizing: 'border-box',
-          backgroundColor: selected ? c.accentTint : hovered || expanded ? c.surfaceAlt : c.surface,
+          backgroundColor: selected ? c.accentTint : hovered ? c.surfaceAlt : c.surface,
           cursor: 'pointer',
           transition: `background-color ${theme.motion.fast} ease`,
         }}
@@ -147,72 +135,38 @@ const ProductRow = memo(function ProductRow({ product: p, compact, columns, isAd
             <Toggle checked={!!p.is_active} onChange={() => actions.toggleActive(p)} label={`${p.name} is active`} />
           </Stop>
         )}
-        <Icon
-          icon={ChevronDown}
-          size={16}
-          style={{ color: c.labelTertiary, transform: expanded ? 'rotate(180deg)' : 'none', transition: `transform ${theme.motion.base} ${theme.motion.easing}` }}
-        />
+        <Icon icon={ChevronRight} size={16} style={{ color: c.labelTertiary }} />
       </div>
-      {expanded && (
-        <ProductDetail
-          detail={detail}
-          loading={detailLoading}
-          error={detailError}
-          isAdmin={isAdmin}
-          onRetry={() => actions.retryDetail(p.id)}
-          onEdit={() => actions.go('/products/edit', { id: p.id })}
-          onFixStock={() => actions.go('/products/stock-adjustments', { productId: p.id })}
-          onHistory={() => actions.go('/products/stock-movements', { productId: p.id })}
-        />
-      )}
     </div>
   );
 });
 
-// Cards view: several can be open at once.
-export function ProductCards({ rows, isAdmin, expandedIds, detailCache, loadingDetailIds, detailErrorIds, actions }) {
+// Cards view.
+export function ProductCards({ rows, actions }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: theme.spacing.md, alignItems: 'start' }}>
       {rows.map((p) => (
-        <ProductCard
-          key={p.id}
-          product={p}
-          isAdmin={isAdmin}
-          expanded={expandedIds.has(p.id)}
-          detail={detailCache[p.id]}
-          detailLoading={loadingDetailIds.has(p.id)}
-          detailError={detailErrorIds.has(p.id)}
-          actions={actions}
-        />
+        <ProductCard key={p.id} product={p} actions={actions} />
       ))}
     </div>
   );
 }
 
-const ProductCard = memo(function ProductCard({ product: p, isAdmin, expanded, detail, detailLoading, detailError, actions }) {
+const ProductCard = memo(function ProductCard({ product: p, actions }) {
   const { hovered, handlers } = useInteraction(false);
   const types = p.variant_count > 1 ? `${p.variant_count} Types` : 'Single item';
   const packs = `${p.unit_count} pack size${p.unit_count === 1 ? '' : 's'}`;
 
   return (
-    <div
-      style={{
-        gridColumn: expanded ? '1 / -1' : undefined,
-        backgroundColor: c.surface,
-        border: `1px solid ${expanded ? c.separatorStrong : c.separator}`,
-        borderRadius: theme.radius.lg,
-        overflow: 'hidden',
-      }}
-    >
+    <div style={{ backgroundColor: c.surface, border: `1px solid ${c.separator}`, borderRadius: theme.radius.lg, overflow: 'hidden' }}>
       <div
         role="button"
         tabIndex={0}
-        aria-expanded={expanded}
-        onClick={() => actions.toggleExpand(p.id)}
+        onClick={() => actions.open(p.id)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            actions.toggleExpand(p.id);
+            actions.open(p.id);
           }
         }}
         {...handlers}
@@ -238,18 +192,6 @@ const ProductCard = memo(function ProductCard({ product: p, isAdmin, expanded, d
           {types} · {packs}
         </div>
       </div>
-      {expanded && (
-        <ProductDetail
-          detail={detail}
-          loading={detailLoading}
-          error={detailError}
-          isAdmin={isAdmin}
-          onRetry={() => actions.retryDetail(p.id)}
-          onEdit={() => actions.go('/products/edit', { id: p.id })}
-          onFixStock={() => actions.go('/products/stock-adjustments', { productId: p.id })}
-          onHistory={() => actions.go('/products/stock-movements', { productId: p.id })}
-        />
-      )}
     </div>
   );
 });
