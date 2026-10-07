@@ -229,7 +229,7 @@ function createReturn(input = {}) {
   const restock = input.restock !== false;
   const note = String(input.note || '').trim() || null;
 
-  const activation = db.prepare('SELECT station_code FROM license_activation WHERE id = 1').get();
+  const activation = db.prepare('SELECT station_code FROM station_config WHERE id = 1').get();
   const stationCode = (activation && activation.station_code) || 'MAIN';
 
   const run = db.transaction(() => {

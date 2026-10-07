@@ -246,7 +246,7 @@ function saveSale(payload, editSaleId) {
   if (!cashierId) return { success: false, reason: 'Missing cashier.' };
   if (!items || items.length === 0) return { success: false, reason: 'Cart is empty.' };
 
-  const activation = db.prepare('SELECT * FROM license_activation WHERE id = 1').get();
+  const activation = db.prepare('SELECT * FROM station_config WHERE id = 1').get();
   const stationCode = (activation && activation.station_code) || 'MAIN';
 
   // Subtotal is recomputed from the lines server-side rather than trusted from
@@ -502,7 +502,7 @@ function registerSalesIpc() {
   }));
   ipcMain.handle('sales:get-next-invoice-no', () => {
     const db = getDb();
-    const activation = db.prepare('SELECT station_code FROM license_activation WHERE id = 1').get();
+    const activation = db.prepare('SELECT station_code FROM station_config WHERE id = 1').get();
     const stationCode = (activation && activation.station_code) || 'MAIN';
     return { invoiceNo: getNextInvoiceNo(db, stationCode) };
   });

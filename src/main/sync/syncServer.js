@@ -8,11 +8,12 @@ const express = require('express');
 const { getDb } = require('../db/connection');
 const { applyRecords } = require('./applyIncoming');
 const { buildOutgoingRecords } = require('./syncEngine');
+const { registerCashierAccount } = require('../setup/setupManager');
 
 let server = null;
 
 function verifySecret(req, res, next) {
-  const activation = getDb().prepare('SELECT sync_secret FROM license_activation WHERE id = 1').get();
+  const activation = getDb().prepare('SELECT sync_secret FROM station_config WHERE id = 1').get();
   const expected = activation && activation.sync_secret;
   const provided = req.headers['x-sync-secret'];
   // Honest limitation, not solved by this build: this authenticates that the
@@ -71,11 +72,21 @@ function handleExchange(req, res) {
   res.json({ records: outgoing, newWatermark: watermark });
 }
 
+// A counter PC joining the shop from its Setup screen. Same secret check as a
+// sync; the Admin PC creates the cashier account (password arrives pre-hashed)
+// so the counter PC's first sync brings it back down like any other user.
+function handleRegisterCashier(req, res) {
+  const result = registerCashierAccount(req.body || {});
+  if (!result.success) return res.status(result.status || 400).json({ reason: result.reason });
+  res.json({ shopName: result.shopName });
+}
+
 function startSyncServer(port) {
   if (server) return server;
   const app = express();
   app.use(express.json({ limit: '25mb' })); // a bulk product import's outbox batch can be sizeable
   app.post('/sync/exchange', verifySecret, handleExchange);
+  app.post('/setup/register-cashier', verifySecret, handleRegisterCashier);
 
   server = app.listen(port, () => console.log(`[syncServer] listening on port ${port}`));
   server.on('error', (err) => console.error('[syncServer] failed to start:', err.message));

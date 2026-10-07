@@ -14,7 +14,7 @@ const { setCurrentSession, clearCurrentSession, getCurrentSession } = require('.
 // Keys stripped (recursively) from logged args before they're stored, so a
 // credential never lands in the audit trail even in summary form. Matched
 // case-insensitively against the key name, not the value.
-const SENSITIVE_KEY_PATTERN = /password|token|secret|licensekey|license_key/i;
+const SENSITIVE_KEY_PATTERN = /password|token|secret/i;
 
 // Caps how much of a call's arguments we keep per row — some handlers (bulk
 // import, bulk queries) take large payloads that would otherwise bloat the
@@ -46,7 +46,7 @@ function summarizeArgs(args) {
 
 function getStationCode() {
   try {
-    const row = getDb().prepare('SELECT station_code FROM license_activation WHERE id = 1').get();
+    const row = getDb().prepare('SELECT station_code FROM station_config WHERE id = 1').get();
     return row?.station_code || null;
   } catch {
     return null;

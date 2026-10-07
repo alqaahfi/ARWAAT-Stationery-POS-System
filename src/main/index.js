@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { initDatabase } = require('./db/connection');
-const { registerAuthIpc } = require('./ipc/auth.ipc');
+const { registerSetupIpc } = require('./ipc/setup.ipc');
 const { registerUsersIpc, seedDummyCashier } = require('./ipc/users.ipc');
 const { registerDashboardIpc } = require('./ipc/dashboard.ipc');
 const { registerCategoriesIpc } = require('./ipc/categories.ipc');
@@ -72,7 +72,7 @@ app.whenReady().then(() => {
       // each wraps whatever `ipcMain.handle` currently is.
       installSyncTriggerMiddleware(ipcMain);
       pruneAuditLog();
-      registerAuthIpc();
+      registerSetupIpc();
       registerUsersIpc();
       registerDashboardIpc();
       registerCategoriesIpc();

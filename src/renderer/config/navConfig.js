@@ -189,7 +189,6 @@ const navConfig = [
       { key: 'settings-printers', label: g.printers, route: '/settings/printers' },
       { key: 'settings-sync', label: g.connectedComputers, route: '/settings/sync' },
       { key: 'settings-backup', label: g.backupRestore, route: '/settings/backup' },
-      { key: 'settings-license', label: g.license, route: '/settings/license' },
     ],
   }),
 ];

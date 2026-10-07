@@ -5,6 +5,7 @@ import glossary from '../../../config/glossary';
 import { Button, Field, IconButton, Label, TextInput } from '../../../components/ui';
 import { formatCount } from '../../../utils/format';
 import { CheckedInput, NumInput, SectionCard } from './fields';
+import UrduSuggestions from './UrduSuggestions';
 
 const c = theme.colors;
 
@@ -66,6 +67,7 @@ function TypeRow({ type: t, index, baseUnitName, onUpdate, onRemove, onCheckBarc
             Auto Urdu Name
           </Button>
         </div>
+        <UrduSuggestions words={t.urduWords} name={t.variantName} onPick={(v) => onUpdate(index, { variantName: v })} />
         <TextInput
           value={t.searchAlias || ''}
           onChange={(e) => onUpdate(index, { searchAlias: e.target.value })}

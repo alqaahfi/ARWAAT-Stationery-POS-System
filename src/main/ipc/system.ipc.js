@@ -41,10 +41,9 @@ const TABLES_TO_CLEAR = [
   'sync_log',
 ];
 
-// Wipes all business data and the activation record, sending the app back
-// to the Setup/Choose-Role screen on next boot. Does NOT unmark the consumed
-// license_keys row — a reset requires a brand new key; the old one stays
-// permanently used.
+// Wipes all business data and this PC's setup record, sending the app back to
+// the Setup screen on next boot. The PC's station_id setting is kept so peers
+// still recognise it.
 //
 // A lot of the FKs among these tables (e.g. sales.cashier_id -> users,
 // purchases.supplier_id -> suppliers) carry no ON DELETE CASCADE, so with
@@ -63,7 +62,7 @@ function factoryReset() {
     for (const table of TABLES_TO_CLEAR) {
       db.prepare(`DELETE FROM ${table}`).run();
     }
-    db.prepare('DELETE FROM license_activation').run();
+    db.prepare('DELETE FROM station_config').run();
     db.exec('COMMIT');
     return { success: true };
   } catch (err) {

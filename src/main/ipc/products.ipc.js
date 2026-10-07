@@ -562,6 +562,25 @@ async function viaTranslateAlt(text) {
   return out;
 }
 
+// Every word's alternative spellings from the phonetic engine, so the user can
+// swap a wrongly guessed word ("mutalia" -> متلا / مطالعہ / ...) with one click.
+async function wordOptions(input) {
+  const words = input.split(/\s+/).filter(Boolean).slice(0, 12);
+  return Promise.all(
+    words.map(async (w) => {
+      try {
+        const data = await fetchJson(
+          `https://inputtools.google.com/request?text=${encodeURIComponent(w)}&itc=ur-t-i0-und&num=8&cp=0&cs=1&ie=utf-8&oe=utf-8&app=pos`
+        );
+        const list = data && data[0] === 'SUCCESS' ? data[1][0][1] : [];
+        return Array.isArray(list) ? list : [];
+      } catch (err) {
+        return [];
+      }
+    })
+  );
+}
+
 async function transliterateToUrdu(text) {
   const input = typeof text === 'string' ? text.trim().slice(0, 200) : '';
   if (!input) return { success: false, reason: 'Type a name first.' };
@@ -573,7 +592,8 @@ async function transliterateToUrdu(text) {
   ];
   for (const [source, attempt] of attempts) {
     try {
-      return { success: true, urdu: await attempt(input), source };
+      const urdu = await attempt(input);
+      return { success: true, urdu, source, words: await wordOptions(input) };
     } catch (err) {
       // try the next service
     }

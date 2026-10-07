@@ -91,8 +91,8 @@ export function DangerZone({ confirmText, onConfirmText, resetting, onReset, err
             {glossary.eraseEverything}
           </h2>
           <p style={{ ...theme.type.subhead, color: c.label, margin: '4px 0 0' }}>
-            Wipes all sales, products, customers, suppliers, users and other shop data on this computer, and removes its
-            activation — the app goes back to the Setup screen and needs a new activation key. This can’t be undone. Make a
+            Wipes all sales, products, customers, suppliers, users and other shop data on this computer, and removes this
+            computer’s setup — the app goes back to the Setup screen. This can’t be undone. Make a
             backup first if there’s any chance you’ll need this data again.
           </p>
 

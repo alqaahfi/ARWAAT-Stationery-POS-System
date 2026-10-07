@@ -234,7 +234,7 @@ export default function Sale() {
   // ---------------- mount: discount cap + station code ----------------
   useEffect(() => {
     window.api.sales.getCashierDiscountCap({ userId: user.id }).then((res) => setDiscountCap(res.capPercentage));
-    window.api.license.getStatus().then((res) => setStationCode(res.stationCode || 'MAIN'));
+    window.api.setup.getStatus().then((res) => setStationCode(res.stationCode || 'MAIN'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.id]);
 

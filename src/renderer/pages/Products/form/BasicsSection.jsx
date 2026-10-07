@@ -4,6 +4,7 @@ import glossary from '../../../config/glossary';
 import { Button, Field, FieldError, HelperText, Label, SegmentedControl, Select, TextInput } from '../../../components/ui';
 import { formatCount } from '../../../utils/format';
 import { CheckedInput, NumInput, SectionCard, grid } from './fields';
+import UrduSuggestions from './UrduSuggestions';
 
 const c = theme.colors;
 
@@ -11,7 +12,7 @@ const c = theme.colors;
 // decides which of the sections below appear.
 export function KindAndNameSection({
   kind, onKindChange, isEdit, name, onNameChange, nameError,
-  searchAlias, onSearchAliasChange, onAutoUrdu, autoUrduBusy,
+  searchAlias, onSearchAliasChange, onAutoUrdu, autoUrduBusy, urduWords,
 }) {
   return (
     <SectionCard title="What are you adding?">
@@ -49,6 +50,7 @@ export function KindAndNameSection({
             Auto Urdu Name
           </Button>
         </div>
+        <UrduSuggestions words={urduWords} name={name} onPick={onNameChange} />
         {nameError ? (
           <FieldError>{nameError}</FieldError>
         ) : (

@@ -17,17 +17,9 @@ function toPublicUser(row) {
   };
 }
 
-function hasAnyUser() {
-  const db = getDb();
-  const row = db.prepare('SELECT COUNT(*) AS count FROM users').get();
-  return row.count > 0;
-}
-
-// Specifically "is there an admin account yet" — NOT hasAnyUser(). seedDummyCashier()
-// below inserts a demo cashier unconditionally on every boot, before Setup ever runs,
-// so hasAnyUser() is true on a completely fresh install too; gating first-admin
-// creation on it would (and did) reject every fresh setup with a false "Setup has
-// already been completed" before an admin account ever existed.
+// Specifically "is there an admin account yet" — NOT "is there any user".
+// seedDummyCashier() below inserts a demo cashier unconditionally on every boot,
+// before Setup ever runs, so any-user is true on a completely fresh install too.
 function hasAdminUser() {
   const db = getDb();
   const row = db.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin'").get();
@@ -38,7 +30,7 @@ function createFirstAdmin(fullName, username, password) {
   const db = getDb();
 
   if (hasAdminUser()) {
-    return { success: false, reason: 'Setup has already been completed on this PC.' };
+    return { success: false, reason: 'This shop already has an Admin.' };
   }
   if (!fullName || !username || !password || password.length < 6) {
     return { success: false, reason: 'Full name, username and a password of at least 6 characters are required.' };
@@ -249,12 +241,17 @@ function createCashier({ fullName, username, password }) {
   if (!username || !username.trim()) return { success: false, reason: 'Username is required.' };
   if (!password || password.length < 6) return { success: false, reason: 'Password must be at least 6 characters.' };
 
-  const passwordHash = bcrypt.hashSync(password, SALT_ROUNDS);
+  return insertCashier(db, fullName.trim(), username.trim(), bcrypt.hashSync(password, SALT_ROUNDS));
+}
 
+// Shared by the Cashiers module and by a counter PC joining the shop from its
+// Setup screen (setup/setupManager.js, which hashes on the counter PC so the
+// password never crosses the network).
+function insertCashier(db, fullName, username, passwordHash) {
   try {
     const result = db
       .prepare(`INSERT INTO users (full_name, username, password_hash, role) VALUES (?, ?, ?, 'cashier')`)
-      .run(fullName.trim(), username.trim(), passwordHash);
+      .run(fullName, username, passwordHash);
 
     queueUserSync(db, result.lastInsertRowid, 'insert');
     return { success: true, id: result.lastInsertRowid };
@@ -440,13 +437,6 @@ function getSessionDetail(sessionId) {
 }
 
 function registerUsersIpc() {
-  ipcMain.handle('users:has-any-user', () => hasAnyUser());
-  ipcMain.handle('users:has-admin-user', () => hasAdminUser());
-
-  ipcMain.handle('users:create-first-admin', (event, { fullName, username, password } = {}) =>
-    createFirstAdmin(fullName, username, password)
-  );
-
   ipcMain.handle('users:login', (event, { username, password } = {}) => login(username, password));
 
   ipcMain.handle('users:verify-password', (event, { userId, password } = {}) => verifyPassword(userId, password));
@@ -472,4 +462,4 @@ function registerUsersIpc() {
   ipcMain.handle('sessions:get-detail', (event, { id } = {}) => getSessionDetail(id));
 }
 
-module.exports = { registerUsersIpc, seedDummyCashier };
+module.exports = { registerUsersIpc, seedDummyCashier, createFirstAdmin, insertCashier, hasAdminUser, SALT_ROUNDS };

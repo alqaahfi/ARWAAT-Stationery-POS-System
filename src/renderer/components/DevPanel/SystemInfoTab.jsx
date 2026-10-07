@@ -22,8 +22,8 @@ export default function SystemInfoTab() {
   const rows = [
     ['App version', info.appVersion],
     ['Station code', info.stationCode || '—'],
-    ['Machine ID', info.machineId || '—'],
-    ['License', info.license.activated ? `activated — ${info.license.role} — ${info.license.shopName || '—'} (since ${info.license.activatedAt})` : 'not activated'],
+    ['Station ID', info.stationId || '—'],
+    ['Setup', info.setup.configured ? `${info.setup.role} — ${info.setup.shopName || '—'} (since ${info.setup.configuredAt})` : 'not set up'],
     ['Database path', info.dbPath],
     ['Database size', formatBytes(info.dbSizeBytes)],
     ['Electron', info.electronVersion],

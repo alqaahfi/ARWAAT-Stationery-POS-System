@@ -10,6 +10,7 @@ const os = require('os');
 const fs = require('fs');
 const { app, ipcMain } = require('electron');
 const { getDb, getDbPath } = require('../db/connection');
+const { getStationId } = require('../setup/stationIdentity');
 
 // ---------------- shared helpers ----------------
 
@@ -165,7 +166,7 @@ function runSelectQuery({ query } = {}) {
 
 function getUsersAndSessions() {
   const db = getDb();
-  const activation = db.prepare('SELECT station_code FROM license_activation WHERE id = 1').get();
+  const activation = db.prepare('SELECT station_code FROM station_config WHERE id = 1').get();
   const stationCode = activation?.station_code || null;
 
   const users = db.prepare('SELECT * FROM users ORDER BY (role != \'admin\'), full_name').all().map((u) => maskRow(u, 'users'));
@@ -195,7 +196,7 @@ function getUsersAndSessions() {
 
 function getSystemInfo() {
   const db = getDb();
-  const activation = db.prepare('SELECT * FROM license_activation WHERE id = 1').get();
+  const activation = db.prepare('SELECT * FROM station_config WHERE id = 1').get();
   const dbPath = getDbPath();
 
   let dbSizeBytes = null;
@@ -207,11 +208,11 @@ function getSystemInfo() {
 
   return {
     appVersion: app.getVersion(),
-    machineId: activation?.machine_id || null,
+    stationId: getStationId(),
     stationCode: activation?.station_code || null,
-    license: activation
-      ? { activated: true, role: activation.role, shopName: activation.shop_name, activatedAt: activation.activated_at }
-      : { activated: false },
+    setup: activation
+      ? { configured: true, role: activation.role, shopName: activation.shop_name, configuredAt: activation.created_at }
+      : { configured: false },
     dbPath,
     dbSizeBytes,
     electronVersion: process.versions.electron,
@@ -250,7 +251,7 @@ function verifyPassword(password, stationCode) {
 }
 
 function getStationCode() {
-  const row = getDb().prepare('SELECT station_code FROM license_activation WHERE id = 1').get();
+  const row = getDb().prepare('SELECT station_code FROM station_config WHERE id = 1').get();
   return row?.station_code || null;
 }
 

@@ -17,17 +17,13 @@ function invoke(channel, ...args) {
 contextBridge.exposeInMainWorld('api', {
   ping: () => invoke('ping'),
 
-  license: {
-    getMachineId: () => invoke('license:get-machine-id'),
-    getStatus: () => invoke('license:get-status'),
-    activateAdmin: (data) => invoke('license:activate-admin', data),
-    activateCashier: (data) => invoke('license:activate-cashier', data),
+  setup: {
+    getStatus: () => invoke('setup:get-status'),
+    createAdmin: (data) => invoke('setup:create-admin', data),
+    joinAsCashier: (data) => invoke('setup:join-as-cashier', data),
   },
 
   users: {
-    hasAnyUser: () => invoke('users:has-any-user'),
-    hasAdminUser: () => invoke('users:has-admin-user'),
-    createFirstAdmin: (data) => invoke('users:create-first-admin', data),
     login: (data) => invoke('users:login', data),
     validateSession: (data) => invoke('users:validate-session', data),
     logout: (data) => invoke('users:logout', data),

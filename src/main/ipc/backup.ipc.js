@@ -22,6 +22,21 @@ async function exportBackup() {
   }
 }
 
+// A backup may have come from another PC, and two PCs must never share a sync
+// identity — drop the restored file's station id so the next boot mints a new one.
+// (A backup from before migration 035 has no settings row to drop; harmless.)
+function forgetRestoredStationId(dbPath) {
+  let restored;
+  try {
+    restored = new Database(dbPath);
+    restored.prepare(`DELETE FROM settings WHERE key = 'station_id'`).run();
+  } catch {
+    // Not fatal: worst case this PC keeps the backup's id.
+  } finally {
+    if (restored) restored.close();
+  }
+}
+
 // Electron can't safely swap out a locked SQLite file and reconnect without a
 // restart — this closes the connection, replaces the file, and leaves the DB
 // closed on success (the renderer prompts for a "Restart Now"). On failure
@@ -41,6 +56,7 @@ function swapDatabaseFile(srcPath) {
         // Fine if it doesn't exist.
       }
     }
+    forgetRestoredStationId(dbPath);
     return { success: true };
   } catch (err) {
     initDatabase();
@@ -60,17 +76,19 @@ async function restoreBackup() {
 }
 
 // Opens the selected file read-only and checks it has the tables a real
-// backup of this app would have, before letting SetupAdmin commit to
-// overwriting the fresh (pre-activation) database with it.
+// backup of this app would have, before letting the Setup screen commit to
+// overwriting the fresh (not yet set up) database with it.
 function isValidBackupFile(filePath) {
   let testDb;
   try {
     testDb = new Database(filePath, { readonly: true, fileMustExist: true });
+    // station_config is the current name; license_activation is what backups
+    // taken before migration 035 call the same table.
     const tables = testDb
-      .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('license_activation', 'users')`)
+      .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('station_config', 'license_activation', 'users')`)
       .all()
       .map((r) => r.name);
-    return tables.length === 2;
+    return tables.includes('users') && (tables.includes('station_config') || tables.includes('license_activation'));
   } catch {
     return false;
   } finally {
@@ -83,9 +101,9 @@ function relaunchApp() {
   app.exit();
 }
 
-// Used from Setup (pre-activation): validates the chosen file looks like a
+// Used from Setup (before this PC is set up): validates the chosen file looks like a
 // real backup of this app before swapping it in, then relaunches straight
-// away — the restored file already carries its own license_activation row
+// away — the restored file already carries its own station_config row
 // and user accounts, so the app boots to the normal Login screen next time.
 async function validateAndRestoreBackup() {
   const result = await dialog.showOpenDialog({

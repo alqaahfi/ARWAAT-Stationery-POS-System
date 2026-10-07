@@ -8,7 +8,7 @@
 // never data.
 const dgram = require('dgram');
 const { getDb } = require('../db/connection');
-const { getMachineId } = require('../license/machineId');
+const { getStationId } = require('../setup/stationIdentity');
 
 const UDP_PORT = 41234;
 const BROADCAST_ADDRESS = '255.255.255.255';
@@ -70,7 +70,7 @@ function handleMessage(buf, rinfo) {
   } catch {
     return; // not our packet — ignore
   }
-  if (!msg || !msg.machineId || msg.machineId === getMachineId()) return;
+  if (!msg || !msg.machineId || msg.machineId === getStationId()) return;
 
   const peer = {
     machineId: msg.machineId,
@@ -87,9 +87,9 @@ function handleMessage(buf, rinfo) {
 function getSelfBroadcastPayload(tcpPort) {
   try {
     const db = getDb();
-    const activation = db.prepare('SELECT station_code, role FROM license_activation WHERE id = 1').get();
+    const activation = db.prepare('SELECT station_code, role FROM station_config WHERE id = 1').get();
     if (!activation) return null; // not set up yet — nothing meaningful to announce, but we still listen
-    return JSON.stringify({ machineId: getMachineId(), stationCode: activation.station_code, role: activation.role, tcpPort });
+    return JSON.stringify({ machineId: getStationId(), stationCode: activation.station_code, role: activation.role, tcpPort });
   } catch {
     return null;
   }

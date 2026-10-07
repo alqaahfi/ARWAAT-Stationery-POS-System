@@ -128,7 +128,7 @@ function getRevenueTrend(days) {
 // ever contain sessions created from this PC).
 function getActiveSessions() {
   const db = getDb();
-  const activation = db.prepare('SELECT station_code FROM license_activation WHERE id = 1').get();
+  const activation = db.prepare('SELECT station_code FROM station_config WHERE id = 1').get();
   const stationCode = activation?.station_code || null;
 
   const rows = db

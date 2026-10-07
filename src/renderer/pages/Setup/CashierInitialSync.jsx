@@ -6,9 +6,9 @@ import SetupShell from './SetupShell';
 
 const c = theme.colors;
 
-// Shown once, right after SetupCashier.jsx saves the shared secret and
-// station code — a brand-new Cashier PC has no user accounts yet, so Login
-// can't work until it's pulled real data from Admin at least once. Polls
+// Shown once, right after Setup.jsx has registered this counter PC with the
+// Admin — a brand-new Cashier PC has no user accounts yet, so Login can't
+// work until it's pulled real data from Admin at least once. Polls
 // discovery for a peer, then forces an immediate sync (not the normal
 // 15-30s timer) and only hands off to Login once that's actually succeeded.
 // See Step 6 of the sync design doc.
@@ -76,8 +76,6 @@ export default function CashierInitialSync({ onDone }) {
   if (status === 'timeout') {
     return (
       <SetupShell
-        step={4}
-        totalSteps={4}
         stepKey="timeout"
         title="Couldn't find the main computer yet"
         onSubmit={() => setAttempt((a) => a + 1)}
@@ -89,7 +87,7 @@ export default function CashierInitialSync({ onDone }) {
       >
         <ul role="alert" style={styles.checklist}>
           <li>Is the main computer turned on? Are both computers on the same WiFi?</li>
-          <li>If this keeps happening, double-check the Connection Code.</li>
+          <li>If this keeps happening, ask the Admin to check that the main computer is open.</li>
         </ul>
       </SetupShell>
     );
@@ -99,7 +97,7 @@ export default function CashierInitialSync({ onDone }) {
   const active = PROGRESS[status];
 
   return (
-    <SetupShell step={4} totalSteps={4} stepKey="connecting" title={done ? 'All set' : 'Connecting to the main computer…'}>
+    <SetupShell stepKey="connecting" title={done ? 'All set' : 'Connecting to the main computer…'}>
       <span aria-live="polite" style={styles.srOnly}>
         {done ? 'All set' : LINES[active]}
       </span>

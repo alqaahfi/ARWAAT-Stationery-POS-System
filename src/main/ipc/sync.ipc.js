@@ -5,7 +5,7 @@ const { syncWithAllKnownPeers, syncWithPeer } = require('../sync/syncEngine');
 
 function getStatus() {
   const db = getDb();
-  const activation = db.prepare('SELECT * FROM license_activation WHERE id = 1').get();
+  const activation = db.prepare('SELECT * FROM station_config WHERE id = 1').get();
   const outboxCount = db.prepare('SELECT COUNT(*) AS c FROM sync_outbox').get().c;
   const lastSync = db.prepare('SELECT * FROM sync_log ORDER BY created_at DESC LIMIT 1').get() || null;
 
@@ -15,7 +15,7 @@ function getStatus() {
           role: activation.role,
           stationCode: activation.station_code || null,
           shopName: activation.shop_name,
-          activatedAt: activation.activated_at,
+          configuredAt: activation.created_at,
         }
       : null,
     outboxCount,
@@ -88,7 +88,7 @@ function getReconciliationWarnings() {
 }
 
 function getSecret() {
-  const row = getDb().prepare('SELECT sync_secret FROM license_activation WHERE id = 1').get();
+  const row = getDb().prepare('SELECT sync_secret FROM station_config WHERE id = 1').get();
   return row ? row.sync_secret : null;
 }
 

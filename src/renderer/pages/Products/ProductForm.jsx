@@ -58,6 +58,7 @@ export default function ProductForm({ productId, onDone, onCancel }) {
   const [nameError, setNameError] = useState('');
   const [searchAlias, setSearchAlias] = useState('');
   const [autoUrduBusy, setAutoUrduBusy] = useState(false);
+  const [urduWords, setUrduWords] = useState([]);
   const [sku, setSku] = useState('');
   const [skuError, setSkuError] = useState('');
   const [skuChecking, setSkuChecking] = useState(false);
@@ -488,6 +489,7 @@ export default function ProductForm({ productId, onDone, onCancel }) {
       }
       setSearchAlias(roman);
       setName(res.urdu);
+      setUrduWords(res.words || []);
       setNameError('');
       toast.info(`Urdu name from: ${res.source}`);
     } catch (err) {
@@ -509,7 +511,7 @@ export default function ProductForm({ productId, onDone, onCancel }) {
         updateType(index, { translating: false });
         return;
       }
-      updateType(index, { searchAlias: roman, variantName: res.urdu, translating: false });
+      updateType(index, { searchAlias: roman, variantName: res.urdu, urduWords: res.words || [], translating: false });
       toast.info(`Urdu name from: ${res.source}`);
     } catch (err) {
       toast.error('Could not get the Urdu name.');
@@ -530,6 +532,7 @@ export default function ProductForm({ productId, onDone, onCancel }) {
             if (v.trim()) setNameError('');
           }}
           nameError={nameError}
+          urduWords={urduWords}
           searchAlias={searchAlias}
           onSearchAliasChange={setSearchAlias}
           onAutoUrdu={autoUrduName}

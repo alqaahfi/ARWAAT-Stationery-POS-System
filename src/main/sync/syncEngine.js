@@ -6,7 +6,7 @@
 // timer and after local writes (see syncTrigger.js) — see Step 5 of the sync
 // design doc.
 const { getDb } = require('../db/connection');
-const { getMachineId } = require('../license/machineId');
+const { getStationId } = require('../setup/stationIdentity');
 const { SYNC_TABLES } = require('./syncSchema');
 const { encodeRow } = require('./recordCodec');
 const { applyRecords } = require('./applyIncoming');
@@ -20,8 +20,8 @@ const REQUEST_TIMEOUT_MS = 10000;
 let debounceTimer = null;
 let periodicTimer = null;
 
-function getActivation(db) {
-  return db.prepare('SELECT station_code, role, sync_secret FROM license_activation WHERE id = 1').get() || null;
+function getStationConfig(db) {
+  return db.prepare('SELECT station_code, role, sync_secret FROM station_config WHERE id = 1').get() || null;
 }
 
 // Reads local sync_outbox rows newer than `sinceOutboxId`, deduped to the
@@ -109,8 +109,8 @@ function upsertPeerState(db, peer, { pushedThrough, pulledThrough, ip }) {
 // never blocks syncing with the rest.
 async function syncWithPeer(peer) {
   const db = getDb();
-  const activation = getActivation(db);
-  if (!activation) throw new Error('This PC is not activated yet.');
+  const activation = getStationConfig(db);
+  if (!activation) throw new Error('This PC is not set up yet.');
 
   const peerRow = db.prepare('SELECT * FROM sync_peer_state WHERE peer_machine_id = ?').get(peer.machineId) || {
     last_synced_outbox_id: 0,
@@ -127,7 +127,7 @@ async function syncWithPeer(peer) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Sync-Secret': activation.sync_secret || '' },
       body: JSON.stringify({
-        fromMachineId: getMachineId(),
+        fromMachineId: getStationId(),
         fromStationCode: activation.station_code,
         fromRole: activation.role,
         sinceOutboxId: peerRow.last_received_outbox_id,
@@ -161,7 +161,7 @@ async function syncWithPeer(peer) {
 // machine id, tolerating individual failures so one offline peer never
 // blocks the rest — see Step 5.
 async function syncWithAllKnownPeers() {
-  const selfId = getMachineId();
+  const selfId = getStationId();
   const peers = getKnownPeers().filter((p) => p.machineId !== selfId && p.ip);
   const results = [];
   for (const peer of peers) {
