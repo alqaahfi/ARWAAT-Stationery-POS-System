@@ -1,4 +1,4 @@
-const { ipcMain } = require('electron');
+const { ipcMain, net } = require('electron');
 const { getDb } = require('../db/connection');
 const ProductModel = require('../db/models/Product');
 
@@ -61,6 +61,12 @@ function tradeFields(u) {
   ];
 }
 
+// Hidden Roman-English search alias: trimmed, blank -> NULL.
+function cleanAlias(alias) {
+  const v = typeof alias === 'string' ? alias.trim() : '';
+  return v || null;
+}
+
 function isSkuTaken(db, sku, excludeId) {
   if (!sku) return false;
   const row = excludeId
@@ -93,7 +99,7 @@ const SORT_COLUMNS = {
 // status is computed identically everywhere.
 function buildFilteredQuery() {
   return `
-    SELECT p.id, p.name, p.sku, p.company_name, p.base_unit_name, p.min_stock_alert, p.dead_stock_days,
+    SELECT p.id, p.name, p.search_alias, p.sku, p.company_name, p.base_unit_name, p.min_stock_alert, p.dead_stock_days,
            p.is_active, p.category_id, p.created_at, p.updated_at,
            c.name AS category_name,
            COALESCE(SUM(pv.stock_qty), 0) AS total_stock,
@@ -104,7 +110,7 @@ function buildFilteredQuery() {
     FROM products p
     LEFT JOIN categories c ON c.id = p.category_id
     LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1
-    WHERE (@likeTerm IS NULL OR p.name LIKE @likeTerm OR p.sku LIKE @likeTerm)
+    WHERE (@likeTerm IS NULL OR p.name LIKE @likeTerm OR p.search_alias LIKE @likeTerm OR p.sku LIKE @likeTerm)
       AND (@categoryId IS NULL OR p.category_id = @categoryId)
       AND (
         @activeFilter = 'all'
@@ -186,7 +192,7 @@ function getById(id) {
 function create(payload) {
   const db = getDb();
   const {
-    name, sku, companyName, categoryId, supplierId, baseUnitName, isActive, notes,
+    name, searchAlias, sku, companyName, categoryId, supplierId, baseUnitName, isActive, notes,
     minStockAlert, deadStockDays, pricingType, defaultPercentage, isAgencyItem,
     variants, units, standardStartingStock, standardBarcode,
   } = payload;
@@ -207,13 +213,14 @@ function create(payload) {
     const productResult = db
       .prepare(
         `INSERT INTO products
-           (name, sku, company_name, category_id, supplier_id, base_unit_name, min_stock_alert,
+           (name, search_alias, sku, company_name, category_id, supplier_id, base_unit_name, min_stock_alert,
             dead_stock_days, pricing_type, default_percentage, is_agency_item, notes, is_active)
-         VALUES (@name, @sku, @companyName, @categoryId, @supplierId, @baseUnitName, @minStockAlert,
+         VALUES (@name, @searchAlias, @sku, @companyName, @categoryId, @supplierId, @baseUnitName, @minStockAlert,
                  @deadStockDays, @pricingType, @defaultPercentage, @isAgencyItem, @notes, @isActive)`
       )
       .run({
         name: name.trim(),
+        searchAlias: cleanAlias(searchAlias),
         sku: sku || null,
         companyName: companyName || null,
         categoryId: categoryId || null,
@@ -293,7 +300,7 @@ function create(payload) {
 function update(payload) {
   const db = getDb();
   const {
-    id, name, sku, companyName, categoryId, supplierId, baseUnitName, isActive, notes,
+    id, name, searchAlias, sku, companyName, categoryId, supplierId, baseUnitName, isActive, notes,
     minStockAlert, deadStockDays, pricingType, defaultPercentage,
     variants, units, standardStartingStock, standardBarcode, standardVariantId,
   } = payload;
@@ -315,13 +322,13 @@ function update(payload) {
   // barcode, not products.sku) — so `sku` simply isn't in its payload. Don't
   // let that silently null out a value a product already has (e.g. from
   // bulk import); only overwrite it when a caller explicitly sends one.
-  const existingProduct = db.prepare('SELECT sku FROM products WHERE id = ?').get(id);
+  const existingProduct = db.prepare('SELECT sku, search_alias FROM products WHERE id = ?').get(id);
   const resolvedSku = sku !== undefined ? sku || null : existingProduct ? existingProduct.sku : null;
 
   const run = db.transaction(() => {
     db.prepare(
       `UPDATE products SET
-         name = @name, sku = @sku, company_name = @companyName, category_id = @categoryId, supplier_id = @supplierId,
+         name = @name, search_alias = @searchAlias, sku = @sku, company_name = @companyName, category_id = @categoryId, supplier_id = @supplierId,
          base_unit_name = @baseUnitName, min_stock_alert = @minStockAlert, dead_stock_days = @deadStockDays,
          pricing_type = @pricingType, default_percentage = @defaultPercentage,
          notes = @notes, is_active = @isActive, updated_at = datetime('now')
@@ -329,6 +336,8 @@ function update(payload) {
     ).run({
       id,
       name: name.trim(),
+      // Callers that don't send an alias (older code paths) keep what is stored.
+      searchAlias: searchAlias !== undefined ? cleanAlias(searchAlias) : existingProduct ? existingProduct.search_alias : null,
       sku: resolvedSku,
       companyName: companyName || null,
       categoryId: categoryId || null,
@@ -503,7 +512,58 @@ function bulkSetCategory({ ids, categoryId }) {
   return { success: true };
 }
 
+// ---------- Urdu transliteration (free public APIs, no key) ----------
+
+async function fetchJson(url) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 6000);
+  try {
+    const res = await net.fetch(url, { signal: ctrl.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Fallback: Google Input Tools, phonetic Roman -> Urdu script ("qalam" -> "قلم").
+async function viaInputTools(text) {
+  const data = await fetchJson(
+    `https://inputtools.google.com/request?text=${encodeURIComponent(text)}&itc=ur-t-i0-und&num=1&cp=0&cs=1&ie=utf-8&oe=utf-8&app=pos`
+  );
+  if (!Array.isArray(data) || data[0] !== 'SUCCESS') throw new Error('No result');
+  // Each space-separated word comes back as its own segment.
+  const out = (data[1] || []).map((seg) => (seg[1] && seg[1][0]) || seg[0]).join(' ').trim();
+  if (!out) throw new Error('Empty result');
+  return out;
+}
+
+// Primary: Google Translate's free endpoint, English -> Urdu.
+async function viaTranslate(text) {
+  const data = await fetchJson(
+    `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ur&dt=t&q=${encodeURIComponent(text)}`
+  );
+  const out = ((data && data[0]) || []).map((seg) => seg[0]).join('').trim();
+  if (!out) throw new Error('Empty result');
+  return out;
+}
+
+async function transliterateToUrdu(text) {
+  const input = typeof text === 'string' ? text.trim().slice(0, 200) : '';
+  if (!input) return { success: false, reason: 'Type a name first.' };
+  if (/[\u0600-\u06FF]/.test(input)) return { success: false, reason: 'That name is already in Urdu.' };
+  for (const attempt of [viaTranslate, viaInputTools]) {
+    try {
+      return { success: true, urdu: await attempt(input) };
+    } catch (err) {
+      // try the next service
+    }
+  }
+  return { success: false, reason: 'Could not reach the translation service. Check the internet connection, or type the Urdu name yourself.' };
+}
+
 function registerProductsIpc() {
+  ipcMain.handle('products:transliterate-urdu', (event, { text } = {}) => transliterateToUrdu(text));
   ipcMain.handle('products:list', (event, filters) => list(filters || {}));
   ipcMain.handle('products:get-by-id', (event, { id } = {}) => getById(id));
   ipcMain.handle('products:create', (event, payload) => create(payload || {}));

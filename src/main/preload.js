@@ -68,6 +68,7 @@ contextBridge.exposeInMainWorld('api', {
   products: {
     list: (data) => invoke('products:list', data),
     getById: (data) => invoke('products:get-by-id', data),
+    transliterateUrdu: (data) => invoke('products:transliterate-urdu', data),
     create: (data) => invoke('products:create', data),
     update: (data) => invoke('products:update', data),
     setActive: (data) => invoke('products:set-active', data),

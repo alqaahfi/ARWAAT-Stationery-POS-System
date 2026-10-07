@@ -21,11 +21,11 @@ function search(query) {
        FROM products p
        LEFT JOIN categories c ON c.id = p.category_id
        LEFT JOIN product_variants pv ON pv.product_id = p.id
-       WHERE p.is_active = 1 AND (p.name LIKE ? OR p.sku LIKE ? OR pv.barcode LIKE ?)
+       WHERE p.is_active = 1 AND (p.name LIKE ? OR p.search_alias LIKE ? OR p.sku LIKE ? OR pv.barcode LIKE ?)
        ORDER BY p.name
        LIMIT ${RESULTS_PER_TYPE}`
     )
-    .all(like, like, like);
+    .all(like, like, like, like);
 
   const customerRows = db
     .prepare(

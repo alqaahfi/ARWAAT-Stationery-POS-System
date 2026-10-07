@@ -1,7 +1,7 @@
 import React from 'react';
 import theme from '../../../config/theme';
 import glossary from '../../../config/glossary';
-import { Field, SegmentedControl, Select, TextInput } from '../../../components/ui';
+import { Button, Field, SegmentedControl, Select, TextInput } from '../../../components/ui';
 import { formatCount } from '../../../utils/format';
 import { CheckedInput, NumInput, SectionCard, grid } from './fields';
 
@@ -9,7 +9,10 @@ const c = theme.colors;
 
 // Step 1 — what kind of product is this, and what is it called? The choice
 // decides which of the sections below appear.
-export function KindAndNameSection({ kind, onKindChange, isEdit, name, onNameChange, nameError }) {
+export function KindAndNameSection({
+  kind, onKindChange, isEdit, name, onNameChange, nameError,
+  searchAlias, onSearchAliasChange, onAutoUrdu, autoUrduBusy,
+}) {
   return (
     <SectionCard title="What are you adding?">
       <SegmentedControl
@@ -27,8 +30,28 @@ export function KindAndNameSection({ kind, onKindChange, isEdit, name, onNameCha
           ? 'One item with a single barcode and stock count.'
           : 'One name with several colours or sizes. Each Type has its own barcode and stock.'}
       </div>
-      <Field label="Name" required error={nameError} style={{ marginBottom: 0 }}>
-        <TextInput value={name} onChange={(e) => onNameChange(e.target.value)} autoFocus={!isEdit} placeholder="e.g. Blue Gel Pen" />
+      <Field label="Name" required error={nameError} hint="Shown on screen and on receipts. Type in English, then tap Auto Urdu Name." style={{ marginBottom: theme.spacing.md }}>
+        <div style={{ display: 'flex', gap: theme.spacing.sm, alignItems: 'stretch' }}>
+          <TextInput
+            dir="auto"
+            value={name}
+            onChange={(e) => onNameChange(e.target.value)}
+            autoFocus={!isEdit}
+            placeholder="e.g. Blue Gel Pen"
+            style={{ flex: 1, minWidth: 0 }}
+          />
+          <Button variant="tinted" size="md" loading={autoUrduBusy} disabled={!name.trim()} onClick={onAutoUrdu} style={{ flexShrink: 0 }}>
+            Auto Urdu Name
+          </Button>
+        </div>
+      </Field>
+      <Field label="Search spelling (English)" hint="Cashiers can find this item by typing this. Not printed anywhere." style={{ marginBottom: 0 }}>
+        <TextInput
+          value={searchAlias}
+          onChange={(e) => onSearchAliasChange(e.target.value)}
+          placeholder="e.g. Blue Gel Pen"
+          style={{ background: c.fill }}
+        />
       </Field>
     </SectionCard>
   );

@@ -91,7 +91,7 @@ function getMovements(filters = {}) {
          AND (@movementType IS NULL OR sm.movement_type = @movementType)
          AND (@dateFrom IS NULL OR date(sm.created_at) >= date(@dateFrom))
          AND (@dateTo IS NULL OR date(sm.created_at) <= date(@dateTo))
-         AND (@likeTerm IS NULL OR p.name LIKE @likeTerm OR p.sku LIKE @likeTerm)
+         AND (@likeTerm IS NULL OR p.name LIKE @likeTerm OR p.search_alias LIKE @likeTerm OR p.sku LIKE @likeTerm)
        ORDER BY sm.created_at DESC, sm.id DESC
        LIMIT ${MOVEMENT_ROW_LIMIT}`
     )

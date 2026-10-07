@@ -56,6 +56,8 @@ export default function ProductForm({ productId, onDone, onCancel }) {
 
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState('');
+  const [searchAlias, setSearchAlias] = useState('');
+  const [autoUrduBusy, setAutoUrduBusy] = useState(false);
   const [sku, setSku] = useState('');
   const [skuError, setSkuError] = useState('');
   const [skuChecking, setSkuChecking] = useState(false);
@@ -96,6 +98,7 @@ export default function ProductForm({ productId, onDone, onCancel }) {
             return;
           }
           setName(p.name);
+          setSearchAlias(p.search_alias || '');
           setSku(p.sku || '');
           setCompany(p.company_name || '');
           setCategoryId(p.category_id || '');
@@ -385,6 +388,7 @@ export default function ProductForm({ productId, onDone, onCancel }) {
 
       const payload = {
         name: name.trim(),
+        searchAlias: searchAlias.trim() || null,
         sku: sku.trim() || null,
         companyName: company.trim() || null,
         categoryId: categoryId ? Number(categoryId) : null,
@@ -468,6 +472,28 @@ export default function ProductForm({ productId, onDone, onCancel }) {
     );
   }
 
+  // Roman/English name -> Urdu script. The typed text becomes the hidden search
+  // spelling and the Urdu becomes the display name; both stay editable.
+  const autoUrduName = async () => {
+    const roman = name.trim();
+    if (!roman || autoUrduBusy) return;
+    setAutoUrduBusy(true);
+    try {
+      const res = await window.api.products.transliterateUrdu({ text: roman });
+      if (!res || !res.success) {
+        toast.error((res && res.reason) || 'Could not get the Urdu name.');
+        return;
+      }
+      setSearchAlias(roman);
+      setName(res.urdu);
+      setNameError('');
+    } catch (err) {
+      toast.error('Could not get the Urdu name.');
+    } finally {
+      setAutoUrduBusy(false);
+    }
+  };
+
   return (
     <div ref={formRef} data-product-form="" style={styles.page}>
       <div style={styles.column}>
@@ -481,6 +507,10 @@ export default function ProductForm({ productId, onDone, onCancel }) {
             if (v.trim()) setNameError('');
           }}
           nameError={nameError}
+          searchAlias={searchAlias}
+          onSearchAliasChange={setSearchAlias}
+          onAutoUrdu={autoUrduName}
+          autoUrduBusy={autoUrduBusy}
         />
 
         {hasTypes ? (
