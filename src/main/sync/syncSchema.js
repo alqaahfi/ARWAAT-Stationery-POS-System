@@ -64,7 +64,7 @@ const SYNC_TABLES = {
   suppliers: {
     kind: 'upsert',
     // mobile, email, joining_date sync like any other column.
-    fks: {},
+    fks: { assigned_letterhead_id: { table: 'letterheads', nullable: true } },
   },
   users: {
     kind: 'upsert',

@@ -1,7 +1,7 @@
 const { BrowserWindow } = require('electron');
 const path = require('path');
 const { getDb } = require('../db/connection');
-const { buildInvoicePdf } = require('./printA4Invoice');
+const { buildInvoicePdf, buildPurchasePdf } = require('./printA4Invoice');
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -80,4 +80,19 @@ async function previewSale({ saleId, printType, showDues }) {
   }
 }
 
-module.exports = { previewSale };
+// Same preview for a supplier purchase: always A4 (letterhead or plain fallback).
+async function previewPurchase({ purchaseId }) {
+  if (!purchaseId) return { success: false, reason: 'Missing purchase id.' };
+  try {
+    const built = await buildPurchasePdf({ purchaseId });
+    if (!built.success) return built;
+    const bytes = built.fallback
+      ? await renderViewToPdf(`?print=1&printMode=purchase-fallback&purchaseId=${encodeURIComponent(purchaseId)}`, null)
+      : built.pdfBytes;
+    return { success: true, format: 'a4', pdfBase64: Buffer.from(bytes).toString('base64'), invoiceNo: built.sale.invoice_no };
+  } catch (err) {
+    return { success: false, reason: err.message || 'Could not build the print preview.' };
+  }
+}
+
+module.exports = { previewSale, previewPurchase };

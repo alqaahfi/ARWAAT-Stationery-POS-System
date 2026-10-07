@@ -5,15 +5,16 @@ import { formatCurrency } from '../../utils/format';
 import { CustomerToolbar, NoCustomers, customerBadges, customerColumns, customerSubline } from './parts/CustomerListParts';
 import { PartyCards, usePartyViewMode } from '../Parties/PartyViews';
 import { ListSummary, LoadError, NoMatch, RestrictedNotice } from '../Parties/PartyParts';
+import useRememberedState from '../../utils/useRememberedState';
 
 export default function CustomerList({ onNavigate }) {
   const { user } = useAuth();
   const toast = useToast();
 
   const [customers, setCustomers] = useState([]);
-  const [tierFilter, setTierFilter] = useState('');
-  const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
+  const [tierFilter, setTierFilter] = useRememberedState('customers.tierFilter', '');
+  const [search, setSearch] = useRememberedState('customers.search', '');
+  const [typeFilter, setTypeFilter] = useRememberedState('customers.typeFilter', '');
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [viewMode, setViewMode] = usePartyViewMode('pos_customer_view_mode');

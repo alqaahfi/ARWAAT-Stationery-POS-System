@@ -34,7 +34,7 @@ function getById(id) {
   const db = getDb();
   return db
     .prepare(
-      `SELECT id, name, contact_person, phone, mobile, email, joining_date, address, notes, opening_balance, is_active
+      `SELECT id, name, contact_person, phone, mobile, email, joining_date, address, notes, opening_balance, is_active, assigned_letterhead_id
        FROM suppliers WHERE id = ?`
     )
     .get(id);
@@ -48,14 +48,14 @@ function todayLocal() {
 
 function create(payload) {
   const db = getDb();
-  const { name, contactPerson, phone, mobile, email, joiningDate, address, notes, openingBalance } = payload;
+  const { name, contactPerson, phone, mobile, email, joiningDate, address, notes, openingBalance, assignedLetterheadId } = payload;
 
   if (!name || !name.trim()) return { success: false, reason: 'Supplier name is required.' };
 
   const result = db
     .prepare(
-      `INSERT INTO suppliers (name, contact_person, phone, mobile, email, joining_date, address, notes, opening_balance)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO suppliers (name, contact_person, phone, mobile, email, joining_date, address, notes, opening_balance, assigned_letterhead_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       name.trim(),
@@ -66,7 +66,8 @@ function create(payload) {
       joiningDate || todayLocal(),
       address || null,
       notes || null,
-      Number(openingBalance) || 0
+      Number(openingBalance) || 0,
+      assignedLetterheadId || null
     );
 
   return { success: true, id: result.lastInsertRowid };
@@ -76,13 +77,13 @@ function create(payload) {
 // Customer Form (adjust via a payment/purchase instead).
 function update(payload) {
   const db = getDb();
-  const { id, name, contactPerson, phone, mobile, email, joiningDate, address, notes } = payload;
+  const { id, name, contactPerson, phone, mobile, email, joiningDate, address, notes, assignedLetterheadId } = payload;
 
   if (!id) return { success: false, reason: 'Missing supplier id.' };
   if (!name || !name.trim()) return { success: false, reason: 'Supplier name is required.' };
 
   db.prepare(
-    `UPDATE suppliers SET name = ?, contact_person = ?, phone = ?, mobile = ?, email = ?, joining_date = ?, address = ?, notes = ? WHERE id = ?`
+    `UPDATE suppliers SET name = ?, contact_person = ?, phone = ?, mobile = ?, email = ?, joining_date = ?, address = ?, notes = ?, assigned_letterhead_id = ? WHERE id = ?`
   ).run(
     name.trim(),
     contactPerson || null,
@@ -92,6 +93,7 @@ function update(payload) {
     joiningDate || null,
     address || null,
     notes || null,
+    assignedLetterheadId || null,
     id
   );
 
@@ -148,6 +150,7 @@ function getLedger(supplierId) {
     ...payments.map((p) => ({
       date: p.created_at,
       type: 'payment',
+      paymentId: p.id,
       label: 'Paid',
       reference: p.payment_method,
       note: p.note,

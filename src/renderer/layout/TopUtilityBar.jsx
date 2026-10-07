@@ -8,6 +8,7 @@ import { Badge, Icon, IconButton, Kbd, Menu, MenuItem, Popover } from '../compon
 import useInteraction from '../components/kit/useInteraction';
 import { SyncChip } from './ShellParts';
 import useAlerts, { ALERT_TYPES } from './useAlerts';
+import { HeaderClock, LockButton } from './LockScreen';
 
 const c = theme.colors;
 
@@ -25,7 +26,9 @@ export default function TopUtilityBar({ title, back, onNavigate, onOpenSearch })
       </div>
 
       <div style={styles.right}>
+        <HeaderClock />
         {isAdmin && <SearchTrigger onClick={onOpenSearch} />}
+        <LockButton />
         <SyncChip onNavigate={onNavigate} />
         {isAdmin && <AlertsBell onNavigate={onNavigate} />}
         {isAdmin && <QuickAdd onNavigate={onNavigate} hasPermission={hasPermission} />}

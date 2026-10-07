@@ -110,6 +110,10 @@ function remove(id) {
   if (count > 0) {
     return { success: false, reason: `${count} customer${count === 1 ? '' : 's'} still ${count === 1 ? 'has' : 'have'} this letterhead assigned — reassign or clear it first.` };
   }
+  const { count: supplierCount } = db.prepare('SELECT COUNT(*) AS count FROM suppliers WHERE assigned_letterhead_id = ?').get(id);
+  if (supplierCount > 0) {
+    return { success: false, reason: `${supplierCount} supplier${supplierCount === 1 ? '' : 's'} still ${supplierCount === 1 ? 'has' : 'have'} this letterhead assigned — reassign or clear it first.` };
+  }
 
   const row = db.prepare('SELECT pdf_template_path FROM letterheads WHERE id = ?').get(id);
   db.prepare('DELETE FROM letterheads WHERE id = ?').run(id);

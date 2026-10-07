@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import appIcons from '../config/appIcons';
 import glossary from '../config/glossary';
 import { SALE_COMPLETED_EVENT } from '../pages/POS/Sale';
+import { STOCK_CHANGED_EVENT } from '../utils/appEvents';
 
 const REFRESH_INTERVAL_MS = 60000;
 
@@ -35,10 +36,12 @@ export default function useAlerts() {
     refresh();
     const interval = setInterval(refresh, REFRESH_INTERVAL_MS);
     window.addEventListener(SALE_COMPLETED_EVENT, refresh);
+    window.addEventListener(STOCK_CHANGED_EVENT, refresh);
     return () => {
       alive = false;
       clearInterval(interval);
       window.removeEventListener(SALE_COMPLETED_EVENT, refresh);
+      window.removeEventListener(STOCK_CHANGED_EVENT, refresh);
     };
   }, []);
   return counts;

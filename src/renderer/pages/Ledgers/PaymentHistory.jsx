@@ -5,12 +5,14 @@ import { LoadError, RestrictedNotice } from '../Parties/PartyParts';
 import { PageIntro, TableCard, ledgerPage } from './parts/LedgerParts';
 import { PaymentsEmpty, PaymentsToolbar, paymentColumns } from './parts/PaymentsParts';
 import { openAccount } from './parts/ledgerUtils';
+import useDeletePayment from '../../utils/useDeletePayment';
 
 // Route: /ledgers/payments. One log across customer and supplier payments,
 // with filters and receipt reprints.
 export default function PaymentHistory({ onNavigate }) {
   const { user } = useAuth();
   const toast = useToast();
+  const deletePayment = useDeletePayment();
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -78,10 +80,15 @@ export default function PaymentHistory({ onNavigate }) {
     }
   }
 
+  async function remove(row) {
+    const gone = await deletePayment({ paymentId: row.id, amount: row.amount, partyName: row.party_name });
+    if (gone) load();
+  }
+
   const hasRecordedBy = rows.some((r) => r.recorded_by_name);
   const rowIndex = useMemo(() => new Map(rows.map((r, i) => [r.id, i])), [rows]);
   const columns = useMemo(
-    () => paymentColumns({ hasRecordedBy, menuId, onMenu: setMenuId, onPrint: reprint, rowIndex }),
+    () => paymentColumns({ hasRecordedBy, menuId, onMenu: setMenuId, onPrint: reprint, onDelete: remove, rowIndex }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [hasRecordedBy, menuId, rowIndex]
   );

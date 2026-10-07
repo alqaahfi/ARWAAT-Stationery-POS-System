@@ -18,7 +18,8 @@ function base64ToBlobUrl(base64) {
 // opens, so nothing here ever voids, deletes or edits it.
 //   printType: 'wholesale-a4' | 'retail-thermal'
 //   onPrinted(result): called after a successful physical print
-export default function PrintPreviewModal({ saleId, printType, showDues, onClose, onPrinted }) {
+export default function PrintPreviewModal({ saleId, purchaseId, printType, showDues, onClose, onPrinted }) {
+  const isPurchase = !!purchaseId; // supplier purchase receipt: always an A4 letterhead page
   const toast = useToast();
   const [state, setState] = useState({ loading: true, error: null, doc: null });
   const [busy, setBusy] = useState(null); // 'print' | 'save'
@@ -29,8 +30,10 @@ export default function PrintPreviewModal({ saleId, printType, showDues, onClose
     let cancelled = false;
     let objectUrl = null;
     setState({ loading: true, error: null, doc: null });
-    window.api.printing
-      .previewSale({ saleId, printType, showDues })
+    const request = isPurchase
+      ? window.api.printing.previewPurchase({ purchaseId })
+      : window.api.printing.previewSale({ saleId, printType, showDues });
+    request
       .then((res) => {
         if (cancelled) return;
         if (!res?.success) {
@@ -48,16 +51,16 @@ export default function PrintPreviewModal({ saleId, printType, showDues, onClose
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [saleId, printType, showDues]);
+  }, [saleId, purchaseId, isPurchase, printType, showDues]);
 
   const { doc } = state;
-  const isThermal = printType !== 'wholesale-a4';
+  const isThermal = !isPurchase && printType !== 'wholesale-a4';
 
   async function handlePrint() {
     setBusy('print');
     setActionError('');
     try {
-      const res = await window.api.printing.printSale({ saleId, printType, showDues });
+      const res = isPurchase ? await window.api.printing.printPurchase({ purchaseId }) : await window.api.printing.printSale({ saleId, printType, showDues });
       if (res?.success) {
         toast.success('Sent to the printer');
         onPrinted?.(res);
@@ -79,7 +82,7 @@ export default function PrintPreviewModal({ saleId, printType, showDues, onClose
     try {
       const res = await window.api.printing.savePdf({
         pdfBase64: doc.pdfBase64,
-        defaultName: doc.invoiceNo ? `invoice-${doc.invoiceNo}` : `receipt-${saleId}`,
+        defaultName: doc.invoiceNo ? `${isPurchase ? 'purchase' : 'invoice'}-${doc.invoiceNo}` : `receipt-${saleId || purchaseId}`,
       });
       if (res?.success) toast.success('Saved as PDF');
       else if (!res?.canceled) setActionError(res?.reason || 'Could not save the PDF.');
@@ -97,7 +100,7 @@ export default function PrintPreviewModal({ saleId, printType, showDues, onClose
       onClose={busy ? undefined : onClose}
       dismissible={!busy}
       title="Print preview"
-      subtitle={isThermal ? 'Receipt' : 'A4 invoice'}
+      subtitle={isThermal ? 'Receipt' : isPurchase ? 'A4 purchase receipt' : 'A4 invoice'}
       width={isThermal ? 440 : 860}
       footer={
         <>

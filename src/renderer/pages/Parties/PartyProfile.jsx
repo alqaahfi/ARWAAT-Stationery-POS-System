@@ -13,6 +13,7 @@ import { TypeBadge } from '../Customers/parts/CustomerListParts';
 import { PartyHeader, contactLine } from './PartyHeader';
 import { RecentActivityCard } from './RecentActivityCard';
 import { RestrictedNotice } from './PartyParts';
+import useDeletePayment from '../../utils/useDeletePayment';
 
 const c = theme.colors;
 
@@ -22,6 +23,7 @@ const c = theme.colors;
 // Payment right in the header. A small pencil button opens the edit form.
 export default function PartyProfile({ party, partyId, onNavigate }) {
   const { user } = useAuth();
+  const deletePayment = useDeletePayment();
   const isCustomer = party === 'customer';
   const api = isCustomer ? window.api.customers : window.api.suppliers;
   const [record, setRecord] = useState(null);
@@ -174,6 +176,9 @@ export default function PartyProfile({ party, partyId, onNavigate }) {
             loading={ledger.loading}
             error={ledger.error}
             onRetry={loadLedger}
+            onDeletePayment={async (row) => {
+              if (await deletePayment({ paymentId: row.paymentId, amount: row.credit, partyName: record.name })) loadLedger();
+            }}
             onSeeAll={() => onNavigate(ledgerRoute, { id: partyId, name: record.name })}
           />
         </div>

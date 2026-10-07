@@ -10,12 +10,14 @@ import { LoadError } from '../../Parties/PartyParts';
 import AccountList from './AccountList';
 import TransactionTimeline from './TransactionTimeline';
 import { AccountSkeleton, ledgerPage } from './LedgerParts';
+import useDeletePayment from '../../../utils/useDeletePayment';
 
 const c = theme.colors;
 
 // One layout for Customer Accounts and Supplier Accounts. No party chosen ->
 // the picker; otherwise the account header and its full timeline.
 export function AccountView({ party, picking, onPick, loading, error, onRetry, data, name, badges, contact, onPay, onChooseAnother, onNavigate }) {
+  const deletePayment = useDeletePayment();
   const isSupplier = party === 'supplier';
   const noun = isSupplier ? 'supplier' : 'customer';
   const listLabel = isSupplier ? glossary.supplierAccounts : glossary.customerAccounts;
@@ -60,7 +62,14 @@ export function AccountView({ party, picking, onPick, loading, error, onRetry, d
         />
         <Card padding="0" style={{ overflow: 'hidden' }}>
           <h2 style={{ ...theme.type.headline, color: c.label, margin: 0, padding: `14px ${theme.spacing.md}` }}>Transactions</h2>
-          <TransactionTimeline rows={data.transactions} openingBalance={data.openingBalance} openingDate={data.openingDate} />
+          <TransactionTimeline
+            rows={data.transactions}
+            openingBalance={data.openingBalance}
+            openingDate={data.openingDate}
+            onDeletePayment={async (row) => {
+              if (await deletePayment({ paymentId: row.paymentId, amount: row.credit, partyName: name })) onRetry?.();
+            }}
+          />
         </Card>
       </>
     );

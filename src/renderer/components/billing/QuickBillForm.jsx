@@ -53,6 +53,8 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
+  // A saved purchase opens its A4 receipt preview before the overlay closes.
+  const [purchasePreviewId, setPurchasePreviewId] = useState(null);
   const [receiptPreview, setReceiptPreview] = useState(null);
   const [focusKey, setFocusKey] = useState(null);
   // Product with several Types picked: { detail, unit, price, types } while its quantities are being typed.
@@ -342,7 +344,8 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
     }
     toast.success('Purchase saved');
     onSaved?.(res);
-    onClose?.();
+    if (res.purchaseId) setPurchasePreviewId(res.purchaseId);
+    else onClose?.();
   }
 
   async function saveSale() {
@@ -450,7 +453,7 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
 
   const handlerRef = useRef(null);
   handlerRef.current = (e) => {
-    if (showPreview) return; // the print preview window owns the keyboard
+    if (showPreview || purchasePreviewId) return; // the print preview window owns the keyboard
     if (done) {
       if (e.key === 'Enter' || e.key === 'Escape') {
         e.preventDefault();
@@ -575,6 +578,15 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
           onRetry={() => setShowPreview(true)}
           onClose={() => onClose?.()}
           closeLabel="Done"
+        />
+      )}
+      {purchasePreviewId && (
+        <PrintPreviewModal
+          purchaseId={purchasePreviewId}
+          onClose={() => {
+            setPurchasePreviewId(null);
+            onClose?.();
+          }}
         />
       )}
       {done && showPreview && (

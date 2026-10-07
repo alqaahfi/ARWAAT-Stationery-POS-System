@@ -8,6 +8,7 @@ import { formatCurrency } from '../../../utils/format';
 import { PartyNameCell, RowChevron, LoadError, NoMatch, ListSummary, listToolbar } from '../../Parties/PartyParts';
 import { PartyCards, PartyViewToggle, usePartyViewMode } from '../../Parties/PartyViews';
 import { TypeBadge } from '../../Customers/parts/CustomerListParts';
+import useRememberedState from '../../../utils/useRememberedState';
 
 const c = theme.colors;
 
@@ -28,10 +29,10 @@ export default function AccountList({ party, onPick }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('name');
-  const [sortDir, setSortDir] = useState('asc');
+  const [search, setSearch] = useRememberedState(`accounts.${party}.search`, '');
+  const [filter, setFilter] = useRememberedState(`accounts.${party}.filter`, 'all');
+  const [sortBy, setSortBy] = useRememberedState(`accounts.${party}.sortBy`, 'name');
+  const [sortDir, setSortDir] = useRememberedState(`accounts.${party}.sortDir`, 'asc');
   const [viewMode, setViewMode] = usePartyViewMode(isSupplier ? 'pos_supplier_account_view_mode' : 'pos_customer_account_view_mode');
 
   const load = useCallback(async () => {

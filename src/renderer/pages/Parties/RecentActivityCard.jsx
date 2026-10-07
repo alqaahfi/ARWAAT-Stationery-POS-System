@@ -1,8 +1,8 @@
 import React, { memo } from 'react';
-import { History } from 'lucide-react';
+import { History, Trash2 } from 'lucide-react';
 import theme from '../../config/theme';
 import glossary from '../../config/glossary';
-import { Button, Card, EmptyState, Skeleton } from '../../components/ui';
+import { Button, Card, EmptyState, IconButton, Skeleton } from '../../components/ui';
 import { formatCurrency, formatDateOnly } from '../../utils/format';
 import { LoadError } from './PartyParts';
 import { returnNote } from '../Ledgers/parts/TransactionTimeline';
@@ -23,7 +23,7 @@ function describe(row) {
 
 // The newest five account entries from the existing ledger handler (which
 // returns them oldest first), with a link to the full account page.
-export function RecentActivityCard({ rows, loading, error, onRetry, onSeeAll }) {
+export function RecentActivityCard({ rows, loading, error, onRetry, onSeeAll, onDeletePayment }) {
   let body;
   if (loading) {
     body = (
@@ -42,7 +42,7 @@ export function RecentActivityCard({ rows, loading, error, onRetry, onSeeAll }) 
     body = (
       <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
         {recent.map((row, i) => (
-          <ActivityRow key={`${row.sortKey || row.date}-${i}`} row={row} first={i === 0} />
+          <ActivityRow key={`${row.sortKey || row.date}-${i}`} row={row} first={i === 0} onDeletePayment={onDeletePayment} />
         ))}
       </ul>
     );
@@ -79,7 +79,7 @@ function amountText(row) {
   return { text: formatCurrency(row.debit || -row.credit), color: c.label };
 }
 
-const ActivityRow = memo(function ActivityRow({ row, first }) {
+const ActivityRow = memo(function ActivityRow({ row, first, onDeletePayment }) {
   const amount = amountText(row);
   const note = row.type === 'adjustment' ? row.reason || row.note : row.type === 'return' ? returnNote(row) : row.note;
   return (
@@ -107,6 +107,9 @@ const ActivityRow = memo(function ActivityRow({ row, first }) {
           <div style={{ ...theme.type.footnote, color: c.labelSecondary }}>Balance {formatCurrency(row.runningBalance)}</div>
         )}
       </div>
+      {onDeletePayment && row.type === 'payment' && row.paymentId && (
+        <IconButton icon={Trash2} tone="danger" size="sm" label="Delete this payment" onClick={() => onDeletePayment(row)} />
+      )}
     </li>
   );
 });

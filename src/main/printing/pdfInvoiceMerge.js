@@ -24,6 +24,8 @@ function formatDate(sqliteDateTime) {
 // outstandingBalance }. Returns the merged PDF as a Uint8Array.
 async function buildMergedInvoicePdf({ templatePath, data, settings, marginTopMm, marginBottomMm }) {
   const { sale, showDues, outstandingBalance } = data;
+  // Purchase receipts reuse this layout with their own wording.
+  const labels = { party: 'BILL TO', details: 'INVOICE DETAILS', number: 'Invoice No', by: 'Cashier', outstanding: 'Total Outstanding Balance', ...(data.labels || {}) };
   const currency = settings.currency_symbol || 'Rs.';
   const money = (n) => `${currency}${Number(n || 0).toFixed(2)}`;
 
@@ -118,11 +120,11 @@ async function buildMergedInvoicePdf({ templatePath, data, settings, marginTopMm
     const rightColX = midX + 10;
     let ly = boxTop - 16;
 
-    text('BILL TO', leftX, ly, { size: 8, bold: true, color: MUTED_COLOR });
-    text('INVOICE DETAILS', rightColX, ly, { size: 8, bold: true, color: MUTED_COLOR });
+    text(labels.party, leftX, ly, { size: 8, bold: true, color: MUTED_COLOR });
+    text(labels.details, rightColX, ly, { size: 8, bold: true, color: MUTED_COLOR });
     ly -= lineH;
     text(sale.customer_name || 'Walk-in Customer', leftX, ly, { size: 11, bold: true, maxWidth: midX - leftX - 10 });
-    text(`Invoice No: ${sale.invoice_no}`, rightColX, ly, { size: 9 });
+    text(`${labels.number}: ${sale.invoice_no}`, rightColX, ly, { size: 9 });
     ly -= lineH;
     text(sale.customer_phone || '—', leftX, ly, { size: 9, color: MUTED_COLOR });
     text(`Date & Time: ${formatDate(sale.created_at)}`, rightColX, ly, { size: 9 });
@@ -130,7 +132,7 @@ async function buildMergedInvoicePdf({ templatePath, data, settings, marginTopMm
     if (sale.customer_address) {
       text(sale.customer_address, leftX, ly, { size: 9, color: MUTED_COLOR, maxWidth: midX - leftX - 10 });
     }
-    text(`Cashier: ${sale.cashier_name}`, rightColX, ly, { size: 9 });
+    text(`${labels.by}: ${sale.cashier_name}`, rightColX, ly, { size: 9 });
 
     y = boxBottom - 18;
   }
@@ -185,7 +187,7 @@ async function buildMergedInvoicePdf({ templatePath, data, settings, marginTopMm
     if (group.variantText) {
       text(group.variantText, x0 + 6, firstLineY - subLineExtra, { size: 8, color: MUTED_COLOR, maxWidth: x1 - x0 - 10 });
     }
-    text(`${group.quantity} ${group.unit_name}`, x1 + 6, firstLineY, { size: 9, maxWidth: x2 - x1 - 10 });
+    text(group.quantityText || `${group.quantity} ${group.unit_name}`, x1 + 6, firstLineY, { size: 9, maxWidth: x2 - x1 - 10 });
     text(money(group.unit_price), x3 - 6, firstLineY, { size: 9, align: 'right' });
     text(money(group.line_total), x4 - 6, firstLineY, { size: 9, align: 'right' });
 
@@ -222,7 +224,7 @@ async function buildMergedInvoicePdf({ templatePath, data, settings, marginTopMm
   if (sale.balance_due > 0) totalsRows.push({ label: 'Balance Due', value: sale.balance_due, bold: true });
   if (showDues) {
     totalsRows.push({
-      label: 'Total Outstanding Balance',
+      label: labels.outstanding,
       value: outstandingBalance,
       bold: true,
       color: outstandingBalance < 0 ? rgb(0.02, 0.4, 0.6) : TEXT_COLOR,

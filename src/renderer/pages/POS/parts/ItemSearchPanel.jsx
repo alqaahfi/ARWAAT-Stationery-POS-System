@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useEffect } from 'react';
 import theme from '../../../config/theme';
 import { formatCount, formatCurrency } from '../../../utils/format';
 import { Kbd } from '../../../components/ui';
@@ -24,6 +24,10 @@ export default function ItemSearchPanel({
   actions,
 }) {
   const open = results.length > 0;
+  // Keep the arrow-key highlight visible inside the scrolling list.
+  useEffect(() => {
+    if (open) document.getElementById(optId(highlight))?.scrollIntoView({ block: 'nearest' });
+  }, [highlight, open, results]);
   return (
     <>
       <PanelTitle

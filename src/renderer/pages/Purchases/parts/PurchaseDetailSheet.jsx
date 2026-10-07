@@ -1,15 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { CircleAlert } from 'lucide-react';
+import { CircleAlert, Printer } from 'lucide-react';
 import theme from '../../../config/theme';
 import { Badge, Button, DataTable, EmptyState, Modal, Skeleton } from '../../../components/ui';
 import { formatCount, formatCurrencyExact } from '../../../utils/format';
 import { formatLocalDateTime } from '../../Sales/parts/saleLabels';
+import PrintPreviewModal from '../../../components/receipt/PrintPreviewModal';
 
 const c = theme.colors;
 
 // Read-only view of one purchase: what came in, what it cost, what was paid.
 export function PurchaseDetailSheet({ purchaseId, userId, onClose, onOpenSupplier }) {
   const [state, setState] = useState({ loading: true, error: false, data: null });
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,6 +58,11 @@ export function PurchaseDetailSheet({ purchaseId, userId, onClose, onOpenSupplie
       footer={
         <>
           {p && (
+            <Button variant="secondary" icon={Printer} onClick={() => setPreviewOpen(true)}>
+              Print A4
+            </Button>
+          )}
+          {p && (
             <Button variant="plain" onClick={() => onOpenSupplier({ id: p.supplier_id, name: p.supplier_name })}>
               Open supplier
             </Button>
@@ -84,6 +91,7 @@ export function PurchaseDetailSheet({ purchaseId, userId, onClose, onOpenSupplie
           </div>
         </>
       )}
+      {previewOpen && <PrintPreviewModal purchaseId={purchaseId} onClose={() => setPreviewOpen(false)} />}
     </Modal>
   );
 }

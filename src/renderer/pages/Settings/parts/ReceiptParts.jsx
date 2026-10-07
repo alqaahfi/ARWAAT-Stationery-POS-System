@@ -57,7 +57,7 @@ export function ReceiptPreview({ headerText, footerText, paperWidth }) {
           padding: '14px',
           backgroundColor: c.surface,
           color: c.label,
-          fontFamily: theme.font.mono,
+          fontFamily: theme.font.family,
           fontSize: '12px',
           lineHeight: 1.6,
           borderTop: edge,

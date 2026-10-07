@@ -1,45 +1,45 @@
 import React from 'react';
 import theme from '../../../config/theme';
 import glossary from '../../../config/glossary';
-import { Button, Field, Select, TextInput } from '../../../components/ui';
+import { Field, SegmentedControl, Select, TextInput } from '../../../components/ui';
 import { formatCount } from '../../../utils/format';
 import { CheckedInput, NumInput, SectionCard, grid } from './fields';
 
 const c = theme.colors;
 
-// Section 1 — always open. Barcode + starting stock live here only while the
-// product is a single item (zero Types).
-export function BasicsSection({
-  hasTypes,
-  isEdit,
-  topVariant,
-  onTopBarcodeChange,
-  onCheckTopBarcode,
-  standardStartingStock,
-  onStandardStartingStockChange,
-  baseUnitName,
-  name,
-  onNameChange,
-  nameError,
-  company,
-  onCompanyChange,
-  categories,
-  categoryId,
-  onCategoryChange,
-  suppliers,
-  supplierId,
-  onSupplierChange,
-  sku,
-  onSkuChange,
-  onCheckSku,
-  skuChecking,
-  skuError,
-  onFixStock,
-}) {
+// Step 1 — what kind of product is this, and what is it called? The choice
+// decides which of the sections below appear.
+export function KindAndNameSection({ kind, onKindChange, isEdit, name, onNameChange, nameError }) {
   return (
-    <SectionCard title="Basics">
-      {!hasTypes && (
-        <Field label="Barcode" hint={topVariant.barcodeError ? undefined : 'Optional. Scan it or type it in.'} error={topVariant.barcodeError}>
+    <SectionCard title="What are you adding?">
+      <SegmentedControl
+        label="Kind of product"
+        fullWidth
+        value={kind}
+        onChange={onKindChange}
+        options={[
+          { value: 'simple', label: 'Simple Product' },
+          { value: 'types', label: 'Product with Types' },
+        ]}
+      />
+      <div style={{ ...theme.type.footnote, color: c.labelSecondary, margin: `${theme.spacing.sm} 0 ${theme.spacing.md}` }}>
+        {kind === 'simple'
+          ? 'One item with a single barcode and stock count.'
+          : 'One name with several colours or sizes. Each Type has its own barcode and stock.'}
+      </div>
+      <Field label="Name" required error={nameError} style={{ marginBottom: 0 }}>
+        <TextInput value={name} onChange={(e) => onNameChange(e.target.value)} autoFocus={!isEdit} placeholder="e.g. Blue Gel Pen" />
+      </Field>
+    </SectionCard>
+  );
+}
+
+// Simple products only — the one barcode and the starting stock.
+export function SimpleStockSection({ topVariant, onTopBarcodeChange, onCheckTopBarcode, standardStartingStock, onStandardStartingStockChange, baseUnitName }) {
+  return (
+    <SectionCard title="Barcode and stock">
+      <div style={grid(240)}>
+        <Field label="Barcode" hint={topVariant.barcodeError ? undefined : 'Optional. Scan it or type it in.'} error={topVariant.barcodeError} style={{ marginBottom: 0 }}>
           <CheckedInput
             scanner
             value={topVariant.barcode}
@@ -50,12 +50,29 @@ export function BasicsSection({
             aria-invalid={!!topVariant.barcodeError}
           />
         </Field>
-      )}
+        {topVariant.id ? (
+          <Field label="In stock" hint="Change stock from the Stock page." style={{ marginBottom: 0 }}>
+            <div style={{ ...theme.type.body, ...theme.font.numeric, fontWeight: theme.font.weightSemibold, minHeight: theme.control.input, display: 'flex', alignItems: 'center' }}>
+              {formatCount(topVariant.stockQty)} {baseUnitName}
+            </div>
+          </Field>
+        ) : (
+          <Field label={glossary.startingStock} hint="How many you have right now." style={{ marginBottom: 0 }}>
+            <NumInput allowDecimal={false} value={standardStartingStock} onChange={onStandardStartingStockChange} />
+          </Field>
+        )}
+      </div>
+    </SectionCard>
+  );
+}
 
-      <Field label="Name" required error={nameError}>
-        <TextInput value={name} onChange={(e) => onNameChange(e.target.value)} autoFocus={!isEdit} placeholder="e.g. Blue Gel Pen" />
-      </Field>
-
+// Brand, category, supplier and item code.
+export function DetailsSection({
+  company, onCompanyChange, categories, categoryId, onCategoryChange, suppliers, supplierId, onSupplierChange,
+  sku, onSkuChange, onCheckSku, skuChecking, skuError,
+}) {
+  return (
+    <SectionCard title="Details">
       <div style={grid(220)}>
         <Field label="Brand">
           <TextInput value={company} onChange={(e) => onCompanyChange(e.target.value)} placeholder="e.g. Dollar, Piano" />
@@ -92,25 +109,6 @@ export function BasicsSection({
           />
         </Field>
       </div>
-
-      {!hasTypes &&
-        (topVariant.id ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.smd, ...theme.type.body }}>
-            <span style={{ color: c.labelSecondary }}>In stock:</span>
-            <span style={{ ...theme.font.numeric, fontWeight: theme.font.weightSemibold }}>
-              {formatCount(topVariant.stockQty)} {baseUnitName}
-            </span>
-            {onFixStock && (
-              <Button variant="plain" size="sm" onClick={onFixStock}>
-                {glossary.fixStockCount}
-              </Button>
-            )}
-          </div>
-        ) : (
-          <Field label={glossary.startingStock} hint="You can change stock later with Fix Stock Count." style={{ maxWidth: '240px', marginBottom: 0 }}>
-            <NumInput allowDecimal={false} value={standardStartingStock} onChange={onStandardStartingStockChange} />
-          </Field>
-        ))}
     </SectionCard>
   );
 }

@@ -9,6 +9,7 @@ import { ProductToolbar, StatusChips } from './list/ProductToolbar';
 import { ProductCards, ProductTable, SkeletonRows } from './list/ProductRows';
 import { BulkBar } from './list/BulkBar';
 import { statusLabel } from './list/StatusBadges';
+import useRememberedState from '../../utils/useRememberedState';
 
 const VIEW_MODE_KEY = 'pos_product_view_mode';
 const SORT_PREFS_KEY = 'pos_product_sort_prefs';
@@ -40,12 +41,12 @@ export default function ProductList({ onNavigate }) {
   const [viewMode, setViewMode] = useState(() => localStorage.getItem(VIEW_MODE_KEY) || 'list');
   const [sortPrefs, setSortPrefs] = useState(loadSortPrefs);
 
-  const [search, setSearch] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [lowStockOnly, setLowStockOnly] = useState(false);
-  const [deadStockOnly, setDeadStockOnly] = useState(false);
-  const [outOfStockOnly, setOutOfStockOnly] = useState(false);
-  const [activeFilter, setActiveFilter] = useState('all');
+  const [search, setSearch] = useRememberedState('productList.search', '');
+  const [categoryId, setCategoryId] = useRememberedState('productList.categoryId', '');
+  const [lowStockOnly, setLowStockOnly] = useRememberedState('productList.lowStockOnly', false);
+  const [deadStockOnly, setDeadStockOnly] = useRememberedState('productList.deadStockOnly', false);
+  const [outOfStockOnly, setOutOfStockOnly] = useRememberedState('productList.outOfStockOnly', false);
+  const [activeFilter, setActiveFilter] = useRememberedState('productList.activeFilter', 'all');
 
   const [categories, setCategories] = useState([]);
   const [data, setData] = useState({ rows: [], counts: { all: 0, lowStock: 0, deadStock: 0, outOfStock: 0 } });

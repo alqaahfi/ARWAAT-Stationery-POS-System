@@ -10,6 +10,7 @@ import { SalesToolbar } from './parts/SalesToolbar';
 import { SalesTable, SummaryStrip } from './parts/SalesTable';
 import { SaleDetailSheet } from './parts/SaleDetailSheet';
 import QuickSaleOverlay from '../../components/billing/QuickSaleOverlay';
+import useRememberedState from '../../utils/useRememberedState';
 
 const c = theme.colors;
 const PAGE_SIZE = 50;
@@ -24,15 +25,15 @@ export default function SalesHistory({ onNavigate, saleId: initialSaleId }) {
   const isAdmin = user.role === 'admin';
   const canSell = hasPermission('make_sale');
 
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
-  const [range, setRange] = useState(todayRange);
-  const [status, setStatus] = useState('all');
-  const [saleType, setSaleType] = useState('all');
-  const [cashierId, setCashierId] = useState('');
+  const [searchInput, setSearchInput] = useRememberedState('salesHistory.searchInput', '');
+  const [search, setSearch] = useRememberedState('salesHistory.search', '');
+  const [range, setRange] = useRememberedState('salesHistory.range', todayRange);
+  const [status, setStatus] = useRememberedState('salesHistory.status', 'all');
+  const [saleType, setSaleType] = useRememberedState('salesHistory.saleType', 'all');
+  const [cashierId, setCashierId] = useRememberedState('salesHistory.cashierId', '');
   const [cashiers, setCashiers] = useState([]);
-  const [sortBy, setSortBy] = useState('date');
-  const [sortDir, setSortDir] = useState('desc');
+  const [sortBy, setSortBy] = useRememberedState('salesHistory.sortBy', 'date');
+  const [sortDir, setSortDir] = useRememberedState('salesHistory.sortDir', 'desc');
   const [newSaleOpen, setNewSaleOpen] = useState(false);
 
   const [result, setResult] = useState({ rows: [], total: 0, totals: { sumTotal: 0, sumBalanceDue: 0 }, hasMore: false });

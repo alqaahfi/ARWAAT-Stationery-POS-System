@@ -1,4 +1,5 @@
-import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { restoreScroll } from '../../utils/scrollRestore';
 import { useAuth } from '../../context/AuthContext';
 import Sidebar from '../../layout/Sidebar';
 import TopUtilityBar from '../../layout/TopUtilityBar';
@@ -15,8 +16,6 @@ import LowStock from '../Products/LowStock';
 import DeadStock from '../Products/DeadStock';
 import BulkImport from '../Products/BulkImport';
 import PurchaseHistory from '../Purchases/PurchaseHistory';
-import StockAdjustment from '../Products/StockAdjustment';
-import MovementHistory from '../Products/MovementHistory';
 import ProductProfile from '../Products/ProductProfile';
 import StockList from '../Stock/StockList';
 import StockHistory from '../Stock/StockHistory';
@@ -81,8 +80,24 @@ export default function AdminDashboard() {
       const proceed = window.confirm("You have an unfinished sale — leave anyway? It'll be saved as a draft.");
       if (!proceed) return;
     }
+    // Remember where this page was scrolled; coming back to it from one of its
+    // own detail pages (same section) puts it back there.
+    const from = getSectionForRoute(nav.route);
+    const to = getSectionForRoute(route);
+    scrollMemory.current[nav.route] = mainRef.current?.scrollTop || 0;
+    restoreTarget.current = from?.page && to && from.section === to.section ? scrollMemory.current[route] || 0 : 0;
     setNav({ route, params });
   }
+
+  const mainRef = useRef(null);
+  const scrollMemory = useRef({});
+  const restoreTarget = useRef(0);
+  useLayoutEffect(() => {
+    const top = restoreTarget.current;
+    restoreTarget.current = 0;
+    if (!top) return undefined;
+    return restoreScroll(mainRef.current, top);
+  }, [nav.route]);
 
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -155,10 +170,6 @@ export default function AdminDashboard() {
         return <BulkImport onNavigate={navigate} onDone={() => navigate('/products')} />;
       case '/products/purchases':
         return <PurchaseHistory onNavigate={navigate} />;
-      case '/products/stock-adjustments':
-        return <StockAdjustment productId={nav.params.productId} />;
-      case '/products/stock-movements':
-        return <MovementHistory productId={nav.params.productId} />;
 
       case '/customers':
         return <CustomerList onNavigate={navigate} />;
@@ -288,7 +299,7 @@ export default function AdminDashboard() {
       <div style={styles.main}>
         <TopUtilityBar title={pageTitle()} back={back} onNavigate={navigate} onOpenSearch={() => setSearchOpen(true)} />
 
-        <main style={nav.route === '/pos' ? styles.posContent : styles.content}>
+        <main ref={mainRef} style={nav.route === '/pos' ? styles.posContent : styles.content}>
           <SectionTabs route={nav.route} onNavigate={navigate} />
           {renderContent()}
         </main>

@@ -30,8 +30,9 @@ export function getKeyHints(stage, ctx) {
       }
       return [
         ...(hasQuery ? [[['Enter'], 'Add']] : []),
-        ...(cartCount > 0 ? [[['↑'], 'Edit items']] : []),
+        ...(cartCount > 0 && !hasQuery ? [[['↑', '↓'], 'Edit items']] : []),
         [['Tab'], 'Next: Discount'],
+        [['Ctrl', '←', '→'], 'Change step'],
         [['Esc'], 'Cancel sale'],
       ];
     case 'qty':
@@ -40,7 +41,7 @@ export function getKeyHints(stage, ctx) {
       if (editingLine) return [[['Enter'], 'Save quantity'], [['Tab'], 'Quantity / Free'], [['Esc'], 'Cancel change']];
       return [
         [['↑', '↓'], 'Choose'],
-        [['Enter'], 'Change quantity'],
+        [['Enter', '/', 'E'], 'Change quantity'],
         [['Delete'], 'Remove'],
         [['Ctrl', 'Z'], 'Undo'],
         [['Esc'], 'Back to items'],

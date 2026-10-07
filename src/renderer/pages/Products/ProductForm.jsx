@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { PackageX } from 'lucide-react';
 import { Button, Card, EmptyState, Skeleton, useConfirm, useToast } from '../../components/ui';
 import theme from '../../config/theme';
-import { BasicsSection, StockAlertsSection } from './form/BasicsSection';
+import { DetailsSection, KindAndNameSection, SimpleStockSection, StockAlertsSection } from './form/BasicsSection';
 import { PackSizesSection } from './form/PackSizesSection';
 import { SpecialPricesSection } from './form/SpecialPricesSection';
 import { TypesSection } from './form/TypesSection';
@@ -40,7 +40,7 @@ const emptyType = () => ({ variantName: '', barcode: '', barcodeError: '', start
 const BARCODE_TAKEN = 'This barcode is already used by another item.';
 const BARCODE_TWICE = 'This barcode is used twice in this product.';
 
-export default function ProductForm({ productId, onDone, onCancel, onNavigate }) {
+export default function ProductForm({ productId, onDone, onCancel }) {
   const isEdit = !!productId;
   const toast = useToast();
   const confirm = useConfirm();
@@ -65,7 +65,6 @@ export default function ProductForm({ productId, onDone, onCancel, onNavigate })
   const [baseUnitName, setBaseUnitName] = useState('Piece');
   const [isActive, setIsActive] = useState(true);
   const [notes, setNotes] = useState('');
-  const [isAgencyItem, setIsAgencyItem] = useState(false);
 
   const [minStockAlert, setMinStockAlert] = useState(0);
   const [deadStockDays, setDeadStockDays] = useState('');
@@ -74,13 +73,14 @@ export default function ProductForm({ productId, onDone, onCancel, onNavigate })
   const [standardStartingStock, setStandardStartingStock] = useState(0);
 
   const [types, setTypes] = useState([]);
-  const [typesOpen, setTypesOpen] = useState(false);
   const [units, setUnits] = useState([{ ...emptyUnit(true), unitName: 'Piece' }]);
   const [unitsError, setUnitsError] = useState('');
   const [customUnitOpen, setCustomUnitOpen] = useState(false);
   const [customUnitName, setCustomUnitName] = useState('');
 
-  const hasTypes = types.length > 0;
+  // Simple Product or Product with Types — the first thing the form asks.
+  const [kind, setKind] = useState('simple');
+  const hasTypes = kind === 'types';
 
   useEffect(() => {
     window.api.categories.list().then(setCategories);
@@ -105,14 +105,15 @@ export default function ProductForm({ productId, onDone, onCancel, onNavigate })
           setNotes(p.notes || '');
           setMinStockAlert(p.min_stock_alert);
           setDeadStockDays(p.dead_stock_days ?? '');
-          setIsAgencyItem(!!p.is_agency_item);
 
           const isImplicitStandard = p.variants.length === 1 && p.variants[0].variant_name === 'Standard';
           if (isImplicitStandard) {
             const v = p.variants[0];
             setTopVariant({ id: v.id, barcode: v.barcode || '', barcodeError: '', stockQty: v.stock_qty });
             setTypes([]);
+            setKind('simple');
           } else {
+            setKind('types');
             setTopVariant({ id: null, barcode: '', barcodeError: '', stockQty: 0 });
             setTypes(
               p.variants.map((v) => ({
@@ -124,7 +125,6 @@ export default function ProductForm({ productId, onDone, onCancel, onNavigate })
                 startingStock: 0,
               }))
             );
-            setTypesOpen(true);
           }
 
           setUnits(
@@ -211,23 +211,40 @@ export default function ProductForm({ productId, onDone, onCancel, onNavigate })
 
   // ---------- Types ----------
 
-  function addType() {
-    setTypesOpen(true);
-    if (types.length === 0 && (topVariant.id || topVariant.barcode)) {
-      setTypes([
-        {
-          id: topVariant.id || undefined,
-          variantName: topVariant.id ? 'Standard' : '',
-          barcode: topVariant.barcode,
-          barcodeError: '',
-          stockQty: topVariant.stockQty,
-          startingStock: Number(standardStartingStock) || 0,
-        },
-      ]);
-      setTopVariant({ id: null, barcode: '', barcodeError: '', stockQty: 0 });
-    } else {
-      setTypes((prev) => [...prev, emptyType()]);
+  // Switching the toggle moves the barcode / starting stock between the single
+  // item fields and the first Type, so nothing typed is lost.
+  function changeKind(next) {
+    if (next === kind) return;
+    if (next === 'types') {
+      setKind('types');
+      if (types.length === 0) {
+        setTypes([
+          {
+            id: topVariant.id || undefined,
+            variantName: topVariant.id ? 'Standard' : '',
+            barcode: topVariant.barcode,
+            barcodeError: '',
+            stockQty: topVariant.stockQty,
+            startingStock: Number(standardStartingStock) || 0,
+          },
+        ]);
+        setTopVariant({ id: null, barcode: '', barcodeError: '', stockQty: 0 });
+      }
+      return;
     }
+    if (types.some((t) => t.id)) {
+      toast.info('Types that are already saved cannot be turned back into a simple product.');
+      return;
+    }
+    const first = types[0];
+    setTopVariant({ id: null, barcode: first?.barcode || '', barcodeError: '', stockQty: 0 });
+    setStandardStartingStock(Number(first?.startingStock) || 0);
+    setTypes([]);
+    setKind('simple');
+  }
+
+  function addType() {
+    setTypes((prev) => [...prev, emptyType()]);
   }
 
   function updateType(index, patch) {
@@ -245,12 +262,11 @@ export default function ProductForm({ productId, onDone, onCancel, onNavigate })
       });
       if (!ok) return;
     }
-    const next = types.filter((_, i) => i !== index);
-    setTypes(next);
-    if (next.length === 0) {
-      setTopVariant({ id: removed.id || null, barcode: removed.barcode || '', barcodeError: '', stockQty: removed.id ? removed.stockQty : 0 });
-      setStandardStartingStock(removed.id ? 0 : Number(removed.startingStock) || 0);
+    if (types.length <= 1) {
+      toast.info('A product with Types needs at least one Type.');
+      return;
     }
+    setTypes(types.filter((_, i) => i !== index));
   }
 
   // ---------- Pack sizes ----------
@@ -340,6 +356,7 @@ export default function ProductForm({ productId, onDone, onCancel, onNavigate })
       const unitsErr =
         units.length === 0 ? 'Add at least one pack size.' : units.some((u) => !u.unitName.trim()) ? 'Give every pack size a name.' : '';
       setUnitsError(unitsErr);
+      const typesErr = !hasTypes ? '' : types.length === 0 ? 'Add at least one Type.' : types.some((t) => !t.variantName.trim()) ? 'Give every Type a name.' : '';
 
       const [skuErr, topErr, typeErrs] = await Promise.all([
         checkSku(),
@@ -360,9 +377,8 @@ export default function ProductForm({ productId, onDone, onCancel, onNavigate })
         setTypes((prev) => prev.map((t, i) => ({ ...t, barcodeError: finalTypeErrs[i] ?? t.barcodeError })));
       }
 
-      if (nameErr || unitsErr || skuErr || topErr || finalTypeErrs.some(Boolean)) {
-        if (finalTypeErrs.some(Boolean)) setTypesOpen(true);
-        toast.error('Please check the highlighted fields');
+      if (nameErr || unitsErr || typesErr || skuErr || topErr || finalTypeErrs.some(Boolean)) {
+        toast.error(typesErr || 'Please check the highlighted fields');
         focusFirstInvalid();
         return;
       }
@@ -378,8 +394,7 @@ export default function ProductForm({ productId, onDone, onCancel, onNavigate })
         notes: notes.trim() || null,
         minStockAlert: Number(minStockAlert) || 0,
         deadStockDays: deadStockDays === '' ? null : Number(deadStockDays),
-        isAgencyItem,
-        variants: types.map((t) => ({
+        variants: (hasTypes ? types : []).map((t) => ({
           id: t.id,
           variantName: t.variantName.trim() || 'Standard',
           barcode: t.barcode.trim() || null,
@@ -426,8 +441,6 @@ export default function ProductForm({ productId, onDone, onCancel, onNavigate })
     }
   }
 
-  const goFixStock = onNavigate ? () => onNavigate('/products/stock-adjustments', { productId }) : undefined;
-
   if (loading) {
     return (
       <div style={styles.column}>
@@ -458,21 +471,40 @@ export default function ProductForm({ productId, onDone, onCancel, onNavigate })
   return (
     <div ref={formRef} data-product-form="" style={styles.page}>
       <div style={styles.column}>
-        <BasicsSection
-          hasTypes={hasTypes}
+        <KindAndNameSection
+          kind={kind}
+          onKindChange={changeKind}
           isEdit={isEdit}
-          topVariant={topVariant}
-          onTopBarcodeChange={(v) => setTopVariant((tv) => ({ ...tv, barcode: v, barcodeError: '' }))}
-          onCheckTopBarcode={checkTopBarcode}
-          standardStartingStock={standardStartingStock}
-          onStandardStartingStockChange={setStandardStartingStock}
-          baseUnitName={baseUnitName}
           name={name}
           onNameChange={(v) => {
             setName(v);
             if (v.trim()) setNameError('');
           }}
           nameError={nameError}
+        />
+
+        {hasTypes ? (
+          <TypesSection
+            types={types}
+            baseUnitName={baseUnitName}
+            showErrors={showErrors}
+            onAddType={addType}
+            onUpdateType={(index, patch) => updateType(index, 'barcode' in patch ? { ...patch, barcodeError: '' } : patch)}
+            onRemoveType={removeType}
+            onCheckBarcode={checkTypeBarcode}
+          />
+        ) : (
+          <SimpleStockSection
+            topVariant={topVariant}
+            onTopBarcodeChange={(v) => setTopVariant((tv) => ({ ...tv, barcode: v, barcodeError: '' }))}
+            onCheckTopBarcode={checkTopBarcode}
+            standardStartingStock={standardStartingStock}
+            onStandardStartingStockChange={setStandardStartingStock}
+            baseUnitName={baseUnitName}
+          />
+        )}
+
+        <DetailsSection
           company={company}
           onCompanyChange={setCompany}
           categories={categories}
@@ -489,7 +521,6 @@ export default function ProductForm({ productId, onDone, onCancel, onNavigate })
           onCheckSku={checkSku}
           skuChecking={skuChecking}
           skuError={skuError}
-          onFixStock={goFixStock}
         />
 
         <StockAlertsSection
@@ -523,22 +554,8 @@ export default function ProductForm({ productId, onDone, onCancel, onNavigate })
 
         <SpecialPricesSection units={units} onUpdateUnit={updateUnit} />
 
-        <TypesSection
-          types={types}
-          open={typesOpen}
-          onOpenChange={setTypesOpen}
-          baseUnitName={baseUnitName}
-          onAddType={addType}
-          onUpdateType={(index, patch) => updateType(index, 'barcode' in patch ? { ...patch, barcodeError: '' } : patch)}
-          onRemoveType={removeType}
-          onCheckBarcode={checkTypeBarcode}
-          onFixStock={goFixStock}
-        />
-
         <MoreOptionsSection
           isEdit={isEdit}
-          isAgencyItem={isAgencyItem}
-          onIsAgencyItemChange={setIsAgencyItem}
           notes={notes}
           onNotesChange={setNotes}
           isActive={isActive}

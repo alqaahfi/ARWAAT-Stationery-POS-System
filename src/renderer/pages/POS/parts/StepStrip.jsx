@@ -1,8 +1,8 @@
 import React from 'react';
-import { Check } from 'lucide-react';
+import { Check, ListChecks, PauseCircle, History, Undo2, XCircle } from 'lucide-react';
 import theme from '../../../config/theme';
-import { Button, Kbd } from '../../../components/ui';
-import { c, keepFocus } from './common';
+import PosButton from './PosButton';
+import { c } from './common';
 
 const STEPS = ['Customer', 'Items', 'Discount', 'Payment'];
 
@@ -19,7 +19,7 @@ const STEP_OF_STAGE = {
   confirm: STEPS.length,
 };
 
-export default function StepStrip({ stage, showCancel, onCancel, heldCount = 0, canHold, onRecent, onHold, onRecall }) {
+export default function StepStrip({ stage, showCancel, onCancel, heldCount = 0, canHold, canReturn, onRecent, onHold, onRecall, onReturn }) {
   const current = STEP_OF_STAGE[stage] ?? -1;
   return (
     <div style={styles.bar}>
@@ -53,34 +53,23 @@ export default function StepStrip({ stage, showCancel, onCancel, heldCount = 0, 
           );
         })}
       </ol>
-      <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.smd }}>
         {stage !== 'confirm' && (
           <>
-            <Button variant="secondary" size="sm" tabIndex={-1} onMouseDown={keepFocus} onClick={onRecent}>
-              Today's bills <Kbd>F2</Kbd>
-            </Button>
-            <Button variant="secondary" size="sm" tabIndex={-1} onMouseDown={keepFocus} onClick={onRecall}>
-              Held{heldCount > 0 ? ` (${heldCount})` : ''} <Kbd>F3</Kbd>
-            </Button>
-            {canHold && (
-              <Button variant="secondary" size="sm" tabIndex={-1} onMouseDown={keepFocus} onClick={onHold}>
-                Hold <Kbd>F4</Kbd>
-              </Button>
-            )}
+            <PosButton label="Today's sales" shortcut="F2" icon={ListChecks} onClick={onRecent} />
+            <PosButton label={`Held${heldCount > 0 ? ` (${heldCount})` : ''}`} shortcut="F3" icon={History} tone="orange" onClick={onRecall} />
+            {canHold && <PosButton label="Hold" shortcut="F4" icon={PauseCircle} tone="orange" onClick={onHold} />}
+            {canReturn && <PosButton label="Return" shortcut="F6" icon={Undo2} tone="green" onClick={onReturn} />}
           </>
         )}
-        {showCancel && (
-          <Button variant="danger" size="sm" tabIndex={-1} onMouseDown={keepFocus} onClick={onCancel}>
-            Cancel sale <Kbd>Esc</Kbd>
-          </Button>
-        )}
+        {showCancel && <PosButton label="Cancel sale" shortcut="Esc" icon={XCircle} tone="red" onClick={onCancel} />}
       </div>
     </div>
   );
 }
 
 const styles = {
-  bar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing.md, minHeight: '32px', flexShrink: 0 },
+  bar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing.md, minHeight: '52px', flexShrink: 0 },
   list: { display: 'flex', alignItems: 'center', gap: theme.spacing.sm, listStyle: 'none', margin: 0, padding: 0 },
   item: { display: 'flex', alignItems: 'center', gap: theme.spacing.sm },
   line: { width: '32px', height: '2px', borderRadius: theme.radius.pill },

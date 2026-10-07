@@ -68,8 +68,6 @@ const navConfig = [
       { key: 'products-low-stock', label: g.runningLow, route: '/products/low-stock', permissionKey: 'view_products' },
       { key: 'products-dead-stock', label: g.notSelling, route: '/products/dead-stock' },
       { key: 'products-categories', label: g.categories, route: '/products/categories' },
-      { key: 'products-adjustments', label: g.fixStockCount, route: '/products/stock-adjustments' },
-      { key: 'products-movements', label: g.stockHistory, route: '/products/stock-movements' },
     ],
     pages: [
       { key: 'products-profile', label: 'Product', route: '/products/profile', needsParams: true },

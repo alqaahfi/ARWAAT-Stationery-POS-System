@@ -294,7 +294,7 @@ function update(payload) {
   const db = getDb();
   const {
     id, name, sku, companyName, categoryId, supplierId, baseUnitName, isActive, notes,
-    minStockAlert, deadStockDays, pricingType, defaultPercentage, isAgencyItem,
+    minStockAlert, deadStockDays, pricingType, defaultPercentage,
     variants, units, standardStartingStock, standardBarcode, standardVariantId,
   } = payload;
 
@@ -323,7 +323,7 @@ function update(payload) {
       `UPDATE products SET
          name = @name, sku = @sku, company_name = @companyName, category_id = @categoryId, supplier_id = @supplierId,
          base_unit_name = @baseUnitName, min_stock_alert = @minStockAlert, dead_stock_days = @deadStockDays,
-         pricing_type = @pricingType, default_percentage = @defaultPercentage, is_agency_item = @isAgencyItem,
+         pricing_type = @pricingType, default_percentage = @defaultPercentage,
          notes = @notes, is_active = @isActive, updated_at = datetime('now')
        WHERE id = @id`
     ).run({
@@ -338,7 +338,6 @@ function update(payload) {
       deadStockDays: deadStockDays || null,
       pricingType: pricingType === 'percentage' ? 'percentage' : 'fixed',
       defaultPercentage: pricingType === 'percentage' ? Number(defaultPercentage) || 0 : null,
-      isAgencyItem: isAgencyItem ? 1 : 0,
       notes: notes || null,
       isActive: isActive === false ? 0 : 1,
     });

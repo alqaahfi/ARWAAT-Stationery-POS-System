@@ -32,6 +32,9 @@ function PrintRoot() {
   if (printMode === 'payment-receipt') {
     return <PrintPaymentReceipt paymentId={params.get('paymentId')} />;
   }
+  if (printMode === 'purchase-fallback') {
+    return <PrintInvoice purchaseId={params.get('purchaseId')} showDues />;
+  }
   if (printMode === 'invoice-fallback') {
     return <PrintInvoice saleId={params.get('saleId')} showDues={params.get('showDues') === '1'} />;
   }

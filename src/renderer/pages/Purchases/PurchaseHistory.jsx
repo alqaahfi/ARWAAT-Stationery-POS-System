@@ -11,6 +11,7 @@ import DateRangePicker, { computeRange } from '../Reports/components/DateRangePi
 import QuickPurchaseOverlay from '../../components/billing/QuickPurchaseOverlay';
 import { PurchaseTable } from './parts/PurchaseTable';
 import { PurchaseDetailSheet } from './parts/PurchaseDetailSheet';
+import useRememberedState from '../../utils/useRememberedState';
 
 const c = theme.colors;
 const PAGE_SIZE = 50;
@@ -40,12 +41,12 @@ export default function PurchaseHistory({ onNavigate }) {
   const { user } = useAuth();
   const isAdmin = user.role === 'admin';
 
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
-  const [range, setRange] = useState(defaultRange);
-  const [status, setStatus] = useState('all');
-  const [sortBy, setSortBy] = useState('date');
-  const [sortDir, setSortDir] = useState('desc');
+  const [searchInput, setSearchInput] = useRememberedState('purchaseHistory.searchInput', '');
+  const [search, setSearch] = useRememberedState('purchaseHistory.search', '');
+  const [range, setRange] = useRememberedState('purchaseHistory.range', defaultRange);
+  const [status, setStatus] = useRememberedState('purchaseHistory.status', 'all');
+  const [sortBy, setSortBy] = useRememberedState('purchaseHistory.sortBy', 'date');
+  const [sortDir, setSortDir] = useRememberedState('purchaseHistory.sortDir', 'desc');
 
   const [result, setResult] = useState({ rows: [], total: 0, totals: { sumTotal: 0, sumDue: 0 }, hasMore: false });
   const [loading, setLoading] = useState(true);

@@ -126,7 +126,7 @@ const styles = {
     boxShadow: theme.shadow.dropdown,
     borderRadius: theme.radius.xs,
     padding: '16px',
-    fontFamily: theme.font.mono,
+    fontFamily: theme.font.family,
     fontSize: '12px',
     lineHeight: '1.6',
   },

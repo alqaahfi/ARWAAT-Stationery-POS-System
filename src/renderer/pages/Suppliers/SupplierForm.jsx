@@ -21,6 +21,7 @@ import {
   SupplierAddressRow,
   SupplierContactRows,
   SupplierJoinedRow,
+  SupplierLetterheadRow,
   SupplierNameRow,
   SupplierNotesRow,
 } from "./parts/SupplierFormParts";
@@ -50,6 +51,8 @@ export default function SupplierForm({
   const [notes, setNotes] = useState("");
   const [openingBalance, setOpeningBalance] = useState(0);
   const [isActive, setIsActive] = useState(true);
+  const [letterheadId, setLetterheadId] = useState("");
+  const [letterheads, setLetterheads] = useState([]);
   const [nameError, setNameError] = useState("");
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(!isEdit);
@@ -72,6 +75,10 @@ export default function SupplierForm({
     loadNextId();
   }, [loadNextId]);
 
+  useEffect(() => {
+    window.api.letterheads.list().then((rows) => setLetterheads(rows || [])).catch(() => {});
+  }, []);
+
   function resetForm() {
     setName("");
     setContactPerson("");
@@ -82,6 +89,7 @@ export default function SupplierForm({
     setAddress("");
     setNotes("");
     setOpeningBalance(0);
+    setLetterheadId("");
     setNameError("");
     loadNextId();
     focusName();
@@ -108,6 +116,7 @@ export default function SupplierForm({
         setNotes(s.notes || "");
         setOpeningBalance(s.opening_balance);
         setIsActive(!!s.is_active);
+        setLetterheadId(s.assigned_letterhead_id ? String(s.assigned_letterhead_id) : "");
         setSaved({
           name: s.name,
           contactPerson: s.contact_person,
@@ -154,6 +163,7 @@ export default function SupplierForm({
         joiningDate: joiningDate || null,
         address: address.trim() || null,
         notes: notes.trim() || null,
+        assignedLetterheadId: letterheadId ? Number(letterheadId) : null,
       };
 
       const res = isEdit
@@ -241,6 +251,11 @@ export default function SupplierForm({
               <SupplierJoinedRow
                 joiningDate={joiningDate}
                 onJoiningDate={setJoiningDate}
+              />
+              <SupplierLetterheadRow
+                letterheads={letterheads}
+                letterheadId={letterheadId}
+                onLetterheadId={setLetterheadId}
               />
               <StartingBalanceField
                 party="supplier"

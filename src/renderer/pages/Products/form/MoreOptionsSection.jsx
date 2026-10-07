@@ -1,20 +1,13 @@
 import React, { useId } from 'react';
 import theme from '../../../config/theme';
-import glossary from '../../../config/glossary';
 import { Disclosure, Field, Textarea, Toggle } from '../../../components/ui';
 
 const c = theme.colors;
 
 // Section 6 — rarely-changed settings, collapsed.
-export function MoreOptionsSection({ isEdit, isAgencyItem, onIsAgencyItemChange, notes, onNotesChange, isActive, onIsActiveChange }) {
+export function MoreOptionsSection({ isEdit, notes, onNotesChange, isActive, onIsActiveChange }) {
   return (
     <Disclosure title="More options" summary={isEdit && !isActive ? 'Inactive' : undefined}>
-      <OptionRow
-        label={glossary.agencyItem}
-        hint="Turn on for agency items (such as books) that are sold on a fixed margin over the buying price."
-        checked={isAgencyItem}
-        onChange={onIsAgencyItemChange}
-      />
       {isEdit && <OptionRow label="Active" hint="Inactive items are hidden from sales." checked={isActive} onChange={onIsActiveChange} />}
       <Field label="Notes" style={{ marginTop: theme.spacing.md, marginBottom: 0 }}>
         <Textarea value={notes} onChange={(e) => onNotesChange(e.target.value)} placeholder="Anything worth remembering about this item" rows={3} />

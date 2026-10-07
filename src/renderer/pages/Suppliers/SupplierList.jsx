@@ -5,13 +5,14 @@ import { formatCurrency } from '../../utils/format';
 import { NoSuppliers, SupplierToolbar, supplierColumns, supplierSubline } from './parts/SupplierListParts';
 import { PartyCards, usePartyViewMode } from '../Parties/PartyViews';
 import { ListSummary, LoadError, NoMatch, RestrictedNotice } from '../Parties/PartyParts';
+import useRememberedState from '../../utils/useRememberedState';
 
 export default function SupplierList({ onNavigate }) {
   const { user } = useAuth();
   const toast = useToast();
 
   const [suppliers, setSuppliers] = useState([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useRememberedState('suppliers.search', '');
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [viewMode, setViewMode] = usePartyViewMode('pos_supplier_view_mode');

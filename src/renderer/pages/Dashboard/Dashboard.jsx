@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
+import { restoreScroll } from '../../utils/scrollRestore';
 import { ChevronLeft, Menu as MenuIcon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import AdminDashboard from './AdminDashboard';
@@ -9,11 +10,11 @@ import glossary from '../../config/glossary';
 import { APP_NAME } from '../../config/appInfo';
 import { Button, Menu, MenuItem, Popover } from '../../components/ui';
 import { Brand, SyncChip, UserChip } from '../../layout/ShellParts';
+import { HeaderClock, LockButton, LockProvider } from '../../layout/LockScreen';
 
 export default function Dashboard() {
   const { user } = useAuth();
-  if (user.role === 'admin') return <AdminDashboard />;
-  return <CashierLayout />;
+  return <LockProvider>{user.role === 'admin' ? <AdminDashboard /> : <CashierLayout />}</LockProvider>;
 }
 
 // POS-first layout: no sidebar or tabs. New Sale is home; a Menu in the
@@ -29,8 +30,21 @@ function CashierLayout() {
       const proceed = window.confirm("You have an unfinished sale — leave anyway? It'll be saved as a draft.");
       if (!proceed) return;
     }
+    // Coming back to a page from one of its detail pages restores its scroll position.
+    scrollMemory.current[nav.route] = mainRef.current?.scrollTop || 0;
+    restoreTarget.current = nav.route !== '/pos' && route !== '/pos' ? scrollMemory.current[route] || 0 : 0;
     setNav({ route, params });
   }
+
+  const mainRef = useRef(null);
+  const scrollMemory = useRef({});
+  const restoreTarget = useRef(0);
+  useLayoutEffect(() => {
+    const top = restoreTarget.current;
+    restoreTarget.current = 0;
+    if (!top) return undefined;
+    return restoreScroll(mainRef.current, top);
+  }, [nav.route]);
 
   const menuItems = CASHIER_MENU.filter((m) => hasPermission(m.permissionKey));
   const showMenu = menuItems.some((m) => m.route !== '/pos');
@@ -88,6 +102,8 @@ function CashierLayout() {
               )}
             </Popover>
           )}
+          <HeaderClock />
+          <LockButton />
           <SyncChip />
           <div style={styles.divider} />
           <UserChip user={user} onLogout={logout} style={{ width: '200px' }} />
@@ -99,7 +115,7 @@ function CashierLayout() {
           <CashierRoutes route={nav.route} params={nav.params} onNavigate={navigate} />
         </main>
       ) : (
-        <main style={styles.content}>
+        <main ref={mainRef} style={styles.content}>
           <div style={styles.page}>
             <CashierRoutes route={nav.route} params={nav.params} onNavigate={navigate} />
           </div>

@@ -98,6 +98,16 @@ function login(username, password) {
   return { success: true, token, user: toPublicUser(user) };
 }
 
+// Lock-screen check: confirms the signed-in user's password without starting a session.
+function verifyPassword(userId, password) {
+  if (!userId || !password) return { success: false, reason: 'Enter your password.' };
+  const user = getDb().prepare('SELECT password_hash, is_active FROM users WHERE id = ?').get(userId);
+  if (!user || !user.is_active || !bcrypt.compareSync(password, user.password_hash)) {
+    return { success: false, reason: 'Wrong password. Try again.' };
+  }
+  return { success: true };
+}
+
 function validateSession(token) {
   const db = getDb();
   if (!token) return { valid: false };
@@ -438,6 +448,8 @@ function registerUsersIpc() {
   );
 
   ipcMain.handle('users:login', (event, { username, password } = {}) => login(username, password));
+
+  ipcMain.handle('users:verify-password', (event, { userId, password } = {}) => verifyPassword(userId, password));
 
   ipcMain.handle('users:validate-session', (event, { token } = {}) => validateSession(token));
 

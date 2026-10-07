@@ -8,23 +8,28 @@ import { formatCurrencyExact, formatDateTime } from '../../utils/format';
 // BrowserWindow + webContents.print() pattern as PrintPaymentReceipt.jsx.
 // Plain-text header from receipt_header_text stands in for the letterhead
 // image. A4 invoices carry no footer text (removed on the merged path too).
-export default function PrintInvoice({ saleId, showDues }) {
+export default function PrintInvoice({ saleId, purchaseId, showDues }) {
   const [data, setData] = useState(null);
   const [settings, setSettings] = useState(null);
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    window.api.sales.getReceiptData({ saleId: Number(saleId), showDues: !!showDues }).then((res) => {
+    // The same page prints a supplier purchase receipt when given a purchaseId.
+    const request = purchaseId
+      ? window.api.purchases.getReceiptData({ purchaseId: Number(purchaseId) })
+      : window.api.sales.getReceiptData({ saleId: Number(saleId), showDues: !!showDues });
+    request.then((res) => {
       if (res && res.sale) setData(res);
       else setNotFound(true);
     });
     window.api.settings.getAll().then(setSettings);
-  }, [saleId, showDues]);
+  }, [saleId, purchaseId, showDues]);
 
   if (notFound) return <div style={styles.page}>Sale not found.</div>;
   if (!data || !settings) return <div style={styles.page}>Loading…</div>;
 
   const { sale, groups, showDues: applyDues, outstandingBalance } = data;
+  const labels = { title: 'INVOICE', party: 'Bill To', details: 'Invoice Details', number: 'Invoice No', by: 'Cashier', outstanding: 'Total Outstanding Balance', ...(data.labels || {}) };
   const currency = settings.currency_symbol || 'Rs.';
   const money = (n) => `${currency}${Number(n || 0).toFixed(2)}`;
 
@@ -44,20 +49,20 @@ export default function PrintInvoice({ saleId, showDues }) {
         )}
       </div>
 
-      <div style={styles.title}>INVOICE</div>
+      <div style={styles.title}>{labels.title}</div>
 
       <div style={styles.infoBox}>
         <div>
-          <div style={styles.label}>Bill To</div>
+          <div style={styles.label}>{labels.party}</div>
           <div style={styles.value}>{sale.customer_name || 'Walk-in Customer'}</div>
           {sale.customer_phone && <div style={styles.metaSmall}>{sale.customer_phone}</div>}
           {sale.customer_address && <div style={styles.metaSmall}>{sale.customer_address}</div>}
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={styles.label}>Invoice Details</div>
-          <div style={styles.metaSmall}>Invoice No: {sale.invoice_no}</div>
+          <div style={styles.label}>{labels.details}</div>
+          <div style={styles.metaSmall}>{labels.number}: {sale.invoice_no}</div>
           <div style={styles.metaSmall}>Date &amp; Time: {formatDateTime(sale.created_at)}</div>
-          <div style={styles.metaSmall}>Cashier: {sale.cashier_name}</div>
+          <div style={styles.metaSmall}>{labels.by}: {sale.cashier_name}</div>
         </div>
       </div>
 
@@ -78,7 +83,7 @@ export default function PrintInvoice({ saleId, showDues }) {
                 {group.variantText && <div style={styles.variantText}>{group.variantText}</div>}
               </td>
               <td style={styles.td}>
-                {group.quantity} {group.unit_name}
+                {group.quantityText || `${group.quantity} ${group.unit_name}`}
               </td>
               <td style={{ ...styles.td, textAlign: 'right' }}>{money(group.unit_price)}</td>
               <td style={{ ...styles.td, textAlign: 'right' }}>{money(group.line_total)}</td>
@@ -94,7 +99,7 @@ export default function PrintInvoice({ saleId, showDues }) {
           <TotalRow label="Total" value={money(sale.total_amount)} bold shaded />
           <TotalRow label="Paid" value={money(sale.paid_amount)} />
           {sale.balance_due > 0 && <TotalRow label="Balance Due" value={money(sale.balance_due)} bold />}
-          {applyDues && <TotalRow label="Total Outstanding Balance" value={money(outstandingBalance)} bold />}
+          {applyDues && <TotalRow label={labels.outstanding} value={money(outstandingBalance)} bold />}
         </div>
       </div>
 

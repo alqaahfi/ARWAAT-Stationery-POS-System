@@ -65,7 +65,7 @@ export default function SyncAndPcs({ onNavigate }) {
       <ThisComputerCard status={status} syncingAll={syncingPeer === 'all'} syncDisabled={syncingPeer !== null && syncingPeer !== 'all'} onSyncAll={() => handleSyncNow(null)} />
       <StockWarningsCard
         warnings={warnings}
-        onFix={onNavigate ? (w) => onNavigate('/products/stock-adjustments', { productId: w.productId }) : undefined}
+        onFix={onNavigate ? (w) => onNavigate('/stock', { productId: w.productId }) : undefined}
       />
       <PeerList peers={peers} syncingPeer={syncingPeer} onSync={handleSyncNow} />
       <SyncLog log={log} />

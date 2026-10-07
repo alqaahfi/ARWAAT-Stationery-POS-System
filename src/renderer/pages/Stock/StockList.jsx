@@ -7,6 +7,7 @@ import { Button, Card, EmptyState, SearchField, Select } from '../../components/
 import { StatusChips } from '../Products/list/ProductToolbar';
 import { ProductTable, SkeletonRows } from '../Products/list/ProductRows';
 import StockEntryDialog from './StockEntryDialog';
+import useRememberedState from '../../utils/useRememberedState';
 
 const NO_SELECTION = new Set();
 
@@ -16,9 +17,9 @@ const NO_SELECTION = new Set();
 export default function StockList({ onNavigate }) {
   const { user } = useAuth();
   const isAdmin = user.role === 'admin';
-  const [search, setSearch] = useState('');
-  const [categoryId, setCategoryId] = useState('');
-  const [chip, setChip] = useState('all');
+  const [search, setSearch] = useRememberedState('stockList.search', '');
+  const [categoryId, setCategoryId] = useRememberedState('stockList.categoryId', '');
+  const [chip, setChip] = useRememberedState('stockList.chip', 'all');
   const [categories, setCategories] = useState([]);
   const [data, setData] = useState({ rows: [], counts: { all: 0, lowStock: 0, deadStock: 0, outOfStock: 0 } });
   const [loading, setLoading] = useState(true);

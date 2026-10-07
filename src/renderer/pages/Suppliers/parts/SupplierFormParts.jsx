@@ -1,5 +1,6 @@
 import React from 'react';
-import { TextInput, Textarea, Toggle } from '../../../components/ui';
+import { Select, TextInput, Textarea, Toggle } from '../../../components/ui';
+import glossary from '../../../config/glossary';
 import { FormRow } from '../../Parties/PartyParts';
 
 const textareaStyle = { minHeight: '56px', height: '56px', resize: 'none' };
@@ -43,6 +44,21 @@ export function SupplierJoinedRow({ joiningDate, onJoiningDate }) {
   return (
     <FormRow label="Joined">
       <TextInput type="date" value={joiningDate} onChange={(e) => onJoiningDate(e.target.value)} />
+    </FormRow>
+  );
+}
+
+export function SupplierLetterheadRow({ letterheads, letterheadId, onLetterheadId }) {
+  return (
+    <FormRow label="Letterhead" hint="Used for this supplier's purchase receipts.">
+      <Select value={letterheadId} onChange={(e) => onLetterheadId(e.target.value)}>
+        <option value="">{glossary.shopDefaultLetterhead}</option>
+        {letterheads.map((l) => (
+          <option key={l.id} value={l.id}>
+            {l.name}
+          </option>
+        ))}
+      </Select>
     </FormRow>
   );
 }

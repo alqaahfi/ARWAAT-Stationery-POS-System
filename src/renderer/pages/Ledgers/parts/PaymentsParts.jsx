@@ -1,5 +1,5 @@
 import React from 'react';
-import { Printer, SearchX, Wallet } from 'lucide-react';
+import { Printer, SearchX, Trash2, Wallet } from 'lucide-react';
 import theme from '../../../config/theme';
 import glossary from '../../../config/glossary';
 import { Badge, Button, ChipGroup, EmptyState, IconButton, Menu, MenuItem, Popover, SearchField, Select, TextInput } from '../../../components/ui';
@@ -73,7 +73,7 @@ function ReprintMenu({ row, open, up, onToggle, onPrint }) {
 }
 
 // rowIndex: id -> position, to decide which way the reprint menu opens.
-export function paymentColumns({ hasRecordedBy, menuId, onMenu, onPrint, rowIndex }) {
+export function paymentColumns({ hasRecordedBy, menuId, onMenu, onPrint, onDelete, rowIndex }) {
   const cols = [
     { key: 'date', label: 'Date', width: '120px', render: (r) => <DateCell date={formatDateOnly(r.created_at)} time={formatTime(r.created_at)} /> },
     { key: 'party', label: 'Party', render: (r) => <PartyCell name={r.party_name} /> },
@@ -99,6 +99,19 @@ export function paymentColumns({ hasRecordedBy, menuId, onMenu, onPrint, rowInde
     align: 'right',
     render: (r) => <ReprintMenu row={r} open={menuId === r.id} up={(rowIndex.get(r.id) ?? 0) >= 2} onToggle={onMenu} onPrint={onPrint} />,
   });
+  if (onDelete) {
+    cols.push({
+      key: 'delete',
+      label: <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Delete</span>,
+      width: '56px',
+      align: 'right',
+      render: (r) => (
+        <RowControl>
+          <IconButton icon={Trash2} tone="danger" label="Delete payment" size="sm" onClick={() => onDelete(r)} />
+        </RowControl>
+      ),
+    });
+  }
   return cols;
 }
 

@@ -194,6 +194,7 @@ function getLedger(customerId) {
     ...payments.map((p) => ({
       date: p.created_at,
       type: 'payment',
+      paymentId: p.id,
       label: 'Received',
       reference: p.payment_method,
       note: p.note,

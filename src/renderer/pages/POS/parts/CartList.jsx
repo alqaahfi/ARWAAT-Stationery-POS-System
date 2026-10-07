@@ -1,4 +1,4 @@
-import React, { memo, useState } from 'react';
+import React, { memo, useEffect, useRef, useState } from 'react';
 import { ScanBarcode, Trash2 } from 'lucide-react';
 import theme from '../../../config/theme';
 import { formatCurrency } from '../../../utils/format';
@@ -70,6 +70,10 @@ export default function CartList({
 
 const CartRow = memo(function CartRow({ line, idx, selected, editing, editValue, editError, onEditChange, editInputRef, editFocValue, onEditFocChange, editFocInputRef, stockIssue, isAdmin, canRemove, actions }) {
   const [hovered, setHovered] = useState(false);
+  const rowRef = useRef(null);
+  useEffect(() => {
+    if (selected) rowRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [selected]);
   const qty = Number(line.quantity) || 0;
   const foc = Number(line.focQuantity) || 0;
   const lineTotal = qty * (Number(line.unitPrice) || 0);
@@ -78,6 +82,7 @@ const CartRow = memo(function CartRow({ line, idx, selected, editing, editValue,
 
   return (
     <div
+      ref={rowRef}
       role="listitem"
       aria-current={selected || undefined}
       onClick={() => actions.onRowClick(idx)}

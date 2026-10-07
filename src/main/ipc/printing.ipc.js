@@ -1,8 +1,8 @@
 const { ipcMain, dialog, BrowserWindow } = require('electron');
 const fs = require('fs');
 const thermalReceipt = require('../printing/thermalReceipt');
-const { printInvoice, printPaymentReceipt: printPaymentReceiptA4 } = require('../printing/printA4Invoice');
-const { previewSale } = require('../printing/previewDocument');
+const { printInvoice, printPaymentReceipt: printPaymentReceiptA4, printPurchaseReceipt } = require('../printing/printA4Invoice');
+const { previewSale, previewPurchase } = require('../printing/previewDocument');
 
 // Retail sales print silently to the thermal receipt printer; wholesale
 // sales open the normal OS print dialog against an A4 invoice, so whoever's
@@ -54,6 +54,8 @@ function registerPrintingIpc() {
   ipcMain.handle('printing:print-sale', (event, { saleId, printType, showDues } = {}) => printSale(saleId, printType, showDues));
   ipcMain.handle('printing:print-payment-receipt', (event, { paymentId, format } = {}) => printPaymentReceipt(paymentId, format));
   ipcMain.handle('printing:preview-sale', (event, { saleId, printType, showDues } = {}) => previewSale({ saleId, printType, showDues }));
+  ipcMain.handle('printing:preview-purchase', (event, { purchaseId } = {}) => previewPurchase({ purchaseId }));
+  ipcMain.handle('printing:print-purchase', (event, { purchaseId } = {}) => (purchaseId ? printPurchaseReceipt({ purchaseId }) : { success: false, reason: 'Missing purchase id.' }));
   ipcMain.handle('printing:save-pdf', (event, data) => savePdf(event, data));
 
   ipcMain.handle('printers:list-installed', async (event) => {

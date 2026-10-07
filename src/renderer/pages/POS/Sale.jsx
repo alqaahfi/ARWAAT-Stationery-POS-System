@@ -23,6 +23,8 @@ import HeldBillsPanel from './parts/HeldBillsPanel';
 import CancelSaleDialog from './parts/CancelSaleDialog';
 import SaleCompleteSheet from './parts/SaleCompleteSheet';
 import PrintPreviewModal from '../../components/receipt/PrintPreviewModal';
+import BillOverlay from '../../components/billing/BillOverlay';
+import Returns from '../Sales/Returns';
 import { InlineMessage, PanelTitle, packSizeName } from './parts/common';
 
 // Cashier Mode is 100% keyboard-operable — see the build prompt for the full
@@ -100,13 +102,13 @@ export function getStageLegend(stage, ctx = {}) {
     case 'item-search':
       return searchResultsOpen
         ? '↑↓ Product · Tab Type/Unit · ←→ Cycle · Enter Confirm · Esc Cancel Sale'
-        : '↑ Edit Cart · Tab Continue to Discount · Esc Cancel Sale';
+        : '↑↓ Edit Cart · Ctrl+←/→ Change Step · Tab Continue to Discount · F6 Return · Esc Cancel Sale';
     case 'qty':
       return 'Enter Add to Cart · Esc Cancel Item';
     case 'cart-edit':
       return editingLine
         ? 'Enter Confirm Qty · Esc Cancel Edit'
-        : '↑↓ Select Line · Enter Edit Qty · Del Remove · Ctrl+Z Undo · Esc Back to Search';
+        : '↑↓ Select Line · Enter/E Edit Qty · Del Remove · Ctrl+Z Undo · Esc Back to Search';
     case 'discount':
       return 'Tab / Enter Continue · Esc Cancel Sale';
     case 'format':
@@ -142,6 +144,7 @@ export default function Sale() {
   const [stationCode, setStationCode] = useState('MAIN');
   const [showRecent, setShowRecent] = useState(false);
   const [showRecall, setShowRecall] = useState(false);
+  const [showReturn, setShowReturn] = useState(false);
   const [heldBills, setHeldBills] = useState([]);
   // Set while an existing bill is loaded for editing: { id, invoiceNo, customerId, owedBySale }.
   const [editingSale, setEditingSale] = useState(null);
@@ -1030,6 +1033,32 @@ export default function Sale() {
     setShowCancelConfirm(false);
   }
 
+  // ---------------- Ctrl+Left/Right step navigation ----------------
+
+  function jumpToStep(dir) {
+    setItemSearchMessage('');
+    if (stage === 'customer') {
+      if (dir < 0) return;
+      if (customer) setStage('item-search');
+      else proceedFromCustomerAsWalkIn();
+    } else if (stage === 'item-search' || stage === 'cart-edit') {
+      if (dir < 0) {
+        setStage('customer');
+      } else if (cartLines.length === 0) {
+        setItemSearchMessage('Add at least one item first');
+      } else {
+        setStage('discount');
+      }
+    } else if (stage === 'discount') {
+      if (dir < 0) setStage('item-search');
+      else advanceFromDiscount();
+    } else if (stage === 'format') {
+      setStage(dir < 0 ? 'discount' : 'payment');
+    } else if (stage === 'payment') {
+      if (dir < 0) setStage('discount');
+    }
+  }
+
   // ---------------- central keyboard handler ----------------
 
   function handleKeyDown(e) {
@@ -1037,15 +1066,26 @@ export default function Sale() {
     if (showPrintPreview) return;
 
     // The Today's bills and Held bills panels run their own keys while open.
-    if (showRecent || showRecall) return;
+    if (showRecent || showRecall || showReturn) return;
 
-    if (e.key === 'F2' || e.key === 'F3' || e.key === 'F4') {
+    if (e.key === 'F2' || e.key === 'F3' || e.key === 'F4' || (e.key === 'F6' && isAdmin)) {
       if (showCancelConfirm || stage === 'confirm') return;
       e.preventDefault();
       if (e.key === 'F2') setShowRecent(true);
       else if (e.key === 'F3') setShowRecall(true);
+      else if (e.key === 'F6') setShowReturn(true);
       else if (stage !== 'idle') holdAndClear();
       return;
+    }
+
+    // Ctrl+Left/Right walk the four billing steps: Customer, Items, Discount, Payment.
+    if (e.ctrlKey && !e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      const step = { customer: 0, 'item-search': 1, 'cart-edit': 1, discount: 2, format: 3, payment: 3 }[stage];
+      if (step !== undefined && !showCancelConfirm && editingLineIndex === null) {
+        e.preventDefault();
+        jumpToStep(e.key === 'ArrowRight' ? 1 : -1);
+        return;
+      }
     }
 
     if (showCancelConfirm) {
@@ -1158,9 +1198,10 @@ export default function Sale() {
           }
           setItemSearchMessage('');
           setStage('discount');
-        } else if (e.key === 'ArrowUp' && cartLines.length > 0) {
+        } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && cartLines.length > 0 && !searchQuery.trim()) {
           e.preventDefault();
-          enterCartEdit();
+          setCartHighlight(e.key === 'ArrowDown' ? 0 : cartLines.length - 1);
+          setStage('cart-edit');
         } else if (e.key === 'Enter' && searchQuery.trim()) {
           e.preventDefault();
           handleItemSearchEnter();
@@ -1208,7 +1249,7 @@ export default function Sale() {
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         moveCartHighlight(-1);
-      } else if (e.key === 'Enter') {
+      } else if (e.key === 'Enter' || e.key === 'e' || e.key === 'E') {
         e.preventDefault();
         startEditCartLine();
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -1494,6 +1535,8 @@ export default function Sale() {
         onRecent={() => setShowRecent(true)}
         onRecall={() => setShowRecall(true)}
         onHold={holdAndClear}
+        canReturn={isAdmin && !editingSale}
+        onReturn={() => setShowReturn(true)}
       />
 
       <div style={styles.middle}>
@@ -1575,6 +1618,13 @@ export default function Sale() {
             window.dispatchEvent(new CustomEvent(SALE_COMPLETED_EVENT));
           }}
         />
+      )}
+      {showReturn && (
+        <BillOverlay title="Return items" subtitle="Take back items from a past sale" onRequestClose={() => setShowReturn(false)}>
+          <div style={{ padding: theme.spacing.md, overflowY: 'auto', height: '100%', boxSizing: 'border-box' }}>
+            <Returns params={{}} onNavigate={() => setShowReturn(false)} />
+          </div>
+        </BillOverlay>
       )}
       {showRecall && <HeldBillsPanel held={heldBills} onRecall={recallHeld} onDiscard={discardHeld} onClose={() => setShowRecall(false)} />}
 

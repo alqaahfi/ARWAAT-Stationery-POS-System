@@ -1,7 +1,7 @@
 import React, { memo, useMemo, useState } from 'react';
-import { History, Landmark, PackagePlus, Receipt, SlidersHorizontal, Undo2, Wallet } from 'lucide-react';
+import { History, Landmark, PackagePlus, Receipt, SlidersHorizontal, Trash2, Undo2, Wallet } from 'lucide-react';
 import theme from '../../../config/theme';
-import { Button, EmptyState, IconTile } from '../../../components/ui';
+import { Button, EmptyState, IconButton, IconTile } from '../../../components/ui';
 import { formatCurrency, formatDateOnly } from '../../../utils/format';
 import { methodLabel, monthLabel, parseDbDate } from './ledgerUtils';
 
@@ -30,7 +30,7 @@ function runningText(value) {
 
 // The ledger handler's rows (oldest first), shown newest first and grouped by
 // month. Only 50 rows go into the page at a time to keep old PCs quick.
-export default function TransactionTimeline({ rows, openingBalance, openingDate }) {
+export default function TransactionTimeline({ rows, openingBalance, openingDate, onDeletePayment }) {
   const [shown, setShown] = useState(PAGE);
 
   const all = useMemo(() => {
@@ -85,7 +85,7 @@ export default function TransactionTimeline({ rows, openingBalance, openingDate 
           </h3>
           <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
             {group.rows.map((row, i) => (
-              <TimelineRow key={row.sortKey || `${row.type}-${row.date}-${i}`} row={row} first={i === 0} />
+              <TimelineRow key={row.sortKey || `${row.type}-${row.date}-${i}`} row={row} first={i === 0} onDeletePayment={onDeletePayment} />
             ))}
           </ul>
         </section>
@@ -101,7 +101,7 @@ export default function TransactionTimeline({ rows, openingBalance, openingDate 
   );
 }
 
-const TimelineRow = memo(function TimelineRow({ row, first }) {
+const TimelineRow = memo(function TimelineRow({ row, first, onDeletePayment }) {
   const kind = KINDS[row.type] || { icon: History, color: 'gray', title: (r) => r.type || 'Entry' };
   const reduces = (Number(row.credit) || 0) > 0;
   const amount = reduces ? Number(row.credit) : Number(row.debit) || 0;
@@ -137,6 +137,9 @@ const TimelineRow = memo(function TimelineRow({ row, first }) {
         </div>
         {balance && <div style={{ ...theme.type.footnote, color: c.labelSecondary }}>{balance}</div>}
       </div>
+      {onDeletePayment && row.type === 'payment' && row.paymentId && (
+        <IconButton icon={Trash2} tone="danger" size="sm" label="Delete this payment" onClick={() => onDeletePayment(row)} />
+      )}
     </li>
   );
 });
