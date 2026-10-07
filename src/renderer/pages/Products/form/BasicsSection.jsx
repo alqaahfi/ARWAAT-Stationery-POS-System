@@ -1,7 +1,7 @@
 import React from 'react';
 import theme from '../../../config/theme';
 import glossary from '../../../config/glossary';
-import { Button, Field, SegmentedControl, Select, TextInput } from '../../../components/ui';
+import { Button, Field, FieldError, HelperText, Label, SegmentedControl, Select, TextInput } from '../../../components/ui';
 import { formatCount } from '../../../utils/format';
 import { CheckedInput, NumInput, SectionCard, grid } from './fields';
 
@@ -30,10 +30,15 @@ export function KindAndNameSection({
           ? 'One item with a single barcode and stock count.'
           : 'One name with several colours or sizes. Each Type has its own barcode and stock.'}
       </div>
-      <Field label="Name" required error={nameError} hint="Shown on screen and on receipts. Type in English, then tap Auto Urdu Name." style={{ marginBottom: theme.spacing.md }}>
+      <div style={{ marginBottom: theme.spacing.md }}>
+        <Label htmlFor="product-name" style={{ marginTop: 0 }}>
+          Name<span style={{ color: c.redText }}> *</span>
+        </Label>
         <div style={{ display: 'flex', gap: theme.spacing.sm, alignItems: 'stretch' }}>
           <TextInput
+            id="product-name"
             dir="auto"
+            aria-invalid={!!nameError}
             value={name}
             onChange={(e) => onNameChange(e.target.value)}
             autoFocus={!isEdit}
@@ -44,7 +49,12 @@ export function KindAndNameSection({
             Auto Urdu Name
           </Button>
         </div>
-      </Field>
+        {nameError ? (
+          <FieldError>{nameError}</FieldError>
+        ) : (
+          <HelperText>Shown on screen and on receipts. Type in English, then tap Auto Urdu Name.</HelperText>
+        )}
+      </div>
       <Field label="Search spelling (English)" hint="Cashiers can find this item by typing this. Not printed anywhere." style={{ marginBottom: 0 }}>
         <TextInput
           value={searchAlias}

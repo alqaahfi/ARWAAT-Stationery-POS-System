@@ -2,14 +2,14 @@ import React from 'react';
 import { Plus, X } from 'lucide-react';
 import theme from '../../../config/theme';
 import glossary from '../../../config/glossary';
-import { Button, Field, IconButton, TextInput } from '../../../components/ui';
+import { Button, Field, IconButton, Label, TextInput } from '../../../components/ui';
 import { formatCount } from '../../../utils/format';
 import { CheckedInput, NumInput, SectionCard } from './fields';
 
 const c = theme.colors;
 
 // Product with Types — each colour/size with its own barcode and starting stock.
-export function TypesSection({ types, baseUnitName, onAddType, onUpdateType, onRemoveType, onCheckBarcode, showErrors }) {
+export function TypesSection({ types, baseUnitName, onAddType, onUpdateType, onRemoveType, onCheckBarcode, onAutoUrdu, showErrors }) {
   return (
     <SectionCard title={glossary.types} intro="Add each colour or size as a Type, with its barcode and how many you have now.">
       <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm, marginBottom: theme.spacing.md }}>
@@ -22,6 +22,7 @@ export function TypesSection({ types, baseUnitName, onAddType, onUpdateType, onR
             onUpdate={onUpdateType}
             onRemove={onRemoveType}
             onCheckBarcode={onCheckBarcode}
+            onAutoUrdu={onAutoUrdu}
             showErrors={showErrors}
           />
         ))}
@@ -33,13 +34,13 @@ export function TypesSection({ types, baseUnitName, onAddType, onUpdateType, onR
   );
 }
 
-function TypeRow({ type: t, index, baseUnitName, onUpdate, onRemove, onCheckBarcode, showErrors }) {
+function TypeRow({ type: t, index, baseUnitName, onUpdate, onRemove, onCheckBarcode, onAutoUrdu, showErrors }) {
   const label = t.variantName.trim() || `Type ${index + 1}`;
   return (
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr) 34px',
+        gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1.1fr) minmax(0, 0.9fr) 34px',
         gap: theme.spacing.smd,
         alignItems: 'start',
         padding: `${theme.spacing.smd} ${theme.spacing.smd} 0`,
@@ -48,15 +49,31 @@ function TypeRow({ type: t, index, baseUnitName, onUpdate, onRemove, onCheckBarc
         backgroundColor: c.surfaceAlt,
       }}
     >
-      <Field label="Type name">
+      <div style={{ marginBottom: theme.spacing.md }}>
+        <Label htmlFor={`type-name-${index}`} style={{ marginTop: 0 }}>Type name</Label>
+        <div style={{ display: 'flex', gap: theme.spacing.xs, alignItems: 'stretch' }}>
+          <TextInput
+            id={`type-name-${index}`}
+            dir="auto"
+            value={t.variantName}
+            onChange={(e) => onUpdate(index, { variantName: e.target.value })}
+            placeholder="e.g. Red, Large"
+            autoFocus={!t.id && !t.variantName && index > 0}
+            aria-invalid={showErrors && !t.variantName.trim()}
+            style={{ flex: 1, minWidth: 0 }}
+          />
+          <Button variant="tinted" size="md" loading={t.translating} disabled={!t.variantName.trim()} onClick={() => onAutoUrdu(index)} style={{ flexShrink: 0 }}>
+            Auto Urdu Name
+          </Button>
+        </div>
         <TextInput
-          value={t.variantName}
-          onChange={(e) => onUpdate(index, { variantName: e.target.value })}
-          placeholder="e.g. Red, Large"
-          autoFocus={!t.id && !t.variantName && index > 0}
-          aria-invalid={showErrors && !t.variantName.trim()}
+          value={t.searchAlias || ''}
+          onChange={(e) => onUpdate(index, { searchAlias: e.target.value })}
+          placeholder="Search spelling (English)"
+          aria-label="Search spelling (English)"
+          style={{ background: c.fill, marginTop: theme.spacing.xs }}
         />
-      </Field>
+      </div>
       <Field label="Barcode" error={t.barcodeError}>
         <CheckedInput
           scanner

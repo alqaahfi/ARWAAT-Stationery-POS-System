@@ -241,8 +241,8 @@ function create(payload) {
     const productId = productResult.lastInsertRowid;
 
     const insertVariant = db.prepare(
-      `INSERT INTO product_variants (product_id, variant_name, barcode, stock_qty)
-       VALUES (?, ?, ?, ?)`
+      `INSERT INTO product_variants (product_id, variant_name, barcode, stock_qty, search_alias)
+       VALUES (?, ?, ?, ?, ?)`
     );
     const insertMovement = db.prepare(
       `INSERT INTO stock_movements (product_variant_id, movement_type, quantity, reference_type, note)
@@ -251,7 +251,7 @@ function create(payload) {
 
     for (const v of normalized.variants) {
       const startingStock = Number(v.startingStock) || 0;
-      const variantResult = insertVariant.run(productId, v.variantName || 'Standard', v.barcode || null, startingStock);
+      const variantResult = insertVariant.run(productId, v.variantName || 'Standard', v.barcode || null, startingStock, cleanAlias(v.searchAlias));
       if (startingStock > 0) {
         insertMovement.run(variantResult.lastInsertRowid, startingStock);
       }
@@ -361,9 +361,9 @@ function update(payload) {
       .map((r) => r.id);
     const submittedVariantIds = normalized.variants.filter((v) => v.id).map((v) => v.id);
 
-    const updateVariant = db.prepare('UPDATE product_variants SET variant_name = ?, barcode = ? WHERE id = ?');
+    const updateVariant = db.prepare('UPDATE product_variants SET variant_name = ?, barcode = ?, search_alias = CASE WHEN ? = 1 THEN ? ELSE search_alias END WHERE id = ?');
     const insertVariant = db.prepare(
-      `INSERT INTO product_variants (product_id, variant_name, barcode, stock_qty) VALUES (?, ?, ?, ?)`
+      `INSERT INTO product_variants (product_id, variant_name, barcode, stock_qty, search_alias) VALUES (?, ?, ?, ?, ?)`
     );
     const insertMovement = db.prepare(
       `INSERT INTO stock_movements (product_variant_id, movement_type, quantity, reference_type, note)
@@ -373,10 +373,10 @@ function update(payload) {
 
     for (const v of normalized.variants) {
       if (v.id) {
-        updateVariant.run(v.variantName || 'Standard', v.barcode || null, v.id);
+        updateVariant.run(v.variantName || 'Standard', v.barcode || null, v.searchAlias !== undefined ? 1 : 0, cleanAlias(v.searchAlias), v.id);
       } else {
         const startingStock = Number(v.startingStock) || 0;
-        const result = insertVariant.run(id, v.variantName || 'Standard', v.barcode || null, startingStock);
+        const result = insertVariant.run(id, v.variantName || 'Standard', v.barcode || null, startingStock, cleanAlias(v.searchAlias));
         if (startingStock > 0) insertMovement.run(result.lastInsertRowid, startingStock);
       }
     }
@@ -514,11 +514,13 @@ function bulkSetCategory({ ids, categoryId }) {
 
 // ---------- Urdu transliteration (free public APIs, no key) ----------
 
+const URDU_SCRIPT = /[؀-ۿ]/;
+
 async function fetchJson(url) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 6000);
   try {
-    const res = await net.fetch(url, { signal: ctrl.signal });
+    const res = await net.fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } finally {
@@ -534,17 +536,29 @@ async function viaInputTools(text) {
   if (!Array.isArray(data) || data[0] !== 'SUCCESS') throw new Error('No result');
   // Each space-separated word comes back as its own segment.
   const out = (data[1] || []).map((seg) => (seg[1] && seg[1][0]) || seg[0]).join(' ').trim();
-  if (!out) throw new Error('Empty result');
+  if (!out || !URDU_SCRIPT.test(out)) throw new Error('No Urdu result');
   return out;
 }
 
 // Primary: Google Translate's free endpoint, English -> Urdu.
 async function viaTranslate(text) {
   const data = await fetchJson(
-    `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ur&dt=t&q=${encodeURIComponent(text)}`
+    `https://translate.googleapis.com/translate_a/single?client=gtx&sl=ur&tl=ur&dt=t&q=${encodeURIComponent(text)}`
   );
   const out = ((data && data[0]) || []).map((seg) => seg[0]).join('').trim();
-  if (!out) throw new Error('Empty result');
+  if (!out || !URDU_SCRIPT.test(out)) throw new Error('No Urdu result');
+  return out;
+}
+
+// Second Google Translate endpoint (same engine). Google sometimes blocks one
+// of the two for a while, so we try both before giving up on real translation.
+async function viaTranslateAlt(text) {
+  const data = await fetchJson(
+    `https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=ur&tl=ur&q=${encodeURIComponent(text)}`
+  );
+  const first = Array.isArray(data) ? data[0] : null;
+  const out = (Array.isArray(first) ? first[0] : first || '').toString().trim();
+  if (!out || !URDU_SCRIPT.test(out)) throw new Error('No Urdu result');
   return out;
 }
 
@@ -552,9 +566,14 @@ async function transliterateToUrdu(text) {
   const input = typeof text === 'string' ? text.trim().slice(0, 200) : '';
   if (!input) return { success: false, reason: 'Type a name first.' };
   if (/[\u0600-\u06FF]/.test(input)) return { success: false, reason: 'That name is already in Urdu.' };
-  for (const attempt of [viaTranslate, viaInputTools]) {
+  const attempts = [
+    ['google-translate', viaTranslate],
+    ['google-translate (backup)', viaTranslateAlt],
+    ['phonetic', viaInputTools],
+  ];
+  for (const [source, attempt] of attempts) {
     try {
-      return { success: true, urdu: await attempt(input) };
+      return { success: true, urdu: await attempt(input), source };
     } catch (err) {
       // try the next service
     }

@@ -20,7 +20,7 @@ function searchProducts(query) {
        FROM product_variants pv
        JOIN products p ON p.id = pv.product_id
        WHERE pv.is_active = 1 AND p.is_active = 1
-         AND (p.name LIKE @term OR p.search_alias LIKE @term OR p.sku LIKE @term OR pv.barcode LIKE @term OR pv.variant_name LIKE @term)
+         AND (p.name LIKE @term OR p.search_alias LIKE @term OR p.sku LIKE @term OR pv.barcode LIKE @term OR pv.variant_name LIKE @term OR pv.search_alias LIKE @term)
        ORDER BY p.name
        LIMIT 30`
     )
@@ -43,7 +43,7 @@ function searchProductsGrouped(query) {
        FROM product_variants pv
        JOIN products p ON p.id = pv.product_id
        WHERE pv.is_active = 1 AND p.is_active = 1
-         AND (p.name LIKE @term OR p.search_alias LIKE @term OR p.sku LIKE @term OR pv.barcode LIKE @term OR pv.variant_name LIKE @term)
+         AND (p.name LIKE @term OR p.search_alias LIKE @term OR p.sku LIKE @term OR pv.barcode LIKE @term OR pv.variant_name LIKE @term OR pv.search_alias LIKE @term)
        ORDER BY p.name, pv.variant_name
        LIMIT 60`
     )

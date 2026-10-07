@@ -122,6 +122,7 @@ export default function ProductForm({ productId, onDone, onCancel }) {
               p.variants.map((v) => ({
                 id: v.id,
                 variantName: v.variant_name,
+                searchAlias: v.search_alias || '',
                 barcode: v.barcode || '',
                 barcodeError: '',
                 stockQty: v.stock_qty,
@@ -401,6 +402,7 @@ export default function ProductForm({ productId, onDone, onCancel }) {
         variants: (hasTypes ? types : []).map((t) => ({
           id: t.id,
           variantName: t.variantName.trim() || 'Standard',
+          searchAlias: (t.searchAlias || '').trim() || null,
           barcode: t.barcode.trim() || null,
           startingStock: Number(t.startingStock) || 0,
         })),
@@ -487,10 +489,31 @@ export default function ProductForm({ productId, onDone, onCancel }) {
       setSearchAlias(roman);
       setName(res.urdu);
       setNameError('');
+      toast.info(`Urdu name from: ${res.source}`);
     } catch (err) {
       toast.error('Could not get the Urdu name.');
     } finally {
       setAutoUrduBusy(false);
+    }
+  };
+
+  // Same as autoUrduName, for one Type's name.
+  const autoUrduType = async (index) => {
+    const roman = (types[index]?.variantName || '').trim();
+    if (!roman) return;
+    updateType(index, { translating: true });
+    try {
+      const res = await window.api.products.transliterateUrdu({ text: roman });
+      if (!res || !res.success) {
+        toast.error((res && res.reason) || 'Could not get the Urdu name.');
+        updateType(index, { translating: false });
+        return;
+      }
+      updateType(index, { searchAlias: roman, variantName: res.urdu, translating: false });
+      toast.info(`Urdu name from: ${res.source}`);
+    } catch (err) {
+      toast.error('Could not get the Urdu name.');
+      updateType(index, { translating: false });
     }
   };
 
@@ -521,6 +544,7 @@ export default function ProductForm({ productId, onDone, onCancel }) {
             onAddType={addType}
             onUpdateType={(index, patch) => updateType(index, 'barcode' in patch ? { ...patch, barcodeError: '' } : patch)}
             onRemoveType={removeType}
+            onAutoUrdu={autoUrduType}
             onCheckBarcode={checkTypeBarcode}
           />
         ) : (
