@@ -14,6 +14,8 @@ function initDatabase() {
   db = new Database(dbPath);
   db.pragma('foreign_keys = ON');
   db.pragma('journal_mode = WAL');
+  // Wait (instead of failing at once) if another connection briefly holds the write lock.
+  db.pragma('busy_timeout = 5000');
 
   runMigrations();
   return db;
