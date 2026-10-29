@@ -1,7 +1,7 @@
 const { ipcMain, dialog } = require('electron');
 const fs = require('fs');
 const Database = require('better-sqlite3');
-const { getDbPath, closeDatabase, initDatabase } = require('../db/connection');
+const { getDb, getDbPath, closeDatabase, initDatabase } = require('../db/connection');
 const { relaunchApp, getModeForWebContents } = require('../windows');
 
 async function exportBackup() {
@@ -16,7 +16,10 @@ async function exportBackup() {
   if (result.canceled || !result.filePath) return { success: false, canceled: true };
 
   try {
-    fs.copyFileSync(dbPath, result.filePath);
+    // The DB runs in WAL mode, so recent writes live in pos.db-wal until a
+    // checkpoint. Copying only pos.db would silently leave them out; SQLite's
+    // online backup writes one complete, consistent file.
+    await getDb().backup(result.filePath);
     return { success: true, filePath: result.filePath };
   } catch (err) {
     return { success: false, reason: err.message || 'Could not export backup.' };
