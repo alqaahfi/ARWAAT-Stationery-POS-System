@@ -1,5 +1,6 @@
 import React from 'react';
 import { formatDateTime } from '../../utils/format';
+import { PRINT_BRANDING_LINE } from '../../config/appInfo';
 
 // The thermal receipt's actual content — shared between the dev-mode preview
 // window (PrintReceipt.jsx, used when no physical thermal printer is
@@ -89,6 +90,10 @@ export default function ThermalContent({ data, settings }) {
           </div>
         </>
       )}
+
+      {/* Fixed ARWAAT line — always the last line, like the printed slip. */}
+      <div style={styles.thinHr} />
+      <div style={styles.branding}>{PRINT_BRANDING_LINE}</div>
     </>
   );
 }
@@ -97,4 +102,6 @@ const styles = {
   center: { textAlign: 'center' },
   hr: { borderTop: '1px dashed #000000', margin: '8px 0' },
   lr: { display: 'flex', justifyContent: 'space-between' },
+  thinHr: { borderTop: '0.5px solid #999999', margin: '8px 0 4px' },
+  branding: { textAlign: 'center', fontSize: '9px', color: '#777777' },
 };

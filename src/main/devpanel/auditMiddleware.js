@@ -9,7 +9,7 @@
 // and it never calls any other module's code to do so — it only reads the
 // call's own channel/args/result/error and the DB connection.
 const { getDb } = require('../db/connection');
-const { setCurrentSession, clearCurrentSession, getCurrentSession } = require('./sessionTracker');
+const { getSession } = require('./sessionTracker');
 
 // Keys stripped (recursively) from logged args before they're stored, so a
 // credential never lands in the audit trail even in summary form. Matched
@@ -53,18 +53,13 @@ function getStationCode() {
   }
 }
 
-// Mirrors the outcome of the three existing auth channels into
-// sessionTracker so the rest of the audit trail can attribute calls to a
-// user — see sessionTracker.js for why this is necessary.
-function trackSessionFromResult(channel, result) {
-  if (channel === 'users:login' && result?.success) setCurrentSession(result.user);
-  if (channel === 'users:validate-session' && result?.valid) setCurrentSession(result.user);
-  if (channel === 'users:logout') clearCurrentSession();
-}
-
-function writeAuditRow({ channel, argsSummary, success, errorMessage, durationMs }) {
+// The user is whoever is signed in to the calling window (sessionTracker is
+// per-webContents, so the Admin and Cashier windows never get mixed up).
+// Read after the call, so a successful users:login is attributed to the user
+// it just signed in.
+function writeAuditRow({ event, channel, argsSummary, success, errorMessage, durationMs }) {
   try {
-    const session = getCurrentSession();
+    const session = getSession(event?.sender?.id) || { userId: null, role: null };
     getDb()
       .prepare(
         `INSERT INTO dev_audit_log
@@ -102,11 +97,11 @@ function installAuditMiddleware(ipcMain) {
       const argsSummary = summarizeArgs(args);
       try {
         const result = await listener(event, ...args);
-        trackSessionFromResult(channel, result);
-        writeAuditRow({ channel, argsSummary, success: true, durationMs: Date.now() - startedAt });
+        writeAuditRow({ event, channel, argsSummary, success: true, durationMs: Date.now() - startedAt });
         return result;
       } catch (err) {
         writeAuditRow({
+          event,
           channel,
           argsSummary,
           success: false,

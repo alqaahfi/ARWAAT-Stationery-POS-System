@@ -32,7 +32,7 @@ const navConfig = [
     key: 'customers',
     label: g.customers,
     icon: 'customers',
-    group: null,
+    group: 'PEOPLE',
     route: '/customers',
     adminOnly: true,
     tabs: [{ key: 'customers-all', label: g.allCustomers, route: '/customers' }],
@@ -47,7 +47,7 @@ const navConfig = [
     key: 'suppliers',
     label: g.suppliers,
     icon: 'suppliers',
-    group: null,
+    group: 'PEOPLE',
     route: '/suppliers',
     adminOnly: true,
     tabs: [{ key: 'suppliers-all', label: g.suppliers, route: '/suppliers' }],
@@ -61,7 +61,7 @@ const navConfig = [
     key: 'products',
     label: g.products,
     icon: 'products',
-    group: null,
+    group: 'INVENTORY',
     route: '/products',
     tabs: [
       { key: 'products-all', label: g.allProducts, route: '/products', permissionKey: 'view_products' },
@@ -80,7 +80,7 @@ const navConfig = [
     key: 'stock',
     label: g.stock,
     icon: 'stock',
-    group: null,
+    group: 'INVENTORY',
     route: '/stock',
     adminOnly: true,
     tabs: [
@@ -92,7 +92,7 @@ const navConfig = [
     key: 'sales',
     label: g.sale,
     icon: 'sales',
-    group: null,
+    group: 'INVOICES',
     route: '/sales',
     tabs: [
       { key: 'sales-history', label: g.sales, route: '/sales', permissionKey: 'view_sales_history' },
@@ -103,7 +103,7 @@ const navConfig = [
     key: 'purchase',
     label: g.purchase,
     icon: 'purchases',
-    group: null,
+    group: 'INVOICES',
     route: '/products/purchases',
     adminOnly: true,
     tabs: [{ key: 'purchase-history', label: g.purchases, route: '/products/purchases' }],
@@ -112,7 +112,7 @@ const navConfig = [
     key: 'ledgers',
     label: g.ledgers,
     icon: 'accounts',
-    group: null,
+    group: 'MONEY',
     route: '/ledgers',
     adminOnly: true,
     // No tabs: /ledgers is a landing page (Customers / Suppliers / More); every
@@ -131,7 +131,7 @@ const navConfig = [
     key: 'expenses',
     label: g.expenses,
     icon: 'expenses',
-    group: null,
+    group: 'MONEY',
     route: '/expenses',
     permissionKey: 'manage_expenses',
     tabs: [{ key: 'expenses-all', label: g.expenses, route: '/expenses', permissionKey: 'manage_expenses' }],
@@ -144,7 +144,7 @@ const navConfig = [
     key: 'reports',
     label: g.reports,
     icon: 'reports',
-    group: null,
+    group: 'MONEY',
     route: '/reports',
     permissionKey: 'view_reports',
     tabs: [
@@ -162,7 +162,7 @@ const navConfig = [
     key: 'cashiers',
     label: g.cashiers,
     icon: 'cashiers',
-    group: null,
+    group: 'SYSTEM',
     route: '/cashiers',
     adminOnly: true,
     tabs: [
@@ -179,7 +179,7 @@ const navConfig = [
     key: 'settings',
     label: g.settings,
     icon: 'settings',
-    group: null,
+    group: 'SYSTEM',
     route: '/settings/preferences',
     adminOnly: true,
     tabs: [
@@ -195,8 +195,9 @@ const navConfig = [
 
 export default navConfig;
 
-// Sidebar group headers. Empty: the sidebar is one flat list in the order of navConfig.
-export const NAV_GROUPS = [];
+// Sidebar group headers, top to bottom. Sections with `group: null` (Home) sit
+// above them; within a group, sections keep their navConfig order.
+export const NAV_GROUPS = ['INVOICES', 'INVENTORY', 'PEOPLE', 'MONEY', 'SYSTEM'];
 
 // Flat lookup: route -> display title. A section's own tabs map to the
 // section name; forms/detail pages map to their own label.

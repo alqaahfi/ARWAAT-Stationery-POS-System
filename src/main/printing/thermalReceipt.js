@@ -1,6 +1,7 @@
 const { ThermalPrinter, PrinterTypes } = require('node-thermal-printer');
 const { getDb } = require('../db/connection');
 const { buildReceiptData } = require('./receiptData');
+const { BRANDING_LINE } = require('../../shared/branding');
 
 function getSettingsMap(db) {
   const rows = db.prepare('SELECT key, value FROM settings').all();
@@ -38,6 +39,16 @@ function printFooterLines(printerDevice, settings) {
   printerDevice.drawLine();
   printerDevice.alignCenter();
   lines.forEach((line) => printerDevice.println(line));
+}
+
+// The fixed ARWAAT line, always last: a thin rule, then the line centered in
+// the printer's small font (Font B) where supported.
+function printBrandingLine(printerDevice) {
+  printerDevice.drawLine();
+  printerDevice.alignCenter();
+  printerDevice.setTypeFontB();
+  printerDevice.println(BRANDING_LINE);
+  printerDevice.setTypeFontA();
 }
 
 // Silent, no dialog, no preview — the whole point of a receipt printer in an
@@ -109,6 +120,7 @@ async function print(saleId, { showDues } = {}) {
     }
 
     printFooterLines(printerDevice, settings);
+    printBrandingLine(printerDevice);
 
     printerDevice.cut();
 
@@ -151,6 +163,7 @@ async function testPrint() {
     printerDevice.println('Test print successful');
     printHeaderLines(printerDevice, settings);
     printerDevice.println(new Date().toLocaleString());
+    printBrandingLine(printerDevice);
     printerDevice.cut();
 
     await printerDevice.execute();
@@ -221,6 +234,7 @@ async function printPaymentReceipt(paymentId) {
     printerDevice.leftRight('Method', payment.payment_method);
 
     printFooterLines(printerDevice, settings);
+    printBrandingLine(printerDevice);
 
     printerDevice.cut();
 

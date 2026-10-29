@@ -7,6 +7,7 @@ import { formatCurrency } from '../../utils/format';
 import SaleCompleteSheet from '../../pages/POS/parts/SaleCompleteSheet';
 import PrintPreviewModal from '../receipt/PrintPreviewModal';
 import { SALE_COMPLETED_EVENT } from '../../pages/POS/Sale';
+import { whileSaving } from '../../utils/appEvents';
 import BillOverlay from './BillOverlay';
 import BillPartyCard from './BillPartyCard';
 import BillItemSearch from './BillItemSearch';
@@ -320,7 +321,7 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
     setSaving(true);
     let res;
     try {
-      res = await window.api.purchases.create({
+      res = await whileSaving(() => window.api.purchases.create({
         supplierId: party.id,
         items: lines.map((l) => ({
           productVariantId: l.variantId,
@@ -333,7 +334,7 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
         paidAmount: totals.paid,
         paymentMethod: method,
         createdBy: user.id,
-      });
+      }));
     } catch {
       res = { success: false };
     }
@@ -383,7 +384,7 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
       paymentMethod: method,
     };
 
-    const res = await window.api.sales.create(payload);
+    const res = await whileSaving(() => window.api.sales.create(payload));
     if (!res.success) {
       setError(res.reason || 'Could not complete sale.');
       return; // the bill stays as it is, so it can be fixed and retried

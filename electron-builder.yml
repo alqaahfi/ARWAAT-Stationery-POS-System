@@ -17,6 +17,23 @@ asarUnpack:
   - node_modules/better-sqlite3/**/*
   - node_modules/bcrypt/**/*
 
+# Window / shortcut icons for the two apps -> resources/icons/ (loaded via
+# process.resourcesPath in src/main/windows.js, used by installer.nsh).
+extraResources:
+  - from: build-resources/admin.ico
+    to: icons/admin.ico
+  - from: build-resources/cashier.ico
+    to: icons/cashier.ico
+
+# Hardened Electron binary: no ELECTRON_RUN_AS_NODE / NODE_OPTIONS / --inspect,
+# and only the integrity-checked app.asar can be loaded.
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+
 win:
   target: nsis
   icon: build-resources/icon.ico
@@ -24,5 +41,8 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
-  createDesktopShortcut: true
-  createStartMenuShortcut: true
+  # The default single shortcut is replaced by "ARWAAT Admin" + "ARWAAT Cashier"
+  # (Desktop and Start Menu), made and removed by build-resources/installer.nsh.
+  createDesktopShortcut: false
+  createStartMenuShortcut: false
+  include: build-resources/installer.nsh

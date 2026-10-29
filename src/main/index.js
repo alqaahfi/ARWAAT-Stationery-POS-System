@@ -1,5 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
-const path = require('path');
+const { app, ipcMain } = require('electron');
 const { initDatabase } = require('./db/connection');
 const { registerSetupIpc } = require('./ipc/setup.ipc');
 const { registerUsersIpc, seedDummyCashier } = require('./ipc/users.ipc');
@@ -31,35 +30,25 @@ const { installSyncTriggerMiddleware } = require('./sync/syncTrigger');
 const { startDiscovery, stopDiscovery } = require('./sync/discovery');
 const { startSyncServer, stopSyncServer } = require('./sync/syncServer');
 const { startPeriodicSync, stopSyncTimers, DEFAULT_SYNC_PORT } = require('./sync/syncEngine');
+const { installIpcGuard } = require('./security/ipcGuard');
+const { registerAppIpc } = require('./ipc/app.ipc');
+const { modeFromArgv, openModeWindow, installWebContentsHardening } = require('./windows');
 
-const isDev = process.env.NODE_ENV === 'development';
-let mainWindow = null;
-
-function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    title: 'ARWAAT Stationery Systems',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
+// One process serves both apps (Admin and Cashier windows) so only one copy
+// ever owns the DB, the sync server port and UDP discovery. A second launch
+// (the other shortcut) is handed to this process via 'second-instance'.
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (event, argv) => {
+    if (app.isReady()) openModeWindow(modeFromArgv(argv));
   });
-
-  if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/dist/index.html'));
-  }
-
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
+  installWebContentsHardening();
+  app.whenReady().then(boot);
 }
 
-app.whenReady().then(() => {
+function boot() {
   try {
     initDatabase();
       // Must run before any register*Ipc() call below — it patches
@@ -71,6 +60,9 @@ app.whenReady().then(() => {
       // module. Order relative to installAuditMiddleware doesn't matter —
       // each wraps whatever `ipcMain.handle` currently is.
       installSyncTriggerMiddleware(ipcMain);
+      // Installed last so it sits innermost: audit still records refused
+      // calls, and nothing reaches a handler without passing the check.
+      installIpcGuard(ipcMain);
       pruneAuditLog();
       registerSetupIpc();
       registerUsersIpc();
@@ -96,7 +88,9 @@ app.whenReady().then(() => {
       registerSystemIpc();
       registerGlobalIpc();
       registerDevPanelIpc();
-      seedDummyCashier();
+      registerAppIpc();
+      // Demo login for development only — never created in an installed build.
+      if (!app.isPackaged) seedDummyCashier();
       // Catches up any recurring expenses (daily/weekly/monthly/annually)
       // due since the app was last opened, so All Expenses and the reports
       // that read `expenses` are current from the first render.
@@ -117,17 +111,14 @@ app.whenReady().then(() => {
 
   ipcMain.handle('ping', () => 'pong');
 
-  createWindow();
+  openModeWindow(modeFromArgv(process.argv));
+}
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
-
+// Closing one window leaves the other running; the app quits with the last one.
 app.on('window-all-closed', () => {
   stopSyncTimers();
   stopDiscovery();
   stopSyncServer();
-  if (process.platform !== 'darwin') app.quit();
+  app.quit();
 });
 console.log('NODE_ENV is:', process.env.NODE_ENV);

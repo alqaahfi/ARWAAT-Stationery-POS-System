@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { loadCurrencySymbol } from '../utils/format';
+import { SESSION_ENDED_EVENT } from '../utils/appEvents';
 
 const AuthContext = createContext(null);
 
@@ -19,11 +21,26 @@ export function AuthProvider({ children }) {
         setUser(res.user);
         setToken(savedToken);
         await loadPermissions(res.user.id);
+        await loadCurrencySymbol();
       } else {
         localStorage.removeItem('pos_session_token');
       }
       setLoading(false);
     });
+  }, []);
+
+  // The main process ended this window's session (expired, revoked, or the
+  // account was deactivated): drop it locally and show Login again.
+  useEffect(() => {
+    function onSessionEnded() {
+      setUser(null);
+      setToken(null);
+      setPermissions({});
+      localStorage.removeItem('pos_session_token');
+      localStorage.removeItem('pos_locked_user'); // signing in again proves the password
+    }
+    window.addEventListener(SESSION_ENDED_EVENT, onSessionEnded);
+    return () => window.removeEventListener(SESSION_ENDED_EVENT, onSessionEnded);
   }, []);
 
   async function loadPermissions(userId) {
@@ -38,6 +55,7 @@ export function AuthProvider({ children }) {
       setToken(res.token);
       localStorage.setItem('pos_session_token', res.token);
       await loadPermissions(res.user.id);
+      await loadCurrencySymbol();
     }
     return res;
   }

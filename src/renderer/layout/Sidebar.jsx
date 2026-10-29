@@ -3,7 +3,7 @@ import theme from '../config/theme';
 import appIcons from '../config/appIcons';
 import glossary from '../config/glossary';
 import { APP_NAME } from '../config/appInfo';
-import { getSectionForRoute, sectionEntryRoute, visibleSections } from '../config/navConfig';
+import { NAV_GROUPS, getSectionForRoute, sectionEntryRoute, visibleSections } from '../config/navConfig';
 import { useAuth } from '../context/AuthContext';
 import { Button, IconTile } from '../components/ui';
 import useInteraction from '../components/kit/useInteraction';
@@ -19,6 +19,10 @@ export default function Sidebar({ activeRoute, onNavigate, user, onLogout }) {
   const sections = visibleSections(user, hasPermission);
   const activeKey = getSectionForRoute(activeRoute)?.section.key;
   const canSell = hasPermission('make_sale');
+
+  // Group headers only appear when at least one of their items is visible.
+  const ungrouped = sections.filter((s) => !s.group);
+  const groups = NAV_GROUPS.map((name) => [name, sections.filter((s) => s.group === name)]).filter(([, list]) => list.length);
 
   function item(s) {
     return (
@@ -49,7 +53,13 @@ export default function Sidebar({ activeRoute, onNavigate, user, onLogout }) {
             {glossary.newSale}
           </Button>
         )}
-        {sections.map(item)}
+        {ungrouped.map(item)}
+        {groups.map(([name, list]) => (
+          <div key={name}>
+            <div style={styles.groupHeader}>{name}</div>
+            {list.map(item)}
+          </div>
+        ))}
       </nav>
 
       <div style={styles.footer}>
@@ -95,6 +105,13 @@ const styles = {
   },
   top: { padding: '18px 14px 12px' },
   nav: { flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '4px 10px 12px' },
+  groupHeader: {
+    ...theme.type.footnote,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    color: c.labelSecondary,
+    padding: '16px 8px 6px',
+  },
   item: {
     width: '100%',
     height: '36px',

@@ -1,22 +1,15 @@
-const { BrowserWindow, dialog } = require('electron');
-const path = require('path');
+const { dialog } = require('electron');
 const fs = require('fs');
-
-const isDev = process.env.NODE_ENV === 'development';
+const { createHiddenRendererWindow, loadRenderer } = require('../windows');
 
 // Reusable pattern: render the plain, print-only version of a report in a
 // hidden window (same SPA, entered via a `?print=1` query string the renderer
 // bootstrap checks for — see main.jsx), print it to a PDF buffer, then let
 // the user save it. A4 invoices will reuse this same helper later.
 async function exportReportToPdf({ reportType, filters }) {
-  const win = new BrowserWindow({
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, '../preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
+  // Carries the signed-in caller's identity, so the print view's report read
+  // is checked (and a cashier's Sales Report locked) exactly as on screen.
+  const win = createHiddenRendererWindow();
 
   const search =
     '?print=1&reportType=' + encodeURIComponent(reportType) + '&filters=' + encodeURIComponent(JSON.stringify(filters || {}));
@@ -33,11 +26,7 @@ async function exportReportToPdf({ reportType, filters }) {
         reject(new Error(errorDescription || `Failed to load print view (${errorCode})`));
       });
 
-      if (isDev) {
-        win.loadURL(`http://localhost:5173/${search}`);
-      } else {
-        win.loadFile(path.join(__dirname, '../../renderer/dist/index.html'), { search });
-      }
+      loadRenderer(win, search);
     });
 
     const pdfBuffer = await win.webContents.printToPDF({ printBackground: true, pageSize: 'A4' });

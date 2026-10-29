@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui';
 import { setCurrencySymbol } from '../../utils/format';
+import { AUTO_LOCK_DEFAULT_MINUTES, AUTO_LOCK_EVENT } from '../../layout/LockScreen';
 import { StickyActions } from '../Products/form/StickyActions';
 import { LoadError, RestrictedNotice } from '../Parties/PartyParts';
 import { SettingsSkeleton, pageWrap, settingsColumn } from './parts/SettingsParts';
@@ -12,6 +13,7 @@ function fromSettings(s) {
     currencySymbol: s.currency_symbol || 'Rs.',
     defaultLowStockAlert: String(s.default_low_stock_alert ?? ''),
     defaultCashierDiscountCap: String(s.default_cashier_discount_cap ?? ''),
+    autoLockMinutes: String(s.auto_lock_minutes ?? AUTO_LOCK_DEFAULT_MINUTES),
   };
 }
 
@@ -51,12 +53,14 @@ export default function Preferences() {
         currency_symbol: values.currencySymbol.trim() || 'Rs.',
         default_low_stock_alert: values.defaultLowStockAlert === '' ? '' : Number(values.defaultLowStockAlert) || 0,
         default_cashier_discount_cap: values.defaultCashierDiscountCap === '' ? '' : Number(values.defaultCashierDiscountCap) || 0,
+        auto_lock_minutes: values.autoLockMinutes === '' ? AUTO_LOCK_DEFAULT_MINUTES : Math.floor(Number(values.autoLockMinutes) || 0),
       });
       if (!res.success) {
         toast.error(res.reason || 'Could not save preferences.');
         return;
       }
       setCurrencySymbol(values.currencySymbol);
+      window.dispatchEvent(new Event(AUTO_LOCK_EVENT));
       setInitial(values);
       toast.success('Preferences saved');
     } catch {

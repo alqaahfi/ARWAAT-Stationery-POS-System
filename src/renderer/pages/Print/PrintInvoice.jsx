@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import theme from '../../config/theme';
+import PrintBranding from './PrintBranding';
 import { formatCurrencyExact, formatDateTime } from '../../utils/format';
 
 // Fallback A4 invoice — rendered only when a sale has no assigned letterhead
@@ -103,6 +104,7 @@ export default function PrintInvoice({ saleId, purchaseId, showDues }) {
         </div>
       </div>
 
+      <PrintBranding />
     </div>
   );
 }

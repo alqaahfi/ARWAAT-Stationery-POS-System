@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
+const { withCallerId } = require('../security/ipcGuard');
 const { getProductStockStatus } = require('../db/models/Product');
 
 // Shown next to whatever the admin types in the Note field — keeps a short,
@@ -275,10 +276,10 @@ function registerStockIpc() {
   ipcMain.handle('stock:get-adjustment-reasons', () =>
     Object.entries(REASON_LABELS).map(([code, label]) => ({ code, label }))
   );
-  ipcMain.handle('stock:add', (event, payload) => addStock(payload || {}));
-  ipcMain.handle('stock:remove', (event, payload) => removeStock(payload || {}));
+  ipcMain.handle('stock:add', (event, payload) => addStock(withCallerId(event, payload, 'createdBy')));
+  ipcMain.handle('stock:remove', (event, payload) => removeStock(withCallerId(event, payload, 'createdBy')));
   ipcMain.handle('stock:get-product-stats', (event, { productId } = {}) => getProductStats(productId));
-  ipcMain.handle('stock:adjust', (event, payload) => adjustStock(payload || {}));
+  ipcMain.handle('stock:adjust', (event, payload) => adjustStock(withCallerId(event, payload, 'createdBy')));
   ipcMain.handle('stock:get-movements', (event, payload) => getMovements(payload || {}));
 }
 

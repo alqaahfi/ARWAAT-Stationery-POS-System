@@ -1,12 +1,10 @@
-const { BrowserWindow } = require('electron');
-const path = require('path');
 const { getDb } = require('../db/connection');
 const { buildInvoicePdf, buildPurchasePdf } = require('./printA4Invoice');
-
-const isDev = process.env.NODE_ENV === 'development';
+const { createHiddenRendererWindow, loadRenderer } = require('../windows');
 
 const MM_TO_PX = 96 / 25.4;
-const MM_TO_MICRONS = 1000;
+// printToPDF takes a custom pageSize in inches (Electron 21+), not microns.
+const MM_TO_INCHES = 1 / 25.4;
 
 function thermalWidthMm() {
   const row = getDb().prepare("SELECT value FROM settings WHERE key = 'thermal_paper_width'").get();
@@ -18,16 +16,10 @@ function thermalWidthMm() {
 // with the page height measured from the rendered content so the receipt is one
 // continuous page (no cut-off, no blank A4 tail).
 async function renderViewToPdf(search, widthMm) {
-  const win = new BrowserWindow({
-    show: false,
+  const win = createHiddenRendererWindow({
     useContentSize: true,
     width: widthMm ? Math.round(widthMm * MM_TO_PX) : 794,
     height: 600,
-    webPreferences: {
-      preload: path.join(__dirname, '../preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
   });
 
   try {
@@ -36,18 +28,14 @@ async function renderViewToPdf(search, widthMm) {
       win.webContents.once('did-fail-load', (event, errorCode, errorDescription) => {
         reject(new Error(errorDescription || `Failed to load preview view (${errorCode})`));
       });
-      if (isDev) {
-        win.loadURL(`http://localhost:5173/${search}`);
-      } else {
-        win.loadFile(path.join(__dirname, '../../renderer/dist/index.html'), { search });
-      }
+      loadRenderer(win, search);
     });
 
     let pageSize = 'A4';
     if (widthMm) {
       const heightPx = await win.webContents.executeJavaScript('document.getElementById("root").scrollHeight');
       const heightMm = Math.max(40, heightPx / MM_TO_PX + 4);
-      pageSize = { width: Math.round(widthMm * MM_TO_MICRONS), height: Math.round(heightMm * MM_TO_MICRONS) };
+      pageSize = { width: widthMm * MM_TO_INCHES, height: heightMm * MM_TO_INCHES };
     }
     return await win.webContents.printToPDF({ pageSize, printBackground: true, margins: { marginType: 'none' } });
   } finally {

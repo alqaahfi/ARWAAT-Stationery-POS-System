@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
+const { withCallerId } = require('../security/ipcGuard');
 const { buildPurchaseReceiptData } = require('../printing/purchaseReceiptData');
 
 function round2(n) {
@@ -197,10 +198,10 @@ function getDetail({ id, requestingUserId } = {}) {
 }
 
 function registerPurchasesIpc() {
-  ipcMain.handle('purchases:create', (event, payload) => create(payload || {}));
-  ipcMain.handle('purchases:list', (event, payload) => list(payload || {}));
+  ipcMain.handle('purchases:create', (event, payload) => create(withCallerId(event, payload, 'createdBy')));
+  ipcMain.handle('purchases:list', (event, payload) => list(withCallerId(event, payload, 'requestingUserId')));
   ipcMain.handle('purchases:get-receipt-data', (event, { purchaseId } = {}) => buildPurchaseReceiptData(purchaseId));
-  ipcMain.handle('purchases:get-detail', (event, payload) => getDetail(payload || {}));
+  ipcMain.handle('purchases:get-detail', (event, payload) => getDetail(withCallerId(event, payload, 'requestingUserId')));
 }
 
 module.exports = { registerPurchasesIpc };

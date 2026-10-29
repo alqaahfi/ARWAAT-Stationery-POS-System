@@ -6,7 +6,6 @@ import PrintReport from './pages/Print/PrintReport.jsx';
 import PrintReceipt from './pages/Print/PrintReceipt.jsx';
 import PrintPaymentReceipt from './pages/Print/PrintPaymentReceipt.jsx';
 import PrintInvoice from './pages/Print/PrintInvoice.jsx';
-import { loadCurrencySymbol } from './utils/format';
 import { GlobalStyles, ToastProvider, ConfirmProvider } from './components/ui';
 
 // A hidden/standalone BrowserWindow used for PDF export, payment-receipt
@@ -41,8 +40,9 @@ function PrintRoot() {
   return <PrintReport reportType={params.get('reportType')} filters={JSON.parse(params.get('filters') || '{}')} />;
 }
 
-async function start() {
-  if (!isPrintMode) await loadCurrencySymbol();
+// The currency symbol is read after sign-in (AuthContext) — settings need a
+// signed-in window.
+function start() {
   ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <GlobalStyles />

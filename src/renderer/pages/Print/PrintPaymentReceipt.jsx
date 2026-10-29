@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import theme from '../../config/theme';
+import PrintBranding from './PrintBranding';
 import { formatCurrencyExact, formatDateTime } from '../../utils/format';
 
 // Rendered only inside the hidden BrowserWindow that printA4Invoice.js's
@@ -63,6 +64,8 @@ export default function PrintPaymentReceipt({ paymentId }) {
       <div style={styles.footer}>
         {footerLines.length > 0 ? footerLines.map((line, i) => <div key={i}>{line}</div>) : 'Thank you.'}
       </div>
+
+      <PrintBranding />
     </div>
   );
 }

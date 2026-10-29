@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import theme from '../../config/theme';
+import PrintBranding from './PrintBranding';
 import { REPORT_TITLES } from '../Reports/reportTitles';
 import { formatCell } from '../Reports/utils/formatCell';
 
@@ -11,7 +12,8 @@ export default function PrintReport({ reportType, filters }) {
   const [data, setData] = useState(null);
 
   useEffect(() => {
-    window.api.reports.getReport({ reportType, filters, requestingUserId: filters?.requestingUserId }).then(setData);
+    // The main process acts as the window that asked for this export.
+    window.api.reports.getReport({ reportType, filters }).then(setData);
   }, [reportType, filters]);
 
   const title = REPORT_TITLES[reportType] || 'Report';
@@ -76,6 +78,8 @@ export default function PrintReport({ reportType, filters }) {
           ))}
         </tbody>
       </table>
+
+      <PrintBranding />
     </div>
   );
 }

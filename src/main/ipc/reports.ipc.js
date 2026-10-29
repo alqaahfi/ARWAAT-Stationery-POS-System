@@ -1,6 +1,7 @@
 const { ipcMain, dialog } = require('electron');
 const fs = require('fs');
 const { getDb } = require('../db/connection');
+const { getCaller } = require('../security/ipcGuard');
 const ProductModel = require('../db/models/Product');
 const { getBalancesForCustomers, getBalancesForSuppliers } = require('../ledger/balanceEngine');
 const { exportReportToPdf } = require('../printing/exportReportPdf');
@@ -604,8 +605,10 @@ async function exportPdf({ reportType, filters }) {
 }
 
 function registerReportsIpc() {
-  ipcMain.handle('reports:get-sales-report', (event, { filters, requestingUserId } = {}) =>
-    getSalesReport(filters || {}, requestingUserId)
+  // The acting user is always the signed-in caller (a print window acts as the
+  // window that opened it), never an id from the renderer.
+  ipcMain.handle('reports:get-sales-report', (event, { filters } = {}) =>
+    getSalesReport(filters || {}, getCaller(event)?.userId)
   );
   ipcMain.handle('reports:get-profit-loss', (event, { filters } = {}) => getProfitLoss(filters || {}));
   ipcMain.handle('reports:get-stock-report', (event, { filters } = {}) => getStockReport(filters || {}));
@@ -616,8 +619,8 @@ function registerReportsIpc() {
 
   // Generic dispatch — used by the hidden print window, which only knows a
   // reportType string + filters, not which specific function to call.
-  ipcMain.handle('reports:get-report', (event, { reportType, filters, requestingUserId } = {}) =>
-    getReport(reportType, filters || {}, requestingUserId)
+  ipcMain.handle('reports:get-report', (event, { reportType, filters } = {}) =>
+    getReport(reportType, filters || {}, getCaller(event)?.userId)
   );
 
   ipcMain.handle('reports:export-csv', (event, payload) => exportCsv(payload || {}));

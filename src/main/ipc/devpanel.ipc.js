@@ -10,6 +10,7 @@ const os = require('os');
 const fs = require('fs');
 const { app, ipcMain } = require('electron');
 const { getDb, getDbPath } = require('../db/connection');
+const { markDevUnlocked } = require('../devpanel/sessionTracker');
 const { getStationId } = require('../setup/stationIdentity');
 
 // ---------------- shared helpers ----------------
@@ -256,7 +257,13 @@ function getStationCode() {
 }
 
 function registerDevPanelIpc(ipc = ipcMain) {
-  ipc.handle('devpanel:verify-password', (event, { password } = {}) => verifyPassword(password, getStationCode()));
+  // A correct password unlocks the other devpanel:* reads for this window
+  // only (the IPC guard checks it), on any screen, signed in or not.
+  ipc.handle('devpanel:verify-password', (event, { password } = {}) => {
+    const result = verifyPassword(password, getStationCode());
+    if (result.success) markDevUnlocked(event.sender.id);
+    return result;
+  });
   ipc.handle('devpanel:get-audit-log', (event, payload) => getAuditLog(payload || {}));
   ipc.handle('devpanel:list-tables', () => listTables());
   ipc.handle('devpanel:get-table-rows', (event, payload) => getTableRows(payload || {}));

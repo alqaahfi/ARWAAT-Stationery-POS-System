@@ -2,6 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Production policy. `npm run dev` widens it (vite.config.js) for the Vite
+         dev server and its websocket only. object/frame-src allow blob: and
+         file: for the embedded PDF previews (print preview, letterheads). -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; object-src 'self' blob: file:; frame-src 'self' blob: file:; connect-src 'self'; base-uri 'self'"
+    />
     <title>ARWAAT Stationery Systems</title>
   </head>
   <body style="margin:0;">

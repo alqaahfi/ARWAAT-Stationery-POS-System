@@ -1,4 +1,5 @@
-const { ipcMain, app } = require('electron');
+const { ipcMain } = require('electron');
+const { relaunchApp, getModeForWebContents } = require('../windows');
 const { getDb } = require('../db/connection');
 
 // Every business/transactional table a factory reset wipes. Deliberately
@@ -77,15 +78,10 @@ function factoryReset() {
   }
 }
 
-function relaunchApp() {
-  app.relaunch();
-  app.exit();
-}
-
 function registerSystemIpc() {
-  ipcMain.handle('system:factory-reset', () => {
+  ipcMain.handle('system:factory-reset', (event) => {
     const result = factoryReset();
-    if (result.success) relaunchApp();
+    if (result.success) relaunchApp(getModeForWebContents(event.sender.id));
     return result;
   });
 }

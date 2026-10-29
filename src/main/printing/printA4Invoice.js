@@ -1,12 +1,11 @@
-const { BrowserWindow, app } = require('electron');
+const { app } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { getDb } = require('../db/connection');
 const { buildReceiptData } = require('./receiptData');
 const { buildPurchaseReceiptData } = require('./purchaseReceiptData');
 const { buildMergedInvoicePdf } = require('./pdfInvoiceMerge');
-
-const isDev = process.env.NODE_ENV === 'development';
+const { createHiddenRendererWindow, createPdfWindow, loadRenderer } = require('../windows');
 
 function getSettingsMap() {
   const rows = getDb().prepare('SELECT key, value FROM settings').all();
@@ -85,7 +84,7 @@ async function buildPurchasePdf({ purchaseId }) {
 
 // Sends an already-built PDF to the OS print dialog through a hidden window.
 async function printPdfFile(pdfPath) {
-  const win = new BrowserWindow({ show: false, webPreferences: { plugins: true } });
+  const win = createPdfWindow();
   try {
     await new Promise((resolve, reject) => {
       win.webContents.once('did-finish-load', () => setTimeout(resolve, 400));
@@ -108,18 +107,14 @@ async function printPdfFile(pdfPath) {
 
 // Loads one of the renderer's ?print=1 views in a hidden window and prints it.
 async function printHiddenView(search) {
-  const win = new BrowserWindow({
-    show: false,
-    webPreferences: { preload: path.join(__dirname, '../preload.js'), contextIsolation: true, nodeIntegration: false },
-  });
+  const win = createHiddenRendererWindow();
   try {
     await new Promise((resolve, reject) => {
       win.webContents.once('did-finish-load', () => setTimeout(resolve, 700));
       win.webContents.once('did-fail-load', (event, errorCode, errorDescription) => {
         reject(new Error(errorDescription || `Failed to load print view (${errorCode})`));
       });
-      if (isDev) win.loadURL(`http://localhost:5173/${search}`);
-      else win.loadFile(path.join(__dirname, '../../renderer/dist/index.html'), { search });
+      loadRenderer(win, search);
     });
     return await new Promise((resolve) => {
       win.webContents.print({ silent: false, printBackground: true }, (success, failureReason) => {
@@ -151,12 +146,9 @@ async function printInvoice({ saleId, showDues }) {
   const pdfPath = path.join(receiptsDir(), `invoice_${sale.id}_${Date.now()}.pdf`);
   fs.writeFileSync(pdfPath, pdfBytes);
 
-  const win = new BrowserWindow({
-    show: false,
-    // Enables Chromium's built-in PDF viewer, which is what lets a plain
-    // BrowserWindow load and print a .pdf file directly.
-    webPreferences: { plugins: true },
-  });
+  // Chromium's built-in PDF viewer (plugins on) is what lets a plain
+  // BrowserWindow load and print a .pdf file directly.
+  const win = createPdfWindow();
 
   try {
     await new Promise((resolve, reject) => {
@@ -182,14 +174,7 @@ async function printInvoice({ saleId, showDues }) {
 // The no-letterhead fallback — same hidden-window HTML-print pattern as
 // printPaymentReceipt() below, just pointed at PrintInvoice.jsx instead.
 async function printInvoiceFallback({ saleId, showDues }) {
-  const win = new BrowserWindow({
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, '../preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
+  const win = createHiddenRendererWindow();
 
   const search = `?print=1&printMode=invoice-fallback&saleId=${encodeURIComponent(saleId)}&showDues=${showDues ? '1' : '0'}`;
 
@@ -200,11 +185,7 @@ async function printInvoiceFallback({ saleId, showDues }) {
         reject(new Error(errorDescription || `Failed to load invoice fallback view (${errorCode})`));
       });
 
-      if (isDev) {
-        win.loadURL(`http://localhost:5173/${search}`);
-      } else {
-        win.loadFile(path.join(__dirname, '../../renderer/dist/index.html'), { search });
-      }
+      loadRenderer(win, search);
     });
 
     return await new Promise((resolve) => {
@@ -223,14 +204,7 @@ async function printInvoiceFallback({ saleId, showDues }) {
 // on the original HTML-print path — same hidden-window pattern, just pointed
 // at the payment-receipt print view instead of a merged PDF.
 async function printPaymentReceipt({ paymentId }) {
-  const win = new BrowserWindow({
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, '../preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
+  const win = createHiddenRendererWindow();
 
   const search = `?print=1&printMode=payment-receipt&paymentId=${encodeURIComponent(paymentId)}`;
 
@@ -243,11 +217,7 @@ async function printPaymentReceipt({ paymentId }) {
         reject(new Error(errorDescription || `Failed to load print view (${errorCode})`));
       });
 
-      if (isDev) {
-        win.loadURL(`http://localhost:5173/${search}`);
-      } else {
-        win.loadFile(path.join(__dirname, '../../renderer/dist/index.html'), { search });
-      }
+      loadRenderer(win, search);
     });
 
     return await new Promise((resolve) => {

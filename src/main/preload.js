@@ -7,15 +7,30 @@ const STOCK_CHANNELS = new Set([
   'stock:adjust', 'stock:add', 'stock:remove', 'purchases:create',
   'sales:create', 'sales:update', 'sales:void', 'returns:create',
 ]);
+// The main process refuses calls from a window whose session ended (expired,
+// revoked, signed out elsewhere); the page hears about it and returns to Login.
+const SESSION_ENDED_REASON = 'Please sign in again.';
+
 function invoke(channel, ...args) {
   return ipcRenderer.invoke(channel, ...args).then((res) => {
     if (STOCK_CHANNELS.has(channel)) window.dispatchEvent(new Event('pos:stock-changed'));
+    if (res && res.success === false && res.reason === SESSION_ENDED_REASON) window.dispatchEvent(new Event('pos:session-ended'));
     return res;
   });
 }
 
+// Which app this window is ('admin' | 'cashier'), from the launch argument main
+// passes in. Display only — main keeps its own record and never trusts this.
+const modeArg = process.argv.find((a) => a.startsWith('--arwaat-mode='));
+const APP_MODE = modeArg ? modeArg.slice('--arwaat-mode='.length) : null;
+
 contextBridge.exposeInMainWorld('api', {
   ping: () => invoke('ping'),
+
+  app: {
+    mode: APP_MODE,
+    openWindow: (data) => invoke('app:open-window', data),
+  },
 
   setup: {
     getStatus: () => invoke('setup:get-status'),

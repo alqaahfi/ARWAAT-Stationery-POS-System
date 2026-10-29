@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
+const { withCallerId } = require('../security/ipcGuard');
 const { getBalancesForCustomers, getBalancesForSuppliers } = require('../ledger/balanceEngine');
 
 // ---------------- Overview ----------------
@@ -256,7 +257,9 @@ function registerLedgersIpc() {
   ipcMain.handle('ledgers:get-advances', () => getAdvances());
   ipcMain.handle('ledgers:get-aging-report', () => getAgingReport());
   ipcMain.handle('ledgers:list-adjustments', () => listAdjustments());
-  ipcMain.handle('ledgers:create-adjustment', (event, payload) => createAdjustment(payload || {}));
+  ipcMain.handle('ledgers:create-adjustment', (event, payload) =>
+    createAdjustment(withCallerId(event, payload, 'requestingUserId', 'createdBy'))
+  );
   ipcMain.handle('ledgers:get-payment-by-id', (event, { id } = {}) => getPaymentById(id));
 }
 

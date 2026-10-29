@@ -1,9 +1,10 @@
 const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
+const { withCallerId } = require('../security/ipcGuard');
 const { getCustomerBalance } = require('../ledger/balanceEngine');
 
-// Read-only Sales History list + one-sale detail. Caller identification
-// mirrors reports:get-sales-report (the renderer passes requestingUserId);
+// Read-only Sales History list + one-sale detail. requestingUserId is always
+// the signed-in caller (injected at registration, like reports:get-sales-report);
 // a cashier additionally needs view_sales_history and is always locked to
 // their own sales, whatever cashierId a crafted call sends.
 
@@ -174,8 +175,8 @@ function getSaleDetail(input = {}) {
 }
 
 function registerSalesHistoryIpc() {
-  ipcMain.handle('sales:list', (event, input) => listSales(input || {}));
-  ipcMain.handle('sales:get-detail', (event, input) => getSaleDetail(input || {}));
+  ipcMain.handle('sales:list', (event, input) => listSales(withCallerId(event, input, 'requestingUserId')));
+  ipcMain.handle('sales:get-detail', (event, input) => getSaleDetail(withCallerId(event, input, 'requestingUserId')));
 }
 
 module.exports = { registerSalesHistoryIpc };

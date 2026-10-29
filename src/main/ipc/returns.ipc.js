@@ -1,9 +1,10 @@
 const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
+const { withCallerId } = require('../security/ipcGuard');
 const { getCustomerBalance } = require('../ledger/balanceEngine');
 
-// Customer returns / refunds — Admin only, enforced here (the renderer
-// passes requestingUserId, same as ledgers:create-adjustment). A return is
+// Customer returns / refunds — Admin only, enforced here (requestingUserId is
+// always the signed-in caller, injected at registration below). A return is
 // tied to one sale and only that sale's lines; every amount is computed here
 // from the stored sale, never taken from the client. Permanent: no edit,
 // delete or undo, and the original sale row is never modified.
@@ -324,10 +325,10 @@ function createReturn(input = {}) {
 }
 
 function registerReturnsIpc() {
-  ipcMain.handle('returns:list', (event, input) => listReturns(input || {}));
-  ipcMain.handle('returns:get-detail', (event, input) => getReturnDetail(input || {}));
-  ipcMain.handle('returns:get-returnable', (event, input) => getReturnable(input || {}));
-  ipcMain.handle('returns:create', (event, input) => createReturn(input || {}));
+  ipcMain.handle('returns:list', (event, input) => listReturns(withCallerId(event, input, 'requestingUserId')));
+  ipcMain.handle('returns:get-detail', (event, input) => getReturnDetail(withCallerId(event, input, 'requestingUserId')));
+  ipcMain.handle('returns:get-returnable', (event, input) => getReturnable(withCallerId(event, input, 'requestingUserId')));
+  ipcMain.handle('returns:create', (event, input) => createReturn(withCallerId(event, input, 'requestingUserId')));
 }
 
 module.exports = { registerReturnsIpc };

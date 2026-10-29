@@ -1,7 +1,8 @@
-const { ipcMain, app, dialog } = require('electron');
+const { ipcMain, dialog } = require('electron');
 const fs = require('fs');
 const Database = require('better-sqlite3');
 const { getDbPath, closeDatabase, initDatabase } = require('../db/connection');
+const { relaunchApp, getModeForWebContents } = require('../windows');
 
 async function exportBackup() {
   const dbPath = getDbPath();
@@ -96,16 +97,11 @@ function isValidBackupFile(filePath) {
   }
 }
 
-function relaunchApp() {
-  app.relaunch();
-  app.exit();
-}
-
 // Used from Setup (before this PC is set up): validates the chosen file looks like a
 // real backup of this app before swapping it in, then relaunches straight
 // away — the restored file already carries its own station_config row
 // and user accounts, so the app boots to the normal Login screen next time.
-async function validateAndRestoreBackup() {
+async function validateAndRestoreBackup(mode) {
   const result = await dialog.showOpenDialog({
     title: 'Restore from Backup',
     filters: [{ name: 'SQLite Database', extensions: ['db'] }],
@@ -121,15 +117,16 @@ async function validateAndRestoreBackup() {
   const swapResult = swapDatabaseFile(src);
   if (!swapResult.success) return swapResult;
 
-  relaunchApp();
+  relaunchApp(mode);
   return { success: true };
 }
 
 function registerBackupIpc() {
   ipcMain.handle('backup:export', () => exportBackup());
   ipcMain.handle('backup:restore', () => restoreBackup());
-  ipcMain.handle('backup:relaunch-app', () => relaunchApp());
-  ipcMain.handle('backup:validate-and-restore', () => validateAndRestoreBackup());
+  // Relaunches into the same window (Admin / Cashier) that asked.
+  ipcMain.handle('backup:relaunch-app', (event) => relaunchApp(getModeForWebContents(event.sender.id)));
+  ipcMain.handle('backup:validate-and-restore', (event) => validateAndRestoreBackup(getModeForWebContents(event.sender.id)));
 }
 
 module.exports = { registerBackupIpc };

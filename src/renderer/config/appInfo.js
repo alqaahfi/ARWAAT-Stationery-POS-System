@@ -9,3 +9,8 @@
 // Settings > Receipt Header & Footer) — that's the shop's own real identity,
 // this is the app's.
 export const APP_NAME = 'ARWAAT Stationery Systems';
+
+// The fixed ARWAAT credit line at the bottom of every print view (pages/Print/*,
+// components/receipt/ThermalContent.jsx). Renderer copy of
+// src/shared/branding.js — keep the two identical. Not a setting.
+export const PRINT_BRANDING_LINE = 'Software by ARWAAT · 0319 2224504 · arwaat.com';

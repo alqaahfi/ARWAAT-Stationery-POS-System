@@ -1,29 +1,72 @@
 // src/main/devpanel/sessionTracker.js
 //
-// The app has no main-process notion of "who's currently logged in" — auth
-// is entirely token-based, validated per-call from whatever the renderer
-// happens to pass (see src/main/ipc/users.ipc.js). Most IPC calls don't pass
-// a token at all. So the audit middleware can't attribute a call to a user
-// by inspecting its own arguments.
+// The main process's own record of who is signed in, per window. Two app
+// windows (Admin + Cashier) can be open at once on one PC, each with its own
+// signed-in user, so identity is keyed by webContents id — never by anything
+// the renderer sends.
 //
-// Instead, since this is a single-window desktop app (one signed-in
-// user/session per running process), auditMiddleware.js watches the results
-// of the three auth channels that already exist (users:login,
-// users:validate-session, users:logout) as they flow through the wrapper it
-// installs anyway, and mirrors the outcome here. No other module needs to
-// change for the audit trail to know who's acting.
-let current = { userId: null, role: null };
+//   app window   — set by users:login / users:validate-session (users.ipc.js),
+//                  cleared by users:logout, a session revoke, or the window closing.
+//   print window — a hidden ?print=1 window main creates for printing / PDF
+//                  export. It never signs in; it borrows the identity of the
+//                  window that asked for it (see windows.js).
+//
+// The IPC guard (security/ipcGuard.js) reads this to authorise every call, and
+// the audit middleware reads it to attribute audit rows.
+const entries = new Map(); // webContents.id -> { userId, role, sessionToken, isPrintWindow }
+const devUnlocked = new Set(); // webContents ids whose Dev Panel password was accepted
 
-function setCurrentSession(user) {
-  current = user ? { userId: user.id, role: user.role } : { userId: null, role: null };
+function setSession(webContentsId, { userId, role, sessionToken }) {
+  entries.set(webContentsId, { userId, role, sessionToken, isPrintWindow: false });
 }
 
-function clearCurrentSession() {
-  current = { userId: null, role: null };
+function clearSession(webContentsId) {
+  entries.delete(webContentsId);
 }
 
-function getCurrentSession() {
-  return current;
+function linkPrintWindow(webContentsId, caller) {
+  if (!caller || !caller.userId) return;
+  entries.set(webContentsId, {
+    userId: caller.userId,
+    role: caller.role,
+    sessionToken: caller.sessionToken,
+    isPrintWindow: true,
+  });
 }
 
-module.exports = { setCurrentSession, clearCurrentSession, getCurrentSession };
+function getSession(webContentsId) {
+  return entries.get(webContentsId) || null;
+}
+
+// A deactivated cashier or a password reset ends that user's sessions in every
+// window at once (print windows borrowing them included).
+function clearSessionsForUser(userId) {
+  for (const [id, entry] of entries) {
+    if (entry.userId === userId) entries.delete(id);
+  }
+}
+
+function markDevUnlocked(webContentsId) {
+  devUnlocked.add(webContentsId);
+}
+
+function isDevUnlocked(webContentsId) {
+  return devUnlocked.has(webContentsId);
+}
+
+// Window closed / destroyed.
+function forgetWebContents(webContentsId) {
+  entries.delete(webContentsId);
+  devUnlocked.delete(webContentsId);
+}
+
+module.exports = {
+  setSession,
+  clearSession,
+  linkPrintWindow,
+  getSession,
+  clearSessionsForUser,
+  markDevUnlocked,
+  isDevUnlocked,
+  forgetWebContents,
+};

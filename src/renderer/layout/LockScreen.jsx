@@ -4,9 +4,19 @@ import { Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import theme from '../config/theme';
 import { Avatar, Banner, Button, Field, PasswordInput } from '../components/ui';
+import { isSaving } from '../utils/appEvents';
 
 const c = theme.colors;
 const LOCK_KEY = 'pos_locked_user';
+
+// Idle auto-lock: Settings → Preferences "Lock the screen after inactivity"
+// (settings.auto_lock_minutes, 0 = never). Each window times its own
+// inactivity. Preferences fires AUTO_LOCK_EVENT after saving so open windows
+// pick up the new value.
+export const AUTO_LOCK_DEFAULT_MINUTES = 15;
+export const AUTO_LOCK_EVENT = 'pos:auto-lock-changed';
+const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart'];
+const IDLE_CHECK_MS = 15 * 1000;
 
 const LockContext = createContext({ locked: false, lock: () => {} });
 export const useLock = () => useContext(LockContext);
@@ -44,6 +54,51 @@ export function LockProvider({ children }) {
     }
     setLocked(false);
   }, []);
+
+  // Lock after N minutes with no mouse/keyboard input — never while a sale or
+  // quick bill is being saved.
+  const [idleMinutes, setIdleMinutes] = useState(AUTO_LOCK_DEFAULT_MINUTES);
+  useEffect(() => {
+    let cancelled = false;
+    function loadSetting() {
+      window.api.settings
+        .getAll()
+        .then((s) => {
+          if (cancelled || !s || s.success === false) return;
+          const raw = s.auto_lock_minutes;
+          const n = raw === undefined || raw === null || raw === '' ? AUTO_LOCK_DEFAULT_MINUTES : Number(raw);
+          setIdleMinutes(Number.isFinite(n) && n > 0 ? n : 0);
+        })
+        .catch(() => {});
+    }
+    loadSetting();
+    window.addEventListener(AUTO_LOCK_EVENT, loadSetting);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(AUTO_LOCK_EVENT, loadSetting);
+    };
+  }, []);
+
+  const lastActivity = useRef(Date.now());
+  useEffect(() => {
+    if (!idleMinutes || locked) return undefined;
+    lastActivity.current = Date.now();
+    const markActive = () => {
+      lastActivity.current = Date.now();
+    };
+    ACTIVITY_EVENTS.forEach((name) => window.addEventListener(name, markActive, { capture: true, passive: true }));
+    const timer = setInterval(() => {
+      if (isSaving()) {
+        lastActivity.current = Date.now();
+        return;
+      }
+      if (Date.now() - lastActivity.current >= idleMinutes * 60 * 1000) lock();
+    }, IDLE_CHECK_MS);
+    return () => {
+      clearInterval(timer);
+      ACTIVITY_EVENTS.forEach((name) => window.removeEventListener(name, markActive, { capture: true }));
+    };
+  }, [idleMinutes, locked, lock]);
 
   useEffect(() => {
     function onKey(e) {

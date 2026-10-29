@@ -2,10 +2,16 @@ import React, { useEffect, useState } from 'react';
 import theme from './config/theme';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Setup from './pages/Setup/Setup';
+import SetupShell from './pages/Setup/SetupShell';
+import { Button } from './components/ui';
 import CashierInitialSync from './pages/Setup/CashierInitialSync';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard/Dashboard';
 import DevPanelTrigger from './components/DevPanelTrigger';
+
+// Which app this window is (Admin or Cashier shortcut). Both run in one
+// process; the main process decides what each may do, this only picks screens.
+const APP_MODE = window.api.app?.mode === 'cashier' ? 'cashier' : 'admin';
 
 function AppRouter() {
   const { user, loading, login } = useAuth();
@@ -35,15 +41,19 @@ function AppRouter() {
       await refreshSetup();
       return;
     }
-    // Admin: straight into the dashboard.
     await refreshSetup();
-    await login(username, password);
+    // Admin set up from the Admin window: straight into the dashboard. From the
+    // Cashier window, open the Admin window to sign in there.
+    if (APP_MODE === 'admin') await login(username, password);
+    else window.api.app.openWindow({ mode: 'admin' });
   }
 
   async function handleCashierSyncDone() {
     const { username, password } = pendingCashierSync;
     setPendingCashierSync(null);
-    await login(username, password);
+    // A counter PC set up from the Admin window hands over to the Cashier window.
+    if (APP_MODE === 'admin') window.api.app.openWindow({ mode: 'cashier', closeThis: true });
+    else await login(username, password);
   }
 
   if (checkingSetup || loading) return <CenteredMessage text="Loading..." />;
@@ -52,9 +62,26 @@ function AppRouter() {
 
   if (pendingCashierSync) return <CashierInitialSync onDone={handleCashierSyncDone} />;
 
-  if (!user) return <Login />;
+  if (APP_MODE === 'admin' && setupStatus.role === 'cashier') return <CounterComputer />;
+
+  if (!user) return <Login mode={APP_MODE} />;
 
   return <Dashboard />;
+}
+
+// The Admin shortcut opened on a counter PC: nothing to sign in to here.
+function CounterComputer() {
+  return (
+    <SetupShell
+      title="This is a counter computer"
+      subtitle="The Admin app runs on the main computer."
+      footer={
+        <Button size="lg" fullWidth onClick={() => window.api.app.openWindow({ mode: 'cashier', closeThis: true })}>
+          Open Cashier
+        </Button>
+      }
+    />
+  );
 }
 
 function CenteredMessage({ text }) {

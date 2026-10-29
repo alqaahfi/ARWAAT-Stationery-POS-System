@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
+const { getCaller, withCallerId } = require('../security/ipcGuard');
 const { resolveUnitPrice } = require('../pricing/priceEngine');
 const { getSaleDetail, buildReceiptData } = require('../printing/receiptData');
 const { logActivity } = require('../activity/activityLog');
@@ -506,12 +507,13 @@ function registerSalesIpc() {
     const stationCode = (activation && activation.station_code) || 'MAIN';
     return { invoiceNo: getNextInvoiceNo(db, stationCode) };
   });
-  ipcMain.handle('sales:get-cashier-discount-cap', (event, { userId } = {}) => ({ capPercentage: getCashierDiscountCap(userId) }));
-  ipcMain.handle('sales:create', (event, payload) => create(payload || {}));
-  ipcMain.handle('sales:update', (event, payload) => updateSale(payload || {}));
-  ipcMain.handle('sales:void', (event, payload) => voidSale(payload || {}));
-  ipcMain.handle('sales:list-recent', (event, payload) => listRecent(payload || {}));
-  ipcMain.handle('sales:get-for-edit', (event, payload) => getForEdit(payload || {}));
+  // The cashier / acting user is always the signed-in caller, never an id from the renderer.
+  ipcMain.handle('sales:get-cashier-discount-cap', (event) => ({ capPercentage: getCashierDiscountCap(getCaller(event)?.userId) }));
+  ipcMain.handle('sales:create', (event, payload) => create(withCallerId(event, payload, 'cashierId')));
+  ipcMain.handle('sales:update', (event, payload) => updateSale(withCallerId(event, payload, 'cashierId')));
+  ipcMain.handle('sales:void', (event, payload) => voidSale(withCallerId(event, payload, 'userId')));
+  ipcMain.handle('sales:list-recent', (event, payload) => listRecent(withCallerId(event, payload, 'userId')));
+  ipcMain.handle('sales:get-for-edit', (event, payload) => getForEdit(withCallerId(event, payload, 'userId')));
   ipcMain.handle('sales:get-sale-detail', (event, { saleId } = {}) => getSaleDetail(saleId));
   ipcMain.handle('sales:get-receipt-data', (event, { saleId, showDues } = {}) => buildReceiptData(saleId, { showDues }));
 }

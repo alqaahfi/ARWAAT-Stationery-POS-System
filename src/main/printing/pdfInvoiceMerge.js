@@ -1,5 +1,6 @@
 const fs = require('fs');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+const { BRANDING_LINE } = require('../../shared/branding');
 
 const MM_TO_PT = 2.83465;
 const mm = (n) => n * MM_TO_PT;
@@ -9,6 +10,12 @@ const MUTED_COLOR = rgb(0.4, 0.44, 0.52);
 const BORDER_COLOR = rgb(0, 0, 0); // visible black grid lines, as requested
 const HEADER_FILL = rgb(0.9, 0.9, 0.9);
 const TOTAL_FILL = rgb(0.87, 0.87, 0.87);
+
+// The fixed ARWAAT credit line on every page (src/shared/branding.js).
+const BRANDING_SIZE = 7;
+const BRANDING_COLOR = rgb(0.55, 0.55, 0.55);
+const BRANDING_BASELINE_MM = 6;
+const MIN_BOTTOM_MARGIN_MM = 12;
 
 function formatDate(sqliteDateTime) {
   if (!sqliteDateTime) return '';
@@ -40,7 +47,9 @@ async function buildMergedInvoicePdf({ templatePath, data, settings, marginTopMm
   const fontBold = await outputDoc.embedFont(StandardFonts.HelveticaBold);
 
   const marginTop = mm(marginTopMm ?? 40);
-  const marginBottom = mm(marginBottomMm ?? 25);
+  // Content always stops at least 12 mm above the bottom edge, so it never
+  // reaches the ARWAAT line stamped 6 mm up on every page (see below).
+  const marginBottom = mm(Math.max(marginBottomMm ?? 25, MIN_BOTTOM_MARGIN_MM));
   const marginX = mm(20);
   const infoBoxHeight = 76;
   const headerRowHeight = 20;
@@ -263,7 +272,19 @@ async function buildMergedInvoicePdf({ templatePath, data, settings, marginTopMm
     text(money(row.value), totalsX + totalsWidth - 8, textY, { size, bold: row.bold, color: row.color || TEXT_COLOR, align: 'right' });
   });
 
-  // No footer text on A4 invoices (it overlapped the bill content).
+  // No footer text on A4 invoices (it overlapped the bill content). Only the
+  // fixed ARWAAT line, small and grey, centered 6 mm above the bottom of every page.
+  for (const p of outputDoc.getPages()) {
+    const width = font.widthOfTextAtSize(BRANDING_LINE, BRANDING_SIZE);
+    p.drawText(BRANDING_LINE, {
+      x: (p.getSize().width - width) / 2,
+      y: mm(BRANDING_BASELINE_MM),
+      size: BRANDING_SIZE,
+      font,
+      color: BRANDING_COLOR,
+    });
+  }
+
   return outputDoc.save();
 }
 

@@ -26,6 +26,7 @@ import PrintPreviewModal from '../../components/receipt/PrintPreviewModal';
 import BillOverlay from '../../components/billing/BillOverlay';
 import Returns from '../Sales/Returns';
 import { InlineMessage, PanelTitle, packSizeName } from './parts/common';
+import { whileSaving } from '../../utils/appEvents';
 
 // Cashier Mode is 100% keyboard-operable — see the build prompt for the full
 // stage-by-stage spec. Built as one component on purpose: a keyboard state
@@ -967,9 +968,9 @@ export default function Sale() {
       paymentMethod,
     };
 
-    const res = editingSale
-      ? await window.api.sales.update({ ...payload, saleId: editingSale.id })
-      : await window.api.sales.create(payload);
+    const res = await whileSaving(() =>
+      editingSale ? window.api.sales.update({ ...payload, saleId: editingSale.id }) : window.api.sales.create(payload)
+    );
     setCompleting(false);
 
     if (!res.success) {

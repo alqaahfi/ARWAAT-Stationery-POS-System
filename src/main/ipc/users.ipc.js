@@ -4,9 +4,52 @@ const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
 const { PERMISSION_DEFINITIONS } = require('../../shared/permissionDefinitions');
 const { logActivity } = require('../activity/activityLog');
+const sessions = require('../devpanel/sessionTracker');
+const { getCaller } = require('../security/ipcGuard');
+const { getModeForWebContents } = require('../windows');
 
 const SALT_ROUNDS = 12;
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
+
+// Wrong-password lockout, kept in memory: 5 misses for one username (or one
+// user's lock screen) refuses it for 5 minutes. A correct password resets it.
+const MAX_WRONG_TRIES = 5;
+const LOCKOUT_MS = 5 * 60 * 1000;
+const TOO_MANY_TRIES = 'Too many wrong tries. Try again in 5 minutes.';
+const wrongTries = new Map(); // key -> { count, lockedUntil }
+
+function isLockedOut(key) {
+  const entry = wrongTries.get(key);
+  return !!entry && entry.lockedUntil > Date.now();
+}
+
+function recordWrongTry(key) {
+  const entry = wrongTries.get(key) || { count: 0, lockedUntil: 0 };
+  if (entry.lockedUntil && entry.lockedUntil <= Date.now()) {
+    entry.count = 0;
+    entry.lockedUntil = 0;
+  }
+  entry.count += 1;
+  if (entry.count >= MAX_WRONG_TRIES) entry.lockedUntil = Date.now() + LOCKOUT_MS;
+  wrongTries.set(key, entry);
+}
+
+const ADMIN_LOGIN_ONLY = 'This is the Admin login. Cashiers sign in from the ARWAAT Cashier shortcut.';
+const CASHIER_LOGIN_ONLY = 'This is the Cashier login. Use the ARWAAT Admin shortcut to manage the shop.';
+const COUNTER_PC = 'This is a counter computer. The Admin app runs on the main computer.';
+
+function stationRole() {
+  const row = getDb().prepare('SELECT role FROM station_config WHERE id = 1').get();
+  return row ? row.role : null;
+}
+
+// Which accounts a window may sign in: the Admin window takes the Admin only
+// (and nobody on a counter PC); the Cashier window takes cashiers only.
+function roleRefusal(mode, userRole) {
+  if (mode === 'cashier') return userRole === 'admin' ? CASHIER_LOGIN_ONLY : null;
+  if (stationRole() === 'cashier') return COUNTER_PC;
+  return userRole === 'admin' ? null : ADMIN_LOGIN_ONLY;
+}
 
 function toPublicUser(row) {
   return {
@@ -18,8 +61,8 @@ function toPublicUser(row) {
 }
 
 // Specifically "is there an admin account yet" — NOT "is there any user".
-// seedDummyCashier() below inserts a demo cashier unconditionally on every boot,
-// before Setup ever runs, so any-user is true on a completely fresh install too.
+// In development seedDummyCashier() below inserts a demo cashier on every boot,
+// before Setup ever runs, so any-user can be true on a fresh dev install too.
 function hasAdminUser() {
   const db = getDb();
   const row = db.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'admin'").get();
@@ -56,22 +99,26 @@ function createFirstAdmin(fullName, username, password) {
   }
 }
 
-function login(username, password) {
+function login(username, password, mode) {
   const db = getDb();
 
   if (!username || !password) {
     return { success: false, reason: 'Username and password are required.' };
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
-  if (!user || !user.is_active) {
-    return { success: false, reason: 'Invalid username or password.' };
-  }
+  const lockKey = `login:${String(username).toLowerCase()}`;
+  if (isLockedOut(lockKey)) return { success: false, reason: TOO_MANY_TRIES };
 
-  const passwordOk = bcrypt.compareSync(password, user.password_hash);
-  if (!passwordOk) {
-    return { success: false, reason: 'Invalid username or password.' };
+  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  if (!user || !user.is_active || !bcrypt.compareSync(password, user.password_hash)) {
+    recordWrongTry(lockKey);
+    return { success: false, reason: isLockedOut(lockKey) ? TOO_MANY_TRIES : 'Invalid username or password.' };
   }
+  wrongTries.delete(lockKey);
+
+  // Checked only after the password, so it never reveals which accounts exist.
+  const refusal = roleRefusal(mode, user.role);
+  if (refusal) return { success: false, reason: refusal };
 
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
@@ -90,17 +137,23 @@ function login(username, password) {
   return { success: true, token, user: toPublicUser(user) };
 }
 
-// Lock-screen check: confirms the signed-in user's password without starting a session.
+// Lock-screen check: confirms the signed-in user's password without starting
+// a session. Same 5-tries lockout as the login screen.
 function verifyPassword(userId, password) {
-  if (!userId || !password) return { success: false, reason: 'Enter your password.' };
+  if (!userId) return { success: false, reason: 'Please sign in again.' };
+  if (!password) return { success: false, reason: 'Enter your password.' };
+  const lockKey = `lock:${userId}`;
+  if (isLockedOut(lockKey)) return { success: false, reason: TOO_MANY_TRIES };
   const user = getDb().prepare('SELECT password_hash, is_active FROM users WHERE id = ?').get(userId);
   if (!user || !user.is_active || !bcrypt.compareSync(password, user.password_hash)) {
-    return { success: false, reason: 'Wrong password. Try again.' };
+    recordWrongTry(lockKey);
+    return { success: false, reason: isLockedOut(lockKey) ? TOO_MANY_TRIES : 'Wrong password. Try again.' };
   }
+  wrongTries.delete(lockKey);
   return { success: true };
 }
 
-function validateSession(token) {
+function validateSession(token, mode) {
   const db = getDb();
   if (!token) return { valid: false };
 
@@ -113,6 +166,7 @@ function validateSession(token) {
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(session.user_id);
   if (!user || !user.is_active) return { valid: false };
+  if (roleRefusal(mode, user.role)) return { valid: false };
 
   return { valid: true, user: toPublicUser(user) };
 }
@@ -142,9 +196,10 @@ function getPermissions(userId) {
   return map;
 }
 
-// Dev/testing convenience: makes sure a demo cashier account always exists so the
-// cashier side of the login flow can be exercised without building an "Add Cashier"
-// admin screen yet. Safe to call on every startup — it's a no-op once the account exists.
+// Development convenience only (index.js calls it when !app.isPackaged): makes
+// sure a demo cashier account exists so the cashier side of the login flow can
+// be exercised. Safe to call on every startup — a no-op once the account exists.
+// Installed builds never create, backfill or touch it.
 // Granted make_sale (+ a sample discount cap) so the seeded account can actually
 // reach the POS screen under the fail-safe permission model, not just log in.
 function seedDummyCashier() {
@@ -286,6 +341,7 @@ function setActive({ id, isActive }) {
   db.prepare(`UPDATE users SET is_active = ?, updated_at = datetime('now') WHERE id = ?`).run(isActive ? 1 : 0, id);
   if (!isActive) {
     db.prepare("UPDATE sessions SET is_revoked = 1, ended_at = COALESCE(ended_at, datetime('now')) WHERE user_id = ?").run(id);
+    sessions.clearSessionsForUser(id);
   }
   queueUserSync(db, id, 'update');
   return { success: true };
@@ -301,6 +357,7 @@ function resetPassword({ id, newPassword }) {
   const passwordHash = bcrypt.hashSync(newPassword, SALT_ROUNDS);
   db.prepare(`UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?`).run(passwordHash, id);
   db.prepare("UPDATE sessions SET is_revoked = 1, ended_at = COALESCE(ended_at, datetime('now')) WHERE user_id = ?").run(id);
+  sessions.clearSessionsForUser(id);
   queueUserSync(db, id, 'update');
   return { success: true };
 }
@@ -437,15 +494,32 @@ function getSessionDetail(sessionId) {
 }
 
 function registerUsersIpc() {
-  ipcMain.handle('users:login', (event, { username, password } = {}) => login(username, password));
+  // Identity is recorded per window (sessionTracker) — that, not anything the
+  // renderer sends later, is what every other handler trusts.
+  ipcMain.handle('users:login', (event, { username, password } = {}) => {
+    const result = login(username, password, getModeForWebContents(event.sender.id));
+    if (result.success) {
+      sessions.setSession(event.sender.id, { userId: result.user.id, role: result.user.role, sessionToken: result.token });
+    }
+    return result;
+  });
 
-  ipcMain.handle('users:verify-password', (event, { userId, password } = {}) => verifyPassword(userId, password));
+  ipcMain.handle('users:verify-password', (event, { password } = {}) => verifyPassword(getCaller(event)?.userId, password));
 
-  ipcMain.handle('users:validate-session', (event, { token } = {}) => validateSession(token));
+  ipcMain.handle('users:validate-session', (event, { token } = {}) => {
+    const result = validateSession(token, getModeForWebContents(event.sender.id));
+    if (result.valid) sessions.setSession(event.sender.id, { userId: result.user.id, role: result.user.role, sessionToken: token });
+    else sessions.clearSession(event.sender.id);
+    return result;
+  });
 
-  ipcMain.handle('users:logout', (event, { token } = {}) => logout(token));
+  ipcMain.handle('users:logout', (event, { token } = {}) => {
+    sessions.clearSession(event.sender.id);
+    return logout(token);
+  });
 
-  ipcMain.handle('users:get-permissions', (event, { userId } = {}) => getPermissions(userId));
+  // Always the caller's own permissions.
+  ipcMain.handle('users:get-permissions', (event) => getPermissions(getCaller(event)?.userId));
 
   ipcMain.handle('users:list', (event, payload) => list(payload || {}));
   ipcMain.handle('users:create-cashier', (event, payload) => createCashier(payload || {}));

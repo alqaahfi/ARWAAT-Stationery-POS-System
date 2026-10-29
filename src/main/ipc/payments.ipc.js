@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
+const { withCallerId } = require('../security/ipcGuard');
 const { getCustomerBalance, getSupplierBalance } = require('../ledger/balanceEngine');
 
 // The standalone Record Payment screen only ever records a customer payment
@@ -103,9 +104,11 @@ function deletePayment({ paymentId, requestingUserId } = {}) {
 }
 
 function registerPaymentsIpc() {
-  ipcMain.handle('payments:delete', (event, payload) => deletePayment(payload || {}));
-  ipcMain.handle('payments:create-standalone', (event, payload) => createStandalone(payload || {}));
-  ipcMain.handle('payments:create-supplier-payment', (event, payload) => createSupplierPayment(payload || {}));
+  ipcMain.handle('payments:delete', (event, payload) => deletePayment(withCallerId(event, payload, 'requestingUserId')));
+  ipcMain.handle('payments:create-standalone', (event, payload) => createStandalone(withCallerId(event, payload, 'receivedBy')));
+  ipcMain.handle('payments:create-supplier-payment', (event, payload) =>
+    createSupplierPayment(withCallerId(event, payload, 'requestingUserId', 'receivedBy'))
+  );
 }
 
 module.exports = { registerPaymentsIpc };

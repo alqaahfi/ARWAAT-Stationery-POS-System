@@ -1,5 +1,5 @@
 import React from 'react';
-import { BadgePercent, Banknote, TrendingDown } from 'lucide-react';
+import { BadgePercent, Banknote, Lock, TrendingDown } from 'lucide-react';
 import theme from '../../../config/theme';
 import glossary from '../../../config/glossary';
 import { ListSection, NumberInput, TextInput } from '../../../components/ui';
@@ -10,6 +10,10 @@ const c = theme.colors;
 function Suffix({ children }) {
   return <span style={{ ...theme.type.body, color: c.labelSecondary }}>{children}</span>;
 }
+
+const onlyWholeNumber = (fn) => (e) => {
+  if (/^\d*$/.test(e.target.value)) fn(e.target.value);
+};
 
 const onlyNumber = (fn) => (e) => {
   if (/^\d*\.?\d*$/.test(e.target.value)) fn(e.target.value);
@@ -58,6 +62,27 @@ export function PreferenceSections({ values, onChange }) {
                 style={{ width: '90px' }}
               />
               <Suffix>%</Suffix>
+            </div>
+          )}
+        />
+      </ListSection>
+
+      <ListSection title="Security">
+        <SettingRow
+          icon={Lock}
+          color="blue"
+          title="Lock the screen after inactivity"
+          subtitle="Minutes without mouse or keyboard use before the screen locks itself. 0 = never."
+          control={(id) => (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <NumberInput
+                id={id}
+                value={values.autoLockMinutes}
+                placeholder="15"
+                onChange={onlyWholeNumber((v) => onChange('autoLockMinutes', v))}
+                style={{ width: '90px' }}
+              />
+              <Suffix>min</Suffix>
             </div>
           )}
         />
