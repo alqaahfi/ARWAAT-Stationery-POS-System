@@ -35,6 +35,11 @@ const { check, expectEq } = H;
   for (const [i, s] of T.SUPPLIERS.entries()) {
     await check('DATA', 'DAT-S' + (i + 1), `Add supplier ${s.name}`, 'V', async () => { await D.addParty(ui, 'supplier', s); await ui.see('saved', 8000); }, ui);
   }
+  await check('DATA', 'DAT-BK', 'Make backup CLEAN-MASTER with the Backup feature of the app; it holds ALL the data', 'V', async () => {
+    const f = await D.makeBackup(ui, 'CLEAN-MASTER');
+    const r = JSON.parse(require('child_process').execFileSync('python', ['-I', require('path').join(__dirname, 'tools', 'q.py'), f, 'select (select count(*) from products) p,(select count(*) from customers) c,(select count(*) from suppliers) s,(select count(*) from users) u']).toString());
+    if (r[0].p !== 11 || r[0].c !== 3 || r[0].s !== 2 || r[0].u < 2) throw new Error('backup incomplete: ' + JSON.stringify(r));
+  }, ui);
   await rec.stop();
   console.log(JSON.stringify(H.q('select name, phone, opening_balance from customers')), JSON.stringify(H.q('select name, opening_balance from suppliers')));
   process.exit(0);

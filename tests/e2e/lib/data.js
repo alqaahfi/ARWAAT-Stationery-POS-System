@@ -86,13 +86,13 @@ async function openBackupTab(ui) {
 }
 async function makeBackup(ui, name) {
   const file = require('path').join(BACKUPS, name + '.db');
-  try { require('fs').rmSync(file); } catch {}
+  for (const ext of ['', '-wal', '-shm']) { try { require('fs').rmSync(file + ext); } catch {} }
   await openBackupTab(ui);
   const dlg = answerFileDialog(file);
   await ui.click(ui.btn('Create a backup'), 'Create a backup');
   await dlg;
-  await ui.see('ackup', 8000);
-  await H.sleep(800);
+  for (let i = 0; i < 40 && !require('fs').existsSync(file); i++) await H.sleep(500); // the copy finishes a moment after the dialog closes
+  await H.sleep(600);
   if (!require('fs').existsSync(file)) throw new Error('backup file was not written: ' + file);
   return file;
 }

@@ -6,7 +6,7 @@ $TS = [System.Windows.Automation.TreeScope]
 $deadline = (Get-Date).AddSeconds($TimeoutSec)
 while ((Get-Date) -lt $deadline) {
   Start-Sleep -Milliseconds 700
-  $pids = @(Get-Process -Name 'ARWAAT Stationery Systems' -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+  $pids = @(Get-Process -Name 'ARWAAT Stationery Systems','electron' -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
   $dlgs = $AE::RootElement.FindAll($TS::Children, (New-Object System.Windows.Automation.PropertyCondition($AE::ClassNameProperty, '#32770')))
   foreach ($d in $dlgs) {
     if ($pids -notcontains $d.Current.ProcessId) { continue }

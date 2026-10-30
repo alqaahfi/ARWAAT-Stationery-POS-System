@@ -32,8 +32,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let current = { section: '', id: '', name: '', kind: 'V' };
 function loadResults() { try { return JSON.parse(fs.readFileSync(RESULTS_JSON, 'utf8')); } catch { return []; } }
 function record(r) {
-  const all = loadResults().filter((x) => !(x.id === r.id));
-  all.push({ ...r, at: new Date().toISOString(), speed: SPEED_NAME });
+  const prev = loadResults();
+  const before = prev.find((x) => x.id === r.id);
+  const history = [...((before && before.history) || (before ? [before.status] : [])), r.status].slice(-8);
+  const all = prev.filter((x) => !(x.id === r.id));
+  all.push({ ...r, history, at: new Date().toISOString(), speed: SPEED_NAME });
   fs.writeFileSync(RESULTS_JSON, JSON.stringify(all, null, 2));
 }
 function log(msg) { console.log(`[${current.id || '--'}] ${msg}`); }
@@ -42,8 +45,24 @@ function log(msg) { console.log(`[${current.id || '--'}] ${msg}`); }
 async function cdpUp() {
   try { const r = await fetch(`http://127.0.0.1:${PORT}/json/version`); return r.ok; } catch { return false; }
 }
+// Dev mode (default): Electron from node_modules + the Vite dev server, so a code fix needs no rebuild
+// (renderer edits hot-reload; main-process edits only need killApp + openApp). ARWAAT_INSTALLED=1 drives the installed exe instead.
+const DEV = process.env.ARWAAT_INSTALLED !== '1';
+const ELECTRON = path.join(ROOT, 'node_modules', 'electron', 'dist', 'electron.exe');
+const PROC_NAME = DEV ? 'electron.exe' : 'ARWAAT Stationery Systems.exe';
+async function portUp(port) { try { const r = await fetch(`http://127.0.0.1:${port}/`); return r.status > 0; } catch { return false; } }
+async function ensureVite() {
+  if (!DEV || (await portUp(5173))) return;
+  const v = spawn(process.execPath, [path.join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js')], { cwd: ROOT, detached: true, stdio: 'ignore' });
+  v.unref();
+  for (let i = 0; i < 60 && !(await portUp(5173)); i++) await sleep(500);
+}
+function devEnv() { const e = { ...process.env, NODE_ENV: 'development' }; delete e.ELECTRON_RUN_AS_NODE; return e; }
 function launchExe(mode) {
-  const child = spawn(EXE, [`--mode=${mode}`, `--remote-debugging-port=${PORT}`], { detached: true, stdio: 'ignore' });
+  const args = [`--mode=${mode}`, `--remote-debugging-port=${PORT}`];
+  const child = DEV
+    ? spawn(ELECTRON, ['.', ...args], { cwd: ROOT, detached: true, stdio: 'ignore', env: devEnv() })
+    : spawn(EXE, args, { detached: true, stdio: 'ignore' });
   child.unref();
 }
 let browser = null;
@@ -56,7 +75,7 @@ async function connect() {
   throw new Error('Could not attach to the installed app');
 }
 function killApp() {
-  spawnSync('taskkill', ['/F', '/IM', 'ARWAAT Stationery Systems.exe'], { stdio: 'ignore' });
+  spawnSync('taskkill', ['/F', '/IM', PROC_NAME], { stdio: 'ignore' });
   browser = null;
 }
 function wipeData() {
@@ -72,6 +91,7 @@ async function findPage(mode) {
 }
 // Opens (or finds) the window for a mode, exactly as the shortcut would.
 async function openApp(mode, { fresh = false } = {}) {
+  await ensureVite();
   if (fresh) { killApp(); await sleep(1500); }
   if (!(await cdpUp())) { launchExe(mode); await sleep(1500); }
   await connect();
@@ -202,4 +222,4 @@ function startRecording(name) {
   return { file, stop: () => new Promise((res) => { ff.on('close', res); try { ff.stdin.write('q'); } catch { res(); } setTimeout(res, 4000); }) };
 }
 
-module.exports = { wipeData, ROOT, EXE, PORT, DATA_DIR, DB_PATH, S, SPEED_NAME, sleep, log, record, loadResults, openApp, killApp, bringFront, UI, check, note, expectEq, q, startRecording, cdpUp, connect, launchExe, RESULTS_DIR, SHOTS, VIDEOS };
+module.exports = { PROC_NAME, DEV, ensureVite, wipeData, ROOT, EXE, PORT, DATA_DIR, DB_PATH, S, SPEED_NAME, sleep, log, record, loadResults, openApp, killApp, bringFront, UI, check, note, expectEq, q, startRecording, cdpUp, connect, launchExe, RESULTS_DIR, SHOTS, VIDEOS };

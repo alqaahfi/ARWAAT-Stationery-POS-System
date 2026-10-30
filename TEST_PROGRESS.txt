@@ -1,0 +1,152 @@
+ARWAAT STATIONERY SYSTEMS - TEST PROGRESS (paused 2026-10-30)
+==========================================================================
+This is NOT the final TEST_RESULTS.txt. It is an honest record of what was done, what was fixed,
+what was checked, and what is still left for you to run by hand.
+
+HOW THE TESTING WAS DONE
+- The app was first built and installed (installer tested once). After that you asked to test in DEV
+  mode so nothing needs rebuilding: the old installed copy was UNINSTALLED (shortcuts and Program Files
+  folder are gone) and the release/ folder was deleted. Nothing is installed on this laptop now.
+- Tests drive the real app windows (Admin and Cashier) with Playwright over the Chromium debug port.
+  Dev mode = Vite dev server + Electron from node_modules (the harness starts both).
+- All test code is in tests/e2e/. Run with:   node tests/e2e/run-all.js [script names]
+  Speed:  TEST_SPEED=slow (human speed, default) | normal | fast.   KEEP_DATA=1 keeps the database.
+  Scripts: 00-setup, 01-data, 02-login, 03a-restore, 03-shopday, 03b-shopday-admin, 03c-shopday-verify,
+           04-checks, 05-ops, 06-concurrency-crash.   Report maker: node tests/e2e/report.js
+  App-window screenshot helper: node tests/e2e/tools/app-shot.js <label>  (screenshots the app only).
+- Old databases were backed up before deletion: test-backups/old-dev-dbs-2026-10-29_1629.zip
+  (list of deleted files: test-backups/deleted-files.txt).
+- NOTE: this build has NO activation / key pool (removed in migration 035). No key was used.
+
+THINGS THAT DIFFER FROM THE TEST BRIEF (the app does not have these features)
+- Activation / 500 key pool: does not exist. Section 1 = NOT APPLICABLE.
+- Tax (5%): does not exist (tax is always 0).  Item-level discount: does not exist (bill discount only).
+- Opening cash / cash-in-hand screen: does not exist (cash was to be computed from the database).
+- Customer credit limit: stored but NOT enforced.        -> needs your decision
+- Barcodes belong to a product Type, not to a pack size, so Box barcodes 1002 / 1005 cannot exist.  -> needs your decision
+- Decimal quantities are allowed for every item (no "whole numbers only" flag).                      -> needs your decision
+- Voiding a sale is a hard delete (history stays only in the activity log).
+- The two apps are ONE process with two windows, not two processes.
+- Deleting customers/suppliers does not exist (only Deactivate).
+
+WHAT PASSED (clean dev-mode run, fast speed): 34 of 34 checks, 0 failures
+  Setup: SET-01 setup screen shown first; SET-02 empty form refused; SET-03 short password refused;
+         SET-04 admin / Admin@123 created and signed in (password stored as bcrypt hash).
+  Data entry through the UI: cashier1 / Cash@123 (10% discount cap); all 11 items with Box pack sizes
+         (Dollar Box = 10, Dux Box = 12); opening stock value = 72,420 (checked in the database);
+         customers Ahmed Raza, Bilal Hussain (owes 2,000), Sana Bibi (advance 500); suppliers
+         Lahore Stationers (owes 5,000), Gujranwala Book Depot.
+  Backup: CLEAN-MASTER made with the app's own Backup screen and checked: 11 items, 3 customers,
+         2 suppliers, users present (test-backups/CLEAN-MASTER.db).
+  Login and permissions (USR-01 to USR-11):
+         empty fields / wrong username / wrong password show clear messages;
+         CRITICAL: cashier1 cannot sign in to the ADMIN app, admin cannot sign in to the CASHIER app;
+         cashier1 signs in to the Cashier app; passwords are hashed;
+         EVERY admin-only IPC channel was called with the cashier session and was refused;
+         permission-gated actions (reports, expenses) refused for cashier1;
+         logout really logs out (session revoked, reload shows sign-in);
+         5 wrong passwords lock that username for 5 minutes.
+  Also seen working in earlier partial runs (not in the 34 above): sales S2 (450), S3 (2,600, Ahmed pays
+         1,000), S4 (200 from Sana's advance), S5 (3,420 with 10% discount) saved with the right totals;
+         P1/P2 customer payments, E1/E2 expenses, PU1 (2,000, paid 1,000) and PU2 (3,000, paid in full) saved;
+         a manual restore of CLEAN-MASTER works ("Backup restored - Restart now").
+
+BUGS FOUND AND FIXED IN THE CODE (one commit each, all in git; NOT yet in an installer - you will build later)
+  1. f75c079  Backup export left out recent data (only pos.db was copied, new writes were still in the
+              WAL file; a backup had 2 of 11 products).  Now uses SQLite online backup.   src/main/ipc/backup.ipc.js
+  2. bd5e0ed  No busy_timeout on the database. Now 5000 ms.                               src/main/db/connection.js
+  3. 4a7f181  Scanning a barcode sent focus to the Quantity box and the next scan was typed into it
+              (3 quick scans gave a Rs 300.9M line and an empty cart). A scan now adds 1 unit and keeps
+              focus in the scan box.                                                    src/renderer/pages/POS/Sale.jsx
+  4. 3155ee1  Server accepted negative discount, discount bigger than the bill, negative payment, zero /
+              negative / NaN quantity, wrong line totals, and did not enforce the cashier discount cap.
+              Now checked in the main process.                                         src/main/ipc/sales.ipc.js
+  5. 622ee8f  Very fast back-to-back scans glued together. Box is emptied before the lookup.   Sale.jsx
+  6. 4bd57bd  Scanner Enter was dropped when keystrokes came faster than the key listener re-bound
+              (6 scans gave 4 items and "004" left in the box). Now reads the barcode from the input.   Sale.jsx
+  7. 0b436b4  A voided bill's invoice number could be given to the next sale. Last issued number per day
+              is now remembered.                                                       src/main/ipc/sales.ipc.js
+  8. fb62c0f  Restore from Settings checked nothing: an empty or wrong file replaced the whole database
+              (this really happened during testing). Now validated (tables + integrity check) and the
+              replaced data is kept as pos.db.before-restore.bak.                      src/main/ipc/backup.ipc.js
+  Fixes 3 and 5 and 6 were seen working (later scans passed); 1 and the valid-file part of 8 were seen
+  working. Fixes 2, 4, 7 and the "junk file is rejected" part of 8 are in the code but NOT yet proven by a
+  passing test run - run them (list below).
+
+WHAT WAS NOT FINISHED
+- The full shop day (S1-S6, R1, P1, P2, E1, E2, PU1, PU2) was never completed in ONE clean run, so the
+  hand-calculated numbers were NOT confirmed (gross 7,260; returns 180; COGS 6,058; profit 1,022;
+  expenses 2,650; net -1,628; cash 4,730; Ahmed 1,000; Bilal 1,500; Sana advance 300; Lahore 6,000;
+  stock 287/100/102/45/30/19/19/14/38/4/35; stock value 71,362; receipt numbers 1..6).
+  The checks are written (03-shopday, 03b, 03c-shopday-verify); the earlier failures were TEST problems
+  (timing of the customer search, the Print Preview window, wrong selectors), mostly fixed in the test code.
+- The last run got stuck on the native "Save backup" dialog while making CLEAN-MASTER (the helper
+  tests/e2e/tools/file-dialog.ps1 sometimes does not answer it). If it happens: just type
+  D:\ARWAAT-Stationery-POS-System\test-backups\CLEAN-MASTER.db in the dialog and press Save.
+- 03a-restore: restore of CLEAN-MASTER passed once, then failed once (timing of the "Backup restored"
+  message). Not fully reliable yet.
+- 04-checks, 05-ops, 06-concurrency-crash were written but never completed in a clean run.
+- TEST_RESULTS.txt does not exist yet (tests/e2e/report.js will create it from test-results/results.json).
+- SYSTEM_STATUS.md was NOT updated yet.
+
+TESTS STILL TO RUN (by you, or by:  node tests/e2e/run-all.js 03a-restore 03-shopday 03b-shopday-admin 03c-shopday-verify 04-checks 05-ops 06-concurrency-crash)
+A. Full shop day (section 13) - restore CLEAN-MASTER first, then as cashier1: S1 3 Dollar pens + 1 Notebook =
+   270 (pay 500, change 230); S2 1 Dollar Box + 2 UHU = 480, Rs 30 bill discount -> 450; S3 Ahmed: Geometry
+   Box + 5 Notebooks + 1 A4 Rim = 2,600, pays 1,000; S4 Sana: 1 Register Large 200 from advance;
+   S5 Casio with 10% discount = 3,420; S6 1 Dux Box + 6 pencils = 320.  As admin: R1 return 1 Notebook from S1
+   (refund 180); P1 Ahmed pays 600; P2 Bilal pays 500; E1 expense 2,500; E2 expense 150; PU1 Lahore: 10 Dollar
+   Boxes at 200, pay 1,000; PU2 Gujranwala: 10 Urdu Textbooks at 300, paid in full. Then open every report
+   screen and compare with the numbers in "WHAT WAS NOT FINISHED" above.
+B. Section 3 settings/receipt: shop name/address/phone/footer appear on the receipt; receipt numbers
+   sequential after restart and after restore; receipt data has items, discount, total, paid, change,
+   customer, previous/new balance, cashier, date/time.
+C. Section 4 master data: duplicate barcode blocked; empty name; negative price; price below cost (warn?);
+   letters / huge numbers in price; Urdu name saves and shows; duplicate customer phone blocked; editing
+   a price does not change old sales; search by full name, partial name and barcode.
+D. Section 5 selling: unknown barcode message; 10 quick scans all added; focus stays in the scan box;
+   stock never goes negative; quantity 0 / negative rejected; underpaying cash blocked; double-click Save or
+   Enter twice = ONE sale; keyboard-only flow; printer missing -> sale still saved with a clear message.
+E. Section 6 discounts: percentage and amount; discount bigger than the bill, negative, above the cashier cap
+   (10%) must be refused (this was fixed on the server - confirm on screen AND with 04-checks DIS-01..08).
+F. Section 7 credit (udhaar): credit sale without customer blocked; partial payment; advance used on a sale
+   (also an advance smaller than the sale); overpayment; ledger running balance; void/return on a credit sale
+   corrects the balance; total receivable = sum of balances.
+G. Section 8 suppliers: purchase adds stock (10 boxes = 100 pens); partial payment; supplier payment; a new
+   purchase cost does not change the profit of old sales.
+H. Section 9 returns/void: prorated refund (1 UHU from the 480 bill with Rs 30 discount = 93.75, not 100);
+   return more than sold / same line twice blocked; exchange pays only the difference; void restores stock and
+   balance, drops out of totals, and its invoice number is NEVER reused (new fix 0b436b4 - confirm).
+I. Section 10 stock: adjustments need a reason and are admin-only; low-stock list; stock value = qty x cost;
+   stock = opening + purchases - sales + returns +/- adjustments.
+J. Section 11 expenses: add/edit/delete with category and date; empty or negative amount blocked; expenses reduce
+   net profit, not gross profit.
+K. Section 12 reports: daily / range / monthly totals; item-wise, profit by item, top sellers, customer balances;
+   a sale at 11:55 PM stays on that day (Pakistan UTC+5); every total equals the sum of its rows.
+L. Section 14 two windows: Admin and Cashier side by side (half screen each); cashier sells while admin changes a
+   price, adds stock, opens reports: no "database is locked", no lost sale, no duplicate receipt number.
+M. Section 15 backup/restore/crash: backup then restore -> identical data; a non-backup, corrupt or EMPTY file is
+   rejected with the data untouched (fix fb62c0f - confirm!); an older backup restores and shows its date;
+   hard-kill during a sale: the sale is complete or absent and PRAGMA integrity_check says ok.
+N. Section 16 dates: sales at 11:59 PM / 12:01 AM, month-end, year-end, 29 February, wrong system clock.
+O. Section 17 bad input sweep: long text, emoji, Urdu, quotes and ' OR 1=1 -- in every text field; 1e9, -0, "abc",
+   empty in every number field; pasting does not bypass validation.
+P. Section 18 speed: 10,000 items / 2,000 customers / 50,000 sales: item search < 300 ms, scanned item add
+   < 200 ms, sale save < 500 ms, one-month report < 3 s, app start < 10 s. Also: no console errors or stack
+   traces shown to the user during normal use.
+Q. Section 19 security: contextIsolation on / nodeIntegration off (verified by code reading); renderer cannot run
+   SQL; no passwords or secrets in logs (04-checks SEC-01..05).
+R. Hardware / shop only (cannot be automated): real barcode scanner, real thermal printer (receipt look, paper
+   out, unplugged), real power cut and laptop sleep, USB backup to a real drive, screen readability on the shop
+   laptop, ease of use for a non-technical person, the go-live checklist in the shop.
+S. After everything passes: build and install the installer yourself, then run the same checks once on the
+   installed copy (tests can drive it: set ARWAAT_INSTALLED=1).
+
+OPEN DECISIONS FOR THE OWNER
+- Add 5% tax? Enforce the customer credit limit? Barcode per pack size (Box)? Whole-number-only flag per item?
+- The unit price in a sale still comes from the screen (the server checks quantity x price = line total but does
+  not look the price up again) - listed as NOT FIXED.
+
+FILES TO KNOW
+  tests/e2e/                 all test code and helpers          test-results/   screenshots, videos, results.json
+  test-backups/              CLEAN-MASTER.db, old database zip, deleted-files.txt
+  Memory notes for the next session: C:\Users\p c\.claude\projects\d--ARWAAT-Stationery-POS-System\memory\
