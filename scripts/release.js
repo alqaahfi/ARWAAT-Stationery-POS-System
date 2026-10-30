@@ -11,8 +11,11 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const bump = process.argv[2] === 'minor' ? 'minor' : 'patch';
 
+// With shell:true on Windows the arguments are joined into one command line, so quote the ones with spaces.
+const quote = (a) => (/[\s"]/.test(a) ? `"${String(a).replace(/"/g, '\\"')}"` : a);
+
 function run(cmd, args, { capture = false } = {}) {
-  const res = spawnSync(cmd, args, { cwd: root, stdio: capture ? ['ignore', 'pipe', 'inherit'] : 'inherit', shell: process.platform === 'win32', encoding: 'utf8' });
+  const res = spawnSync(cmd, args.map(quote), { cwd: root, stdio: capture ? ['ignore', 'pipe', 'inherit'] : 'inherit', shell: process.platform === 'win32', encoding: 'utf8' });
   if (res.status !== 0) {
     console.error(`\nStopped: "${cmd} ${args.join(' ')}" failed.`);
     process.exit(res.status || 1);
