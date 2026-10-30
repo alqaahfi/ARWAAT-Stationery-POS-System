@@ -368,11 +368,27 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
     }
 
     // Rule 2: going over a customer's credit limit is a warning only — they can save anyway.
-    if (party && totals.balanceDue > 0 && !opts.approvalToken && !opts.allowNegativeStock) {
+    if (party && totals.balanceDue > 0 && !opts.approvalToken && !opts.allowNegativeStock && !opts.allowLargeQty) {
       const credit = await window.api.customers.creditCheck({ customerId: party.id, addAmount: totals.balanceDue }).catch(() => null);
       if (credit?.overLimit) {
         const ok = await confirm({ title: 'Over the credit limit', message: credit.message, confirmLabel: 'Save anyway', cancelLabel: 'Go back' });
         if (!ok) return;
+      }
+    }
+
+    // Anomaly safeguard: qty > 100 or lineTotal > Rs 100,000 asks for confirmation before saving.
+    let allowLargeQty = !!opts.allowLargeQty;
+    if (!allowLargeQty) {
+      const largeLine = lines.find((l) => (Number(l.quantity) || 0) > 100 || lineTotal(l) > 100000);
+      if (largeLine) {
+        const ok = await confirm({
+          title: 'Large quantity or amount',
+          message: `"${largeLine.productName}" has quantity ${largeLine.quantity} and line total ${formatCurrency(lineTotal(largeLine))}. Save this bill anyway?`,
+          confirmLabel: 'Save anyway',
+          cancelLabel: 'Go back',
+        });
+        if (!ok) return;
+        allowLargeQty = true;
       }
     }
 
@@ -396,10 +412,16 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
       paymentMethod: method,
       approvalToken: opts.approvalToken || null,
       allowNegativeStock: !!opts.allowNegativeStock,
+      allowLargeQty,
     };
 
     const res = await whileSaving(() => window.api.sales.create(payload));
     if (!res.success) {
+      if (res.needsLargeConfirm) {
+        const ok = await confirm({ title: 'Large quantity or amount', message: res.reason, confirmLabel: 'Save anyway', cancelLabel: 'Go back' });
+        if (ok) await saveSale({ ...opts, allowLargeQty: true });
+        return;
+      }
       // Rule 12: Admin approval (cashier) or a stock confirm (Admin), then the same bill again.
       if (res.needsApproval) {
         setApproval({ labels: res.approvalLabels || [], message: res.reason, retry: (token) => saveSale({ ...opts, approvalToken: token }) });

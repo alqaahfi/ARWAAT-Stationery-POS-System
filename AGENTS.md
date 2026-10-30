@@ -22,8 +22,8 @@ Read this file first, then SYSTEM_STATUS.md (code wins when they disagree), then
 ## Status
 | Stage | What | Status | Next concrete step |
 |---|---|---|---|
-| 1 | 17 business rules + anomaly handling (server first, then UI), one commit per rule | IN PROGRESS (R1-R17 done; anomalies next) - done: R1 9295f6a, R2 9240782, R3 9ddd33a, R4 2a1777a, R5 9261169, R6 e151378, R7 fe33dd2, R8 565067d, R9 547bb61, R10 795ac5b, R11 9c189b5, R12 a98e6bf, R13 f404401, R14 83bf1e8, R15 3d86a18, R16 7f83830, R17 done | Stage 1 anomaly handling |
-| 2 | Reliable harness (ARWAAT_TEST_MODE, state-based waits, TEST_SPEED=fast, CLEAN-MASTER rebuild) | NOT STARTED | - |
+| 1 | 17 business rules + anomaly handling (server first, then UI), one commit per rule | DONE (R1-R17 + anomalies R18, 128/128 rules checks pass) | - |
+| 2 | Reliable harness (ARWAAT_TEST_MODE, state-based waits, TEST_SPEED=fast, CLEAN-MASTER rebuild) | IN PROGRESS | ARWAAT_TEST_MODE=1 file dialog bypass + state-based waits + CLEAN-MASTER rebuild |
 | 3 | Run everything A-Q + per-rule + anomaly checks, bombard, crash, concurrency, load, dates, security | NOT STARTED | - |
 | 4 | Screenshot every page/form/print at 1366x768, 1920x1080, 683x768; fix UI bugs | NOT STARTED | - |
 

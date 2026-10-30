@@ -15,8 +15,13 @@ const { getCaller } = require('../security/ipcGuard');
 // standardVariantId, when present, is an existing product_variants.id to
 // update in place (preserving its stock_qty/history) rather than replacing —
 // set when editing a product that's still in single-item ("no Types") mode.
+function cleanBarcode(value) {
+  const v = String(value ?? '').replace(/[\r\n\t]/g, '').trim();
+  return v || null;
+}
+
 function normalizeVariantsAndUnits(variants, units, standardStartingStock, standardBarcode, standardVariantId) {
-  const normalizedVariants =
+  const normalizedVariants = (
     variants && variants.length > 0
       ? variants
       : [
@@ -26,7 +31,8 @@ function normalizeVariantsAndUnits(variants, units, standardStartingStock, stand
             barcode: standardBarcode || null,
             startingStock: Number(standardStartingStock) || 0,
           },
-        ];
+        ]
+  ).map((v) => ({ ...v, barcode: cleanBarcode(v.barcode) }));
 
   if (!units || units.length === 0) {
     return { error: 'At least one selling unit is required.' };
@@ -83,10 +89,11 @@ function isSkuTaken(db, sku, excludeId) {
 }
 
 function isBarcodeTaken(db, barcode, excludeVariantId) {
-  if (!barcode) return false;
+  const code = cleanBarcode(barcode);
+  if (!code) return false;
   const row = excludeVariantId
-    ? db.prepare('SELECT id FROM product_variants WHERE barcode = ? AND id != ?').get(barcode, excludeVariantId)
-    : db.prepare('SELECT id FROM product_variants WHERE barcode = ?').get(barcode);
+    ? db.prepare('SELECT id FROM product_variants WHERE barcode = ? COLLATE NOCASE AND id != ?').get(code, excludeVariantId)
+    : db.prepare('SELECT id FROM product_variants WHERE barcode = ? COLLATE NOCASE').get(code);
   return !!row;
 }
 

@@ -33,6 +33,7 @@ export function AuthProvider({ children }) {
   // account was deactivated): drop it locally and show Login again.
   useEffect(() => {
     function onSessionEnded() {
+      window.dispatchEvent(new Event('pos:before-logout'));
       setUser(null);
       setToken(null);
       setPermissions({});
@@ -61,6 +62,7 @@ export function AuthProvider({ children }) {
   }
 
   async function logout() {
+    window.dispatchEvent(new Event('pos:before-logout'));
     if (token) await window.api.users.logout({ token });
     setUser(null);
     setToken(null);

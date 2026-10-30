@@ -107,8 +107,13 @@ function searchProductsGrouped(query) {
   return [...byProduct.values()].slice(0, 20);
 }
 
+function cleanBarcode(barcode) {
+  return String(barcode ?? '').replace(/[\r\n\t]/g, '').trim();
+}
+
 function getVariantByBarcode(barcode) {
-  if (!barcode) return null;
+  const code = cleanBarcode(barcode);
+  if (!code) return null;
   const db = getDb();
   return (
     db
@@ -116,9 +121,9 @@ function getVariantByBarcode(barcode) {
         `SELECT ${SEARCH_COLUMNS}
          FROM product_variants pv
          JOIN products p ON p.id = pv.product_id
-         WHERE pv.barcode = ? AND pv.is_active = 1 AND p.is_active = 1`
+         WHERE pv.barcode = ? COLLATE NOCASE AND pv.is_active = 1 AND p.is_active = 1`
       )
-      .get(barcode) || null
+      .get(code) || null
   );
 }
 
@@ -328,14 +333,25 @@ const PRICE_TOLERANCE = 0.01;
 // same customer, the bill's own stored price for that pack size is also
 // accepted (the bill keeps the price it was sold at). The server's price is
 // what gets stored, and line totals are recomputed from it.
+const LARGE_QTY_LIMIT = 100;
+const LARGE_LINE_LIMIT = 100000;
+
 function priceLines(db, items, { customerId, actorIsAdmin, original }) {
   const priced = [];
   const changed = [];
   for (const item of items) {
-    const variant = db.prepare('SELECT id, product_id, variant_name FROM product_variants WHERE id = ?').get(item.productVariantId);
-    const unit = db.prepare('SELECT id, product_id, unit_name FROM product_units WHERE id = ?').get(item.productUnitId);
+    const variant = db.prepare('SELECT id, product_id, variant_name, is_active FROM product_variants WHERE id = ?').get(item.productVariantId);
+    const unit = db.prepare('SELECT id, product_id, unit_name, is_active FROM product_units WHERE id = ?').get(item.productUnitId);
     if (!variant || !unit || unit.product_id !== variant.product_id) {
       return { error: 'One of the items in the cart no longer exists.' };
+    }
+    const product = db.prepare('SELECT id, name, is_active FROM products WHERE id = ?').get(variant.product_id);
+    if (!product) {
+      return { error: 'One of the items in the cart no longer exists.' };
+    }
+    if (!product.is_active || !variant.is_active || !unit.is_active) {
+      const label = variant.variant_name && variant.variant_name !== 'Standard' ? `${product.name} (${variant.variant_name})` : product.name;
+      return { error: `"${label}" has been switched off and can no longer be sold. Remove it from the bill.` };
     }
     const enginePrice = resolveUnitPrice({ db, productUnitId: unit.id, customerId: customerId || null });
     if (enginePrice === null || enginePrice === undefined) return { error: 'One of the items in the cart no longer exists.' };
@@ -349,12 +365,12 @@ function priceLines(db, items, { customerId, actorIsAdmin, original }) {
       if (actorIsAdmin || keepsBillPrice) {
         price = round2(sent);
       } else {
-        const name = db.prepare('SELECT name FROM products WHERE id = ?').get(unit.product_id)?.name || 'an item';
+        const name = product.name || 'an item';
         changed.push({ productVariantId: variant.id, productUnitId: unit.id, name, sentPrice: sent, price: enginePrice });
       }
     }
     const qty = Number(item.quantity);
-    priced.push({ ...item, unitPrice: price, lineTotal: round2(qty * price) });
+    priced.push({ ...item, productName: product.name, unitPrice: price, lineTotal: round2(qty * price) });
   }
   return { priced, changed };
 }
@@ -367,6 +383,14 @@ function saveSale(payload, editSaleId) {
 
   if (!cashierId) return { success: false, reason: 'Missing cashier.' };
   if (!items || items.length === 0) return { success: false, reason: 'Cart is empty.' };
+
+  if (customerId) {
+    const cust = db.prepare('SELECT id, name, is_active FROM customers WHERE id = ?').get(customerId);
+    if (!cust) return { success: false, reason: 'The selected customer no longer exists.' };
+    if (!cust.is_active) {
+      return { success: false, reason: `Customer "${cust.name}" has been switched off. Choose another customer or sell as walk-in.` };
+    }
+  }
 
   const activation = db.prepare('SELECT * FROM station_config WHERE id = 1').get();
   const stationCode = (activation && activation.station_code) || 'MAIN';
@@ -410,6 +434,18 @@ function saveSale(payload, editSaleId) {
     };
   }
   items = pricing.priced;
+
+  // Anomaly safeguard: a quantity above 100 or a line total above Rs 100,000 asks for confirmation before saving.
+  if (!payload.allowLargeQty) {
+    const largeLine = items.find((i) => Number(i.quantity) > LARGE_QTY_LIMIT || Number(i.lineTotal) > LARGE_LINE_LIMIT);
+    if (largeLine) {
+      return {
+        success: false,
+        needsLargeConfirm: true,
+        reason: `"${largeLine.productName || 'An item'}" has quantity ${largeLine.quantity} and line total Rs. ${Number(largeLine.lineTotal).toFixed(2)}. Please confirm this large line before saving.`,
+      };
+    }
+  }
 
   // Subtotal is recomputed from the server-priced lines rather than trusted
   // from the client, so a stale/tampered total can't slip through.

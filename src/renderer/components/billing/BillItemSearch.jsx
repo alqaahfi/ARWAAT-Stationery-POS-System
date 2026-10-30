@@ -13,12 +13,14 @@ export default function BillItemSearch({ onPick, disabled, autoFocus = true, inp
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [active, setActive] = useState(0);
+  const [navigated, setNavigated] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const requestRef = useRef(0);
   const listId = useId();
 
   useEffect(() => {
+    setNavigated(false);
     const text = query.trim();
     if (!text) {
       requestRef.current++;
@@ -43,6 +45,7 @@ export default function BillItemSearch({ onPick, disabled, autoFocus = true, inp
     requestRef.current++;
     setQuery('');
     setResults([]);
+    setNavigated(false);
     setMessage('');
   }
 
@@ -54,15 +57,17 @@ export default function BillItemSearch({ onPick, disabled, autoFocus = true, inp
   }
 
   async function onEnter() {
-    const text = query.trim();
+    const text = query.replace(/[\r\n\t]/g, '').trim();
     if (!text || busy) return;
     setBusy(true);
     try {
-      // A scanned barcode is an exact match and skips the list.
-      const exact = await window.api.sales.getVariantByBarcode({ barcode: text });
-      if (exact) {
-        await pick(exact, true);
-        return;
+      // A scanned barcode is an exact match and skips the list unless the user navigated the dropdown with arrows.
+      if (!navigated) {
+        const exact = await window.api.sales.getVariantByBarcode({ barcode: text });
+        if (exact) {
+          await pick(exact, true);
+          return;
+        }
       }
       if (results[active]) await pick(results[active]);
       else setMessage('Nothing matches that. Check the name, item code or barcode.');
@@ -74,9 +79,11 @@ export default function BillItemSearch({ onPick, disabled, autoFocus = true, inp
   function onKeyDown(e) {
     if (e.key === 'ArrowDown' && results.length) {
       e.preventDefault();
+      setNavigated(true);
       setActive((i) => Math.min(i + 1, results.length - 1));
     } else if (e.key === 'ArrowUp' && results.length) {
       e.preventDefault();
+      setNavigated(true);
       setActive((i) => Math.max(i - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();

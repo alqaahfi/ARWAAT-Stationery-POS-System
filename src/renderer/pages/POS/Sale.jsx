@@ -240,6 +240,9 @@ export default function Sale() {
   const [receiptPreview, setReceiptPreview] = useState(null);
 
   // ---------------- refs ----------------
+  const completingRef = useRef(false);
+  const logoutHoldRef = useRef(() => {});
+  const flushDraftRef = useRef(() => {});
   const customerInputRef = useRef(null);
   const searchInputRef = useRef(null);
   const qtyInputRef = useRef(null);
@@ -294,25 +297,49 @@ export default function Sale() {
   }, [cartLines.length]);
 
   // Draft autosave — only once there's something worth saving.
+  function writeDraftNow() {
+    if (stage === 'idle' || stage === 'confirm' || editingSale) return;
+    if (cartLines.length === 0 && !customer) return;
+    const draft = {
+      customerId: customer?.id || null,
+      lines: cartLines.map((l) => ({ variantId: l.variantId, unitId: l.unitId, quantity: l.quantity, focQuantity: l.focQuantity || 0 })),
+      discountMode,
+      discountInput,
+    };
+    try {
+      localStorage.setItem(draftKey(stationCode), JSON.stringify(draft));
+      setDraftAvailable(true);
+    } catch {
+      // localStorage unavailable — draft just won't persist.
+    }
+  }
+  flushDraftRef.current = writeDraftNow;
+
   useEffect(() => {
     if (stage === 'idle' || stage === 'confirm' || editingSale) return;
     if (cartLines.length === 0 && !customer) return;
-    const t = setTimeout(() => {
-      const draft = {
-        customerId: customer?.id || null,
-        lines: cartLines.map((l) => ({ variantId: l.variantId, unitId: l.unitId, quantity: l.quantity, focQuantity: l.focQuantity || 0 })),
-        discountMode,
-        discountInput,
-      };
-      try {
-        localStorage.setItem(draftKey(stationCode), JSON.stringify(draft));
-        setDraftAvailable(true);
-      } catch {
-        // localStorage unavailable — draft just won't persist.
-      }
-    }, 400);
+    const t = setTimeout(writeDraftNow, 400);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer, cartLines, discountMode, discountInput, stage, stationCode, editingSale]);
+
+  // Signing out with an open cart automatically holds the bill so the next cashier has a clean counter and nothing is lost.
+  logoutHoldRef.current = () => {
+    if (!editingSale && cartLines.length > 0) {
+      holdCurrentSale();
+      clearDraft();
+    }
+  };
+  useEffect(() => {
+    const onBeforeLogout = () => logoutHoldRef.current();
+    const onBeforeUnload = () => flushDraftRef.current();
+    window.addEventListener('pos:before-logout', onBeforeLogout);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      window.removeEventListener('pos:before-logout', onBeforeLogout);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+    };
+  }, []);
 
   // Customer search (debounced).
   useEffect(() => {
@@ -772,12 +799,12 @@ export default function Sale() {
   async function handleItemSearchEnter() {
     // Read the box itself: the key listener is re-bound after every render, so during a burst of scanner
     // keystrokes it can still hold an older searchQuery.
-    const raw = (searchInputRef.current ? searchInputRef.current.value : searchQuery).trim();
+    const raw = (searchInputRef.current ? searchInputRef.current.value : searchQuery).replace(/[\r\n\t]/g, '').trim();
     if (!raw) return;
 
     // A scanner sends the next code right after Enter. Empty the box now, before the async
     // lookup, so the next code is not glued onto this one.
-    const looksLikeScan = !searchNavigated && /^\d{3,}$/.test(raw);
+    const looksLikeScan = !searchNavigated && /^[0-9A-Za-z-]{3,}$/.test(raw);
     if (looksLikeScan) setSearchQuery('');
 
     if (!searchNavigated) {
@@ -896,12 +923,23 @@ export default function Sale() {
     });
   }
 
-  function confirmMultiQty() {
+  async function confirmMultiQty() {
     if (!pendingItem || !multiTypes) return;
     const entries = entriesFromValues(multiTypes, multiValues);
     if (entries.length === 0) {
       setMultiError('Type a quantity for at least one Type.');
       return;
+    }
+    const unitPrice = Number(pendingItem.unitPrice) || 0;
+    const large = entries.find((e) => e.quantity > 100 || e.quantity * unitPrice > 100000);
+    if (large) {
+      const ok = await askConfirm({
+        title: 'Large quantity or amount',
+        message: `${pendingItem.productName} (${large.type.variantName}) has quantity ${large.quantity} and line total Rs. ${(large.quantity * unitPrice).toFixed(2)}. Add this to the bill?`,
+        confirmLabel: 'Yes, add it',
+        cancelLabel: 'Go back',
+      });
+      if (!ok) return;
     }
     const over = !pendingItem.allowNegative && entries.find((e) => e.quantity * pendingItem.conversionFactor > e.type.stockQty);
     if (over) toast.error(`Only ${formatCount(over.type.stockQty / pendingItem.conversionFactor)} of ${over.type.variantName} in stock. Selling more needs the Admin's approval at payment.`);
@@ -911,8 +949,19 @@ export default function Sale() {
     cancelPendingItem();
   }
 
-  function confirmQty() {
+  async function confirmQty() {
     if (!pendingItem || qtyNumber <= 0) return; // a stock shortfall is shown, and approved at payment (rule 12)
+    const unitPrice = Number(pendingItem.unitPrice) || 0;
+    const lineTotal = round2(qtyNumber * unitPrice);
+    if (qtyNumber > 100 || lineTotal > 100000) {
+      const ok = await askConfirm({
+        title: 'Large quantity or amount',
+        message: `${pendingItem.productName} has quantity ${qtyNumber} and line total Rs. ${lineTotal.toFixed(2)}. Add this to the bill?`,
+        confirmLabel: 'Yes, add it',
+        cancelLabel: 'Go back',
+      });
+      if (!ok) return;
+    }
     addOrMergeCartLine({ ...pendingItem, quantity: qtyNumber, focQuantity: focNumber });
     setPendingItem(null);
     setQtyValue('1');
@@ -954,9 +1003,32 @@ export default function Sale() {
     setEditingFocValue(line.focQuantity ? String(line.focQuantity) : '');
   }
 
-  function confirmEditCartLine() {
+  async function confirmEditCartLine() {
     if (editingLineIndex === null || editingQtyNumber <= 0) return; // shortfall approved at payment (rule 12)
-    setCartLines((lines) => lines.map((l, i) => (i === editingLineIndex ? { ...l, quantity: editingQtyNumber, focQuantity: editingFocNumber } : l)));
+    const targetLine = cartLines[editingLineIndex];
+    if (!targetLine) return;
+    let nextPrice = Number(targetLine.unitPrice) || 0;
+    // When a line is touched, re-check its price in case the Admin changed it while the bill was open.
+    if (!editingSale) {
+      try {
+        const res = await window.api.sales.resolvePrice({ productUnitId: targetLine.unitId, customerId: customer?.id || null });
+        if (res && Number.isFinite(res.price) && Math.abs(res.price - nextPrice) > 0.01) {
+          nextPrice = res.price;
+          toast.info(`Price of "${targetLine.productName}" updated to Rs. ${nextPrice.toFixed(2)}.`);
+        }
+      } catch { /* ignore */ }
+    }
+    const lineTotal = round2(editingQtyNumber * nextPrice);
+    if (editingQtyNumber > 100 || lineTotal > 100000) {
+      const ok = await askConfirm({
+        title: 'Large quantity or amount',
+        message: `${targetLine.productName} has quantity ${editingQtyNumber} and line total Rs. ${lineTotal.toFixed(2)}. Keep this quantity?`,
+        confirmLabel: 'Yes, keep it',
+        cancelLabel: 'Go back',
+      });
+      if (!ok) return;
+    }
+    setCartLines((lines) => lines.map((l, i) => (i === editingLineIndex ? { ...l, quantity: editingQtyNumber, focQuantity: editingFocNumber, unitPrice: nextPrice } : l)));
     setEditingLineIndex(null);
     setEditingQtyValue('');
     setEditingFocValue('');
@@ -1014,6 +1086,7 @@ export default function Sale() {
   // ---------------- stage 7/8: payment / finalize ----------------
 
   async function finalizeSale(opts = {}) {
+    if (completingRef.current) return;
     setFinalizeError('');
     if (partialBlockedNoCustomer) {
       setPaymentError('Select a customer to allow partial payment.');
@@ -1030,100 +1103,117 @@ export default function Sale() {
       setStage('item-search');
       return;
     }
-    // Not enough stock is no longer a dead end (rule 12): the main process asks for the
-    // Admin's approval (cashier) or a confirm (Admin) and the stock goes below zero.
 
-    // Rule 2: going over a customer's credit limit is a warning only — they can save anyway.
-    if (customer && balanceDue > 0 && !opts.approvalToken && !opts.allowNegativeStock) {
-      const credit = await window.api.customers.creditCheck({ customerId: customer.id, addAmount: balanceDue, excludeSaleId: editingSale?.id || null });
-      if (credit?.overLimit) {
-        const ok = await askConfirm({ title: 'Over the credit limit', message: credit.message, confirmLabel: 'Save anyway', cancelLabel: 'Go back' });
-        if (!ok) return;
+    completingRef.current = true;
+    try {
+      // Not enough stock is no longer a dead end (rule 12): the main process asks for the
+      // Admin's approval (cashier) or a confirm (Admin) and the stock goes below zero.
+
+      // Rule 2: going over a customer's credit limit is a warning only — they can save anyway.
+      if (customer && balanceDue > 0 && !opts.approvalToken && !opts.allowNegativeStock && !opts.allowLargeQty) {
+        const credit = await window.api.customers.creditCheck({ customerId: customer.id, addAmount: balanceDue, excludeSaleId: editingSale?.id || null });
+        if (credit?.overLimit) {
+          const ok = await askConfirm({ title: 'Over the credit limit', message: credit.message, confirmLabel: 'Save anyway', cancelLabel: 'Go back' });
+          if (!ok) return;
+        }
       }
+
+      const hasLargeLine = cartLines.some((l) => (Number(l.quantity) || 0) > 100 || round2((Number(l.quantity) || 0) * (Number(l.unitPrice) || 0)) > 100000);
+
+      setCompleting(true);
+      const payload = {
+        saleType,
+        customerId: customer?.id || null,
+        cashierId: user.id,
+        letterheadId,
+        items: cartLines.map((l) => ({
+          productVariantId: l.variantId,
+          productUnitId: l.unitId,
+          quantity: Number(l.quantity) || 0,
+          focQuantity: Number(l.focQuantity) || 0,
+          unitPrice: Number(l.unitPrice) || 0,
+          discountAmount: 0,
+          lineTotal: round2((Number(l.quantity) || 0) * (Number(l.unitPrice) || 0)),
+        })),
+        discountAmount,
+        paidAmount,
+        paymentMethod,
+        approvalToken: opts.approvalToken || null,
+        allowNegativeStock: !!opts.allowNegativeStock,
+        allowLargeQty: !!opts.allowLargeQty || hasLargeLine,
+      };
+
+      const res = await whileSaving(() =>
+        editingSale ? window.api.sales.update({ ...payload, saleId: editingSale.id }) : window.api.sales.create(payload)
+      );
+      setCompleting(false);
+
+      if (!res.success) {
+        if (res.needsLargeConfirm) {
+          completingRef.current = false;
+          const ok = await askConfirm({ title: 'Large quantity or amount', message: res.reason, confirmLabel: 'Save anyway', cancelLabel: 'Go back' });
+          if (ok) await finalizeSale({ ...opts, allowLargeQty: true });
+          return;
+        }
+        // Rule 12: the Admin approves on this screen, then the same bill is saved again.
+        if (res.needsApproval) {
+          setApproval({ labels: res.approvalLabels || [], message: res.reason, retry: (token) => finalizeSale({ ...opts, approvalToken: token }) });
+          return;
+        }
+        if (res.needsStockConfirm) {
+          completingRef.current = false;
+          const ok = await askConfirm({ title: 'Not enough stock', message: res.reason, confirmLabel: 'Sell anyway', cancelLabel: 'Go back' });
+          if (ok) await finalizeSale({ ...opts, allowNegativeStock: true });
+          return;
+        }
+        // The server re-checks every price; a price the Admin changed while this
+        // bill was open comes back here — take the new price and let them retry.
+        if (res.priceChanged && Array.isArray(res.changedLines)) {
+          setCartLines((lines) =>
+            lines.map((l) => {
+              const hit = res.changedLines.find((c) => c.productVariantId === l.variantId && c.productUnitId === l.unitId);
+              return hit ? { ...l, unitPrice: hit.price } : l;
+            })
+          );
+        }
+        setFinalizeError(res.reason || 'Could not complete sale.');
+        return; // cart is preserved on purpose — let the cashier retry
+      }
+
+      // Lets the top utility bar's Today's Revenue tile refresh immediately
+      // instead of waiting for its next periodic poll.
+      window.dispatchEvent(new CustomEvent(SALE_COMPLETED_EVENT));
+
+      const effectiveShowDues = showDues && !!customer;
+      // Nothing goes to the printer automatically: the print preview opens
+      // first and its Print button does the physical print. The sale is already
+      // saved, so closing the preview never affects it.
+      const finishedTotal = totalAmount;
+      const finishedChange = changeDue;
+      const finishedBalance = balanceDue;
+
+      clearDraft();
+      clearSaleState();
+      setConfirmData({
+        invoiceNo: res.invoiceNo,
+        saleId: res.saleId,
+        totalAmount: finishedTotal,
+        changeDue: finishedChange,
+        balanceDue: finishedBalance,
+        printType: printFormat,
+        showDues: effectiveShowDues,
+        printSuccess: null,
+        printReason: null,
+        // Set once the A4 invoice is physically printed (printInvoice returns
+        // the merged PDF's path); the confirm sheet embeds it from then on.
+        pdfPath: null,
+      });
+      setStage('confirm');
+      setShowPrintPreview(true);
+    } finally {
+      completingRef.current = false;
+      setCompleting(false);
     }
-
-    setCompleting(true);
-    const payload = {
-      saleType,
-      customerId: customer?.id || null,
-      cashierId: user.id,
-      letterheadId,
-      items: cartLines.map((l) => ({
-        productVariantId: l.variantId,
-        productUnitId: l.unitId,
-        quantity: Number(l.quantity) || 0,
-        focQuantity: Number(l.focQuantity) || 0,
-        unitPrice: Number(l.unitPrice) || 0,
-        discountAmount: 0,
-        lineTotal: round2((Number(l.quantity) || 0) * (Number(l.unitPrice) || 0)),
-      })),
-      discountAmount,
-      paidAmount,
-      paymentMethod,
-      approvalToken: opts.approvalToken || null,
-      allowNegativeStock: !!opts.allowNegativeStock,
-    };
-
-    const res = await whileSaving(() =>
-      editingSale ? window.api.sales.update({ ...payload, saleId: editingSale.id }) : window.api.sales.create(payload)
-    );
-    setCompleting(false);
-
-    if (!res.success) {
-      // Rule 12: the Admin approves on this screen, then the same bill is saved again.
-      if (res.needsApproval) {
-        setApproval({ labels: res.approvalLabels || [], message: res.reason, retry: (token) => finalizeSale({ ...opts, approvalToken: token }) });
-        return;
-      }
-      if (res.needsStockConfirm) {
-        const ok = await askConfirm({ title: 'Not enough stock', message: res.reason, confirmLabel: 'Sell anyway', cancelLabel: 'Go back' });
-        if (ok) await finalizeSale({ ...opts, allowNegativeStock: true });
-        return;
-      }
-      // The server re-checks every price; a price the Admin changed while this
-      // bill was open comes back here — take the new price and let them retry.
-      if (res.priceChanged && Array.isArray(res.changedLines)) {
-        setCartLines((lines) =>
-          lines.map((l) => {
-            const hit = res.changedLines.find((c) => c.productVariantId === l.variantId && c.productUnitId === l.unitId);
-            return hit ? { ...l, unitPrice: hit.price } : l;
-          })
-        );
-      }
-      setFinalizeError(res.reason || 'Could not complete sale.');
-      return; // cart is preserved on purpose — let the cashier retry
-    }
-
-    // Lets the top utility bar's Today's Revenue tile refresh immediately
-    // instead of waiting for its next periodic poll.
-    window.dispatchEvent(new CustomEvent(SALE_COMPLETED_EVENT));
-
-    const effectiveShowDues = showDues && !!customer;
-    // Nothing goes to the printer automatically: the print preview opens
-    // first and its Print button does the physical print. The sale is already
-    // saved, so closing the preview never affects it.
-    const finishedTotal = totalAmount;
-    const finishedChange = changeDue;
-    const finishedBalance = balanceDue;
-
-    clearDraft();
-    clearSaleState();
-    setConfirmData({
-      invoiceNo: res.invoiceNo,
-      saleId: res.saleId,
-      totalAmount: finishedTotal,
-      changeDue: finishedChange,
-      balanceDue: finishedBalance,
-      printType: printFormat,
-      showDues: effectiveShowDues,
-      printSuccess: null,
-      printReason: null,
-      // Set once the A4 invoice is physically printed (printInvoice returns
-      // the merged PDF's path); the confirm sheet embeds it from then on.
-      pdfPath: null,
-    });
-    setStage('confirm');
-    setShowPrintPreview(true);
   }
 
   function onPrinted(res) {

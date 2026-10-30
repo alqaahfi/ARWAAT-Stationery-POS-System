@@ -438,3 +438,27 @@ STAGE 1 DECISIONS
   D12 (rule 17) In a no-bill return, the 30-day lowest selling price accounts for bill-level discounts
      (unit_price * total_amount / subtotal) so a customer never gets back more than the lowest discounted unit price
      charged in the last 30 days. No-bill returns are charged to the Admin who recorded them in Cashier Performance.
+  D13 (anomalies) Large quantity (> 100) or line total (> Rs 100,000) asks for confirmation both when adding/editing
+     a line in the POS and on the server (saveSale returns needsLargeConfirm unless allowLargeQty is true).
+  D14 (anomalies) Signing out (or session ending) while a non-empty POS cart is open dispatches pos:before-logout,
+     which automatically holds the cart into pos_held_bills_<station> and clears the draft; closing/reloading the
+     window flushes any pending debounced draft immediately on beforeunload.
+
+STAGE 1 COUNTER ANOMALIES (BRIEF.md section 2)
+  Changed:
+    - sales.ipc.js: getVariantByBarcode strips [\r\n\t] + trims and matches COLLATE NOCASE; priceLines and saveSale
+      verify product/variant/unit/customer is_active = 1 (refusing deactivated items/customers with a clear message);
+      saveSale checks for any line with quantity > 100 or lineTotal > Rs 100,000 and returns needsLargeConfirm unless
+      allowLargeQty is set.
+    - products.ipc.js: normalizeVariantsAndUnits cleans/trims barcodes; isBarcodeTaken checks COLLATE NOCASE.
+    - Sale.jsx: synchronous completingRef lock prevents double Enter/click on Pay from saving twice; confirmQty,
+      confirmMultiQty, confirmEditCartLine and finalizeSale ask confirmation for qty > 100 or lineTotal > Rs 100,000;
+      confirmEditCartLine re-resolves unitPrice when a line is touched and notifies if changed; pos:before-logout
+      listener holds an open cart on sign-out; beforeunload listener flushes draft immediately; handleItemSearchEnter
+      trims scanner whitespace/newlines and supports alphanumeric barcodes.
+    - QuickBillForm.jsx: confirms qty > 100 or lineTotal > Rs 100,000 before saving and passes allowLargeQty.
+    - BillItemSearch.jsx: tracks arrow navigation so scanning a barcode that equals a product name matches the barcode
+      first, while arrow-selecting in the dropdown picks the highlighted product.
+    - AuthContext.jsx: dispatches pos:before-logout synchronously before logout / session end.
+  Checks: R18-01..R18-10 in tests/rules/checks/r18-anomalies.js (PASS; 128/128 total rules checks pass).
+
