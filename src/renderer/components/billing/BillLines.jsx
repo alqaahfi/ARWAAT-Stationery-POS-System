@@ -4,6 +4,7 @@ import theme from '../../config/theme';
 import { formatCount, formatCurrency } from '../../utils/format';
 import { Card, EmptyState, IconButton, NumberInput, Select } from '../ui';
 import { lineTotal, lineUnits } from './billingUtils';
+import { wholeNumber } from '../../utils/quantity';
 
 const c = theme.colors;
 
@@ -90,7 +91,8 @@ const BillRow = memo(function BillRow({ line, isPurchase, canSeeCost, canEditPri
           id={`bill-qty-${line.key}`}
           aria-label={`Quantity for ${line.productName}`}
           value={line.quantity}
-          onChange={(e) => onField(line.key, 'quantity', e.target.value)}
+          inputMode="numeric"
+          onChange={(e) => onField(line.key, 'quantity', wholeNumber(e.target.value))}
           onFocus={(e) => e.target.select()}
           aria-invalid={qty <= 0 ? true : undefined}
         />
@@ -98,7 +100,8 @@ const BillRow = memo(function BillRow({ line, isPurchase, canSeeCost, canEditPri
           aria-label={`Free quantity for ${line.productName}`}
           value={line.focQuantity === 0 ? '' : line.focQuantity}
           placeholder="0"
-          onChange={(e) => onField(line.key, 'focQuantity', e.target.value)}
+          inputMode="numeric"
+          onChange={(e) => onField(line.key, 'focQuantity', wholeNumber(e.target.value))}
           onFocus={(e) => e.target.select()}
         />
         {isPurchase && isTrade ? (

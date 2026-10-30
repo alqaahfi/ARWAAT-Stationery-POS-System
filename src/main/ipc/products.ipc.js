@@ -1,6 +1,7 @@
 const { ipcMain, net } = require('electron');
 const { getDb } = require('../db/connection');
 const ProductModel = require('../db/models/Product');
+const { wholeQty, WHOLE_QTY_MSG } = require('../validation/quantity');
 
 // ---------- shared validation / normalization ----------
 
@@ -26,6 +27,9 @@ function normalizeVariantsAndUnits(variants, units, standardStartingStock, stand
 
   if (!units || units.length === 0) {
     return { error: 'At least one selling unit is required.' };
+  }
+  for (const v of normalizedVariants) {
+    if (wholeQty(v.startingStock, { allowZero: true }) === null) return { error: `Starting stock: ${WHOLE_QTY_MSG}` };
   }
 
   let normalizedUnits = units;

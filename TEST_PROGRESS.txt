@@ -182,8 +182,21 @@ RULE 2 - Credit limit = warning only
   Stage 3 e2e: credit sale for a customer with a limit -> warning dialog with numbers -> Enter saves; Esc/Go back
            returns to payment without saving.
 
+RULE 3 - Whole numbers only for every quantity
+  Changed: src/main/validation/quantity.js (wholeQty, WHOLE_QTY_MSG). Server checks in sales:create/update
+           (qty + FOC), returns:create, purchases:create (qty + FOC), stock:add/remove/adjust, products:create/update
+           (starting stock). Renderer: utils/quantity.js wholeNumber(); quantity boxes strip everything but digits
+           as typed/pasted: POS QtyPanel (qty + free), POS cart edit (qty + free), MultiTypeQtyPanel, BillLines
+           (qty + free; sale and purchase), Returns ItemsStep, StockEntryForm, AdjustParts. Product form starting
+           stock already integer-only (NumInput allowDecimal=false).
+  Checks: R03-01..R03-07 (PASS).
+  Stage 3 e2e: type "1.5", "-2", "1e3", "abc" into each quantity box -> only digits remain; paste "2.5" -> "25"?
+           NOTE: pasting "2.5" leaves "25" (dot stripped) - the e2e should check the value shown, not assume "2".
+
 STAGE 1 DECISIONS
   D1 (rule 1) Editing a saved bill: a cashier may keep the bill's OWN stored price for a pack size (same
      customer only); any other price must match the price engine. Changing the customer re-prices.
   D2 (rule 1) Admin manual price override is in the quick Sale form (BillLines price box, Admin only).
      The keyboard POS has no price box (unchanged); Admin uses the quick Sale form to override.
+  D3 (rule 3) Pack-size conversion factors (e.g. Box = 12) are not quantities typed at the counter and stay as
+     they are. Old saved rows with decimal quantities are left untouched (they still display and count).

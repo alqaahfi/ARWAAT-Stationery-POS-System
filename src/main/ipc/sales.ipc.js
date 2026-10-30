@@ -4,6 +4,7 @@ const { getCaller, withCallerId } = require('../security/ipcGuard');
 const { resolveUnitPrice } = require('../pricing/priceEngine');
 const { getSaleDetail, buildReceiptData } = require('../printing/receiptData');
 const { logActivity } = require('../activity/activityLog');
+const { wholeQty, WHOLE_QTY_MSG } = require('../validation/quantity');
 
 // ---------- product search / barcode (feed the cart) ----------
 
@@ -308,6 +309,7 @@ function saveSale(payload, editSaleId) {
     const qty = Number(item.quantity), foc = Number(item.focQuantity) || 0, price = Number(item.unitPrice), line = Number(item.lineTotal);
     if (!Number.isFinite(qty) || qty <= 0 || qty > 1e6) return { success: false, reason: 'Every item needs a quantity above zero.' };
     if (!Number.isFinite(foc) || foc < 0) return { success: false, reason: 'Free quantity cannot be negative.' };
+    if (wholeQty(qty) === null || wholeQty(foc, { allowZero: true }) === null) return { success: false, reason: WHOLE_QTY_MSG };
     if (!Number.isFinite(price) || price < 0 || !Number.isFinite(line) || line < 0) return { success: false, reason: 'An item has an invalid price.' };
     if (Math.abs(line - qty * price) > 0.02) return { success: false, reason: 'An item total does not match its quantity and price.' };
   }

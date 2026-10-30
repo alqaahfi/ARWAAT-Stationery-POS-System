@@ -6,6 +6,7 @@ import { Button, Checkbox, EmptyState, IconButton, NumberInput, Select, Spinner,
 import BillItemSearch from '../../components/billing/BillItemSearch';
 import { purchasePriceFields, round2, tradeUnitCost } from '../../components/billing/billingUtils';
 import { formatCount, formatCurrency } from '../../utils/format';
+import { wholeNumber } from '../../utils/quantity';
 
 const c = theme.colors;
 const TRADE_FIELDS = ['tradePrice', 'purchaseDiscount', 'extraDiscount'];
@@ -294,7 +295,8 @@ const Row = React.memo(function Row({ line, isAdd, after, showName, onField, onU
           aria-label={`Quantity for ${line.productName}`}
           value={line.quantity}
           placeholder="0"
-          onChange={(e) => onField(line.key, 'quantity', e.target.value)}
+          inputMode="numeric"
+          onChange={(e) => onField(line.key, 'quantity', wholeNumber(e.target.value))}
           onFocus={(e) => e.target.select()}
           aria-invalid={bad ? true : undefined}
         />

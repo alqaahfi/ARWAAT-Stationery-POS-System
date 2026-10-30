@@ -5,6 +5,7 @@ import appIcons from '../../../config/appIcons';
 import glossary from '../../../config/glossary';
 import { Button, ChipGroup, Field, FieldError, IconTile, NumberInput, SegmentedControl, TextArea } from '../../../components/ui';
 import { formatCount } from '../../../utils/format';
+import { wholeNumber } from '../../../utils/quantity';
 
 const c = theme.colors;
 
@@ -94,7 +95,8 @@ export function AmountFields({ direction, onDirection, quantity, onQuantity, uni
           id="adjust-qty"
           value={quantity}
           aria-invalid={overLimit ? true : undefined}
-          onChange={(e) => onQuantity(e.target.value)}
+          inputMode="numeric"
+          onChange={(e) => onQuantity(wholeNumber(e.target.value))}
           onKeyDown={(e) => {
             if (e.key === 'Enter') onSubmit();
           }}

@@ -2,6 +2,7 @@ const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
 const { withCallerId } = require('../security/ipcGuard');
 const { getProductStockStatus } = require('../db/models/Product');
+const { wholeQty, WHOLE_QTY_MSG } = require('../validation/quantity');
 
 // Shown next to whatever the admin types in the Note field — keeps a short,
 // consistent label on every adjustment row even when Note is left blank.
@@ -25,6 +26,7 @@ function adjustStock({ productVariantId, direction, quantity, reasonCode, note, 
   if (!['increase', 'decrease'].includes(direction)) return { success: false, reason: 'Choose Increase or Decrease.' };
   const qty = Number(quantity);
   if (!qty || qty <= 0) return { success: false, reason: 'Enter a quantity greater than zero.' };
+  if (wholeQty(qty) === null) return { success: false, reason: WHOLE_QTY_MSG };
   if (!REASON_LABELS[reasonCode]) return { success: false, reason: 'Select a reason.' };
 
   const variant = db
@@ -127,6 +129,7 @@ function loadLine(db, line) {
   if (!unit) return { error: `Pack size not found for ${variant.product_name}.` };
   const qty = Number(line.quantity);
   if (!qty || qty <= 0) return { error: `Enter a quantity greater than zero for ${variant.product_name}.` };
+  if (wholeQty(qty) === null) return { error: `${WHOLE_QTY_MSG} (${variant.product_name})` };
   return { variant, unit, qty, baseQty: qty * unit.conversion_factor };
 }
 

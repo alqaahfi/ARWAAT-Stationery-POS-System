@@ -2,6 +2,7 @@ const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
 const { withCallerId } = require('../security/ipcGuard');
 const { buildPurchaseReceiptData } = require('../printing/purchaseReceiptData');
+const { wholeQty, WHOLE_QTY_MSG } = require('../validation/quantity');
 
 function round2(n) {
   return Math.round((Number(n) || 0) * 100) / 100;
@@ -25,6 +26,7 @@ function create({ supplierId, referenceNo, items, createdBy, discountAmount, pai
     if (!item.productVariantId || !item.productUnitId) return { success: false, reason: 'Each line needs a product and unit.' };
     if (!item.quantity || Number(item.quantity) <= 0) return { success: false, reason: 'Quantity must be greater than zero.' };
     if (Number(item.focQuantity) < 0) return { success: false, reason: 'Free quantity cannot be negative.' };
+    if (wholeQty(item.quantity) === null || wholeQty(item.focQuantity, { allowZero: true }) === null) return { success: false, reason: WHOLE_QTY_MSG };
     if (item.unitCost === undefined || item.unitCost === null || Number(item.unitCost) < 0) {
       return { success: false, reason: 'Enter a valid unit cost.' };
     }

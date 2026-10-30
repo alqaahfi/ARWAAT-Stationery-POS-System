@@ -4,6 +4,7 @@ import theme from '../../../config/theme';
 import { formatCurrency } from '../../../utils/format';
 import { Card, EmptyState, IconButton, TextInput } from '../../../components/ui';
 import { InlineMessage, Money, c, keepFocus, packSizeName, typeName } from './common';
+import { wholeNumber } from '../../../utils/quantity';
 
 export default function CartList({
   lines,
@@ -112,19 +113,20 @@ const CartRow = memo(function CartRow({ line, idx, selected, editing, editValue,
             <div style={{ display: 'flex', gap: theme.spacing.xs, alignItems: 'center' }}>
             <TextInput
               ref={editInputRef}
-              type="number"
+              type="text"
+              inputMode="numeric"
               value={editValue}
-              onChange={(e) => onEditChange(e.target.value)}
+              onChange={(e) => onEditChange(wholeNumber(e.target.value))}
               aria-label={`Quantity for ${line.productName}`}
               aria-invalid={editError ? true : undefined}
               style={{ ...theme.font.numeric, textAlign: 'right', width: '80px' }}
             />
             <TextInput
               ref={editFocInputRef}
-              type="number"
-              min="0"
+              type="text"
+              inputMode="numeric"
               value={editFocValue}
-              onChange={(e) => onEditFocChange(e.target.value)}
+              onChange={(e) => onEditFocChange(wholeNumber(e.target.value))}
               aria-label={`Free quantity for ${line.productName}`}
               placeholder="Free"
               style={{ ...theme.font.numeric, textAlign: 'right', width: '72px' }}

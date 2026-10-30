@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import theme from '../../config/theme';
 import { formatCount } from '../../utils/format';
 import { TextInput } from '../ui';
+import { wholeNumber } from '../../utils/quantity';
 
 const c = theme.colors;
 
@@ -64,10 +65,10 @@ export default function MultiTypeQtyPanel({ productName, unitLabel, types, value
               <TextInput
                 ref={i === 0 ? firstRef : undefined}
                 data-type-qty
-                type="number"
-                min="0"
+                type="text"
+                inputMode="numeric"
                 value={values[t.variantId] ?? ''}
-                onChange={(e) => onChange(t.variantId, e.target.value)}
+                onChange={(e) => onChange(t.variantId, wholeNumber(e.target.value))}
                 onFocus={(e) => e.target.select()}
                 aria-label={`Quantity of ${t.variantName}`}
                 aria-invalid={over ? true : undefined}

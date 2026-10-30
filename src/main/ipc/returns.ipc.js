@@ -2,6 +2,7 @@ const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
 const { withCallerId } = require('../security/ipcGuard');
 const { getCustomerBalance } = require('../ledger/balanceEngine');
+const { wholeQty, WHOLE_QTY_MSG } = require('../validation/quantity');
 
 // Customer returns / refunds — Admin only, enforced here (requestingUserId is
 // always the signed-in caller, injected at registration below). A return is
@@ -221,6 +222,7 @@ function createReturn(input = {}) {
   for (const line of Array.isArray(input.lines) ? input.lines : []) {
     const qty = Number(line && line.quantity);
     if (!Number.isFinite(qty) || qty < 0) return { success: false, reason: 'Return quantities must be positive numbers.' };
+    if (wholeQty(qty, { allowZero: true }) === null) return { success: false, reason: WHOLE_QTY_MSG };
     if (qty === 0) continue;
     const key = Number(line.saleItemId);
     wanted.set(key, (wanted.get(key) || 0) + qty);

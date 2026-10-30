@@ -5,6 +5,7 @@ import { Button, Card, Checkbox, ChipGroup, DataTable, Field, Label, NumberInput
 import { formatCurrencyExact } from '../../../../utils/format';
 import { formatLocalDateTime } from '../saleLabels';
 import { REASON_OPTIONS, formatQty, packLine, round2 } from './returnUtils';
+import { wholeNumber } from '../../../../utils/quantity';
 
 const c = theme.colors;
 
@@ -57,7 +58,8 @@ export function ItemsStep({ data, qty, onQty, onReturnAll, reason, onReason, not
             aria-label={`Quantity of ${l.item_name} to return, up to ${formatQty(l.returnable)}`}
             onFocus={(e) => e.target.select()}
             onWheel={(e) => e.currentTarget.blur()}
-            onChange={(e) => onQty(l, e.target.value)}
+            inputMode="numeric"
+            onChange={(e) => onQty(l, wholeNumber(e.target.value))}
             style={{ width: '90px', height: '34px' }}
           />
         ),

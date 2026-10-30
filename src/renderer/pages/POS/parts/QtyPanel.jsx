@@ -3,6 +3,7 @@ import theme from '../../../config/theme';
 import { formatCount, formatCurrency } from '../../../utils/format';
 import { TextInput } from '../../../components/ui';
 import { InlineMessage, Money, NUMERIC_INPUT, PanelTitle, c, packSizeName, typeName } from './common';
+import { wholeNumber } from '../../../utils/quantity';
 
 export default function QtyPanel({ inputRef, focInputRef, item, value, onChange, focValue, onFocChange, lineTotal, stockError }) {
   const pack = packSizeName(item);
@@ -22,9 +23,10 @@ export default function QtyPanel({ inputRef, focInputRef, item, value, onChange,
           Quantity ({pack})
           <TextInput
             ref={inputRef}
-            type="number"
+            type="text"
+            inputMode="numeric"
             value={value}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(e) => onChange(wholeNumber(e.target.value))}
             aria-invalid={stockError ? true : undefined}
             style={{ ...NUMERIC_INPUT, width: '160px', display: 'block', marginTop: '4px' }}
           />
@@ -33,10 +35,10 @@ export default function QtyPanel({ inputRef, focInputRef, item, value, onChange,
           Free (FOC) <span style={{ ...theme.type.caption, color: c.labelTertiary }}>Tab</span>
           <TextInput
             ref={focInputRef}
-            type="number"
-            min="0"
+            type="text"
+            inputMode="numeric"
             value={focValue}
-            onChange={(e) => onFocChange(e.target.value)}
+            onChange={(e) => onFocChange(wholeNumber(e.target.value))}
             aria-label="Free of cost quantity"
             style={{ ...NUMERIC_INPUT, width: '120px', display: 'block', marginTop: '4px' }}
           />
