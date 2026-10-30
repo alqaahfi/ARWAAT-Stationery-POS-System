@@ -364,6 +364,18 @@ RULE 14 - Reprints print "DUPLICATE COPY" + reprint date/time
   Stage 3 e2e: save a sale -> preview shows no stamp -> Print -> reprint from Sales History -> preview shows
            DUPLICATE COPY + time (thermal and A4). Printer missing -> sale saved, message, next print is still original.
 
+RULE 15 - Wrong computer clock = warning banner (both windows)
+  Server: main/system/clockCheck.js getClockStatus(): wrong when the year < 2026, when now is more than 5 minutes
+           earlier than the newest saved sale/return/payment, or more than 2 years past the newest record (or past
+           1 Jan 2026 when there are none). IPC app:get-clock-status (public like other app:* channels, so it also
+           works on Setup/Login). Selling is never blocked.
+  Renderer: components/ClockWarningBanner.jsx rendered at the app root (app.jsx) in both windows; checks every
+           minute and after each sale; red bar at the bottom (clear of the Dev Panel corner) with "The computer's
+           date/time looks wrong - fix it before selling."
+  Checks: R15-01..R15-05 (PASS).
+  Stage 3 e2e (dates N): set the Windows clock back a day after a sale -> banner in both windows within a minute;
+           selling still works; fix the clock -> banner goes.
+
 STAGE 1 DECISIONS
   D1 (rule 1) Editing a saved bill: a cashier may keep the bill's OWN stored price for a pack size (same
      customer only); any other price must match the price engine. Changing the customer re-prices.

@@ -8,6 +8,7 @@ import CashierInitialSync from './pages/Setup/CashierInitialSync';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard/Dashboard';
 import DevPanelTrigger from './components/DevPanelTrigger';
+import ClockWarningBanner from './components/ClockWarningBanner';
 
 // Which app this window is (Admin or Cashier shortcut). Both run in one
 // process; the main process decides what each may do, this only picks screens.
@@ -109,6 +110,8 @@ export default function App() {
       {/* True root, outside the router: renders on Setup and Login too, not
           just inside the authenticated Sidebar layout. */}
       <DevPanelTrigger />
+      {/* Rule 15: wrong computer clock warning, in both windows. */}
+      <ClockWarningBanner />
     </AuthProvider>
   );
 }

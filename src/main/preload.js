@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('api', {
   app: {
     mode: APP_MODE,
     openWindow: (data) => invoke('app:open-window', data),
+    getClockStatus: () => invoke('app:get-clock-status'),
   },
 
   setup: {
