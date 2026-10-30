@@ -802,10 +802,13 @@ export default function Sale() {
     const raw = (searchInputRef.current ? searchInputRef.current.value : searchQuery).replace(/[\r\n\t]/g, '').trim();
     if (!raw) return;
 
-    // A scanner sends the next code right after Enter. Empty the box now, before the async
-    // lookup, so the next code is not glued onto this one.
+    // A scanner sends the next code right after Enter. Empty the DOM input and state now, before the async
+    // lookup, so the next code is not glued onto this one and async completion does not wipe the next scan's characters.
     const looksLikeScan = !searchNavigated && /^[0-9A-Za-z-]{3,}$/.test(raw);
-    if (looksLikeScan) setSearchQuery('');
+    if (looksLikeScan) {
+      if (searchInputRef.current) searchInputRef.current.value = '';
+      setSearchQuery('');
+    }
 
     if (!searchNavigated) {
       const match = await window.api.sales.getVariantByBarcode({ barcode: raw });
@@ -822,7 +825,10 @@ export default function Sale() {
           const inCartBase = cartLines
             .filter((l) => l.variantId === detail.variant.id)
             .reduce((sum, l) => sum + ((Number(l.quantity) || 0) + (Number(l.focQuantity) || 0)) * l.conversionFactor, 0);
-          setSearchQuery('');
+          if (!looksLikeScan) {
+            if (searchInputRef.current) searchInputRef.current.value = '';
+            setSearchQuery('');
+          }
           setSearchResults([]);
           const pending = scanPendingRef.current[detail.variant.id] || 0;
           if (!detail.product.needsReview && inCartBase + pending + unit.conversionFactor > detail.variant.stockQty) {
@@ -1089,7 +1095,7 @@ export default function Sale() {
     if (completingRef.current) return;
     setFinalizeError('');
     if (partialBlockedNoCustomer) {
-      setPaymentError('Select a customer to allow partial payment.');
+      setPaymentError('Walk-in sales must be paid in full — select a customer to allow partial payment.');
       return;
     }
     setPaymentError('');
@@ -1105,6 +1111,7 @@ export default function Sale() {
     }
 
     completingRef.current = true;
+    let savedOk = false;
     try {
       // Not enough stock is no longer a dead end (rule 12): the main process asks for the
       // Admin's approval (cashier) or a confirm (Admin) and the stock goes below zero.
@@ -1175,6 +1182,15 @@ export default function Sale() {
               return hit ? { ...l, unitPrice: hit.price } : l;
             })
           );
+          completingRef.current = false;
+          const ok = await askConfirm({
+            title: 'Price changed while this bill was open',
+            message: `${res.reason} Update the bill with the new price?`,
+            confirmLabel: 'Use new prices',
+            cancelLabel: 'Review bill',
+          });
+          if (!ok) setStage('item-search');
+          return;
         }
         setFinalizeError(res.reason || 'Could not complete sale.');
         return; // cart is preserved on purpose — let the cashier retry
@@ -1192,6 +1208,7 @@ export default function Sale() {
       const finishedChange = changeDue;
       const finishedBalance = balanceDue;
 
+      savedOk = true;
       clearDraft();
       clearSaleState();
       setConfirmData({
@@ -1211,16 +1228,25 @@ export default function Sale() {
       setStage('confirm');
       setShowPrintPreview(true);
     } finally {
-      completingRef.current = false;
+      if (!savedOk) {
+        completingRef.current = false;
+      }
       setCompleting(false);
     }
   }
+
+  useEffect(() => {
+    if (stage !== 'payment') {
+      completingRef.current = false;
+    }
+  }, [stage]);
 
   function onPrinted(res) {
     setConfirmData((d) => ({ ...d, printSuccess: true, printReason: null, pdfPath: res.pdfPath || d.pdfPath }));
   }
 
   function dismissConfirm() {
+    completingRef.current = false;
     setConfirmData(null);
     setStage('idle');
   }

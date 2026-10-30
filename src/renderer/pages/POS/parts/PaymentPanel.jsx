@@ -71,7 +71,7 @@ export default function PaymentPanel({
 
       {(blockedNoCustomer || error) && (
         <InlineMessage tone="warning">
-          {error || 'Select a customer to allow partial payment.'}
+          {error || 'Walk-in sales must be paid in full — select a customer to allow partial payment.'}
           {blockedNoCustomer && (
             <>
               {' '}Press <strong>Esc</strong> to choose a customer.
