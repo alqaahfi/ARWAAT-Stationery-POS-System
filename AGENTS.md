@@ -22,7 +22,7 @@ Read this file first, then SYSTEM_STATUS.md (code wins when they disagree), then
 ## Status
 | Stage | What | Status | Next concrete step |
 |---|---|---|---|
-| 1 | 17 business rules + anomaly handling (server first, then UI), one commit per rule | IN PROGRESS - done: R1 9295f6a | Rule 2 (credit limit warning). Checks: npm run test:rules |
+| 1 | 17 business rules + anomaly handling (server first, then UI), one commit per rule | IN PROGRESS - done: R1 9295f6a, R2 9240782 | Rule 3 (whole-number quantities). Checks: npm run test:rules |
 | 2 | Reliable harness (ARWAAT_TEST_MODE, state-based waits, TEST_SPEED=fast, CLEAN-MASTER rebuild) | NOT STARTED | - |
 | 3 | Run everything A-Q + per-rule + anomaly checks, bombard, crash, concurrency, load, dates, security | NOT STARTED | - |
 | 4 | Screenshot every page/form/print at 1366x768, 1920x1080, 683x768; fix UI bugs | NOT STARTED | - |
