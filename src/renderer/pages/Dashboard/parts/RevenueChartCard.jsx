@@ -3,7 +3,7 @@ import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Cartes
 import theme from '../../../config/theme';
 import appIcons from '../../../config/appIcons';
 import { Button, EmptyState, SegmentedControl, Skeleton } from '../../../components/ui';
-import { formatCurrency, formatCurrencyExact } from '../../../utils/format';
+import { formatCurrencyCompact, formatCurrencyExact } from '../../../utils/format';
 import { Panel } from './Panel';
 
 const c = theme.colors;
@@ -103,7 +103,7 @@ export default function RevenueChartCard({ onNavigate }) {
         />
       }
     >
-      <div style={styles.total}>{trend ? formatCurrency(total) : <Skeleton width="140px" height="30px" />}</div>
+      <div style={styles.total}>{trend ? formatCurrencyCompact(total) : <Skeleton width="140px" height="30px" />}</div>
       <div style={styles.footnote}>{footnote}</div>
       <div style={{ marginTop: theme.spacing.md }}>{body}</div>
     </Panel>

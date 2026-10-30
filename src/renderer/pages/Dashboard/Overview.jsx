@@ -3,7 +3,7 @@ import theme from '../../config/theme';
 import appIcons from '../../config/appIcons';
 import glossary from '../../config/glossary';
 import { Button } from '../../components/ui';
-import { formatCount, formatCurrency } from '../../utils/format';
+import { formatCount, formatCurrencyCompact } from '../../utils/format';
 import { Panel } from './parts/Panel';
 import GreetingHeader from './parts/GreetingHeader';
 import GettingStartedCard from './parts/GettingStartedCard';
@@ -72,16 +72,16 @@ export default function Overview({ onNavigate }) {
     {
       label: glossary.salesToday,
       ...appIcons.sell,
-      value: formatCurrency(s.todaySalesTotal),
+      value: formatCurrencyCompact(s.todaySalesTotal),
       footnote:
         (salesCount ? `${formatCount(salesCount)} ${salesCount === 1 ? 'sale' : 'sales'}` : 'No sales yet today') +
-        (returnedToday > 0 ? ` · ${formatCurrency(returnedToday)} returned` : ''),
+        (returnedToday > 0 ? ` · ${formatCurrencyCompact(returnedToday)} returned` : ''),
       route: '/reports/sales',
     },
     {
       label: glossary.customersOweYou,
       ...appIcons.accounts,
-      value: formatCurrency(s.outstandingReceivables),
+      value: formatCurrencyCompact(s.outstandingReceivables),
       footnote: 'Across all customers',
       route: '/ledgers',
     },
@@ -96,7 +96,7 @@ export default function Overview({ onNavigate }) {
     {
       label: glossary.expensesThisMonth,
       ...appIcons.expenses,
-      value: formatCurrency(s.monthExpenses),
+      value: formatCurrencyCompact(s.monthExpenses),
       footnote: 'Since the 1st',
       route: '/expenses',
     },

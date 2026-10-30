@@ -1,14 +1,14 @@
 import React, { memo } from 'react';
 import theme from '../../../config/theme';
 import { IconTile } from '../../../components/ui';
-import { formatCurrency, formatCount } from '../../../utils/format';
+import { formatCurrencyCompact, formatCount } from '../../../utils/format';
 import { useNarrow } from '../parts/reportUtils';
 
 const c = theme.colors;
 
 function formatValue(value, format) {
   if (value === null || value === undefined || value === '') return '—';
-  if (format === 'currency') return formatCurrency(value);
+  if (format === 'currency') return formatCurrencyCompact(value);
   if (format === 'number') return formatCount(value);
   return String(value);
 }

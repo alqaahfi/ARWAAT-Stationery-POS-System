@@ -284,6 +284,16 @@ RULE 9 - Cash only everywhere
   Stage 3 e2e: POS payment step shows only Amount received + Change (no Cash/Bank/Other, C/B/O keys do nothing);
            Receive Payment / Pay Supplier / quick bills have no method choice; Payment History rows say Cash.
 
+RULE 10 - No rounding of totals
+  Found: renderer utils/format.js formatCurrency() rounded every amount to whole rupees and compacted >= 100K to
+           "K"/"M" - used on the POS cart, totals, change, bills and lists (a 93.75 bill showed "Rs 94").
+  Changed: formatCurrency now shows the exact amount (thousands separators, paisa when present). The old compact
+           form is formatCurrencyCompact, used only for Home stat tiles, the Home chart total and report summary
+           cards. Server totals were already exact to the paisa (2 dp); nothing rounds to whole rupees.
+  Checks: R10-01..R10-04 (PASS).
+  Stage 3 e2e: sell 3 x 31.25 with Rs 0.50 discount -> cart/summary/receipt show Rs 93.25; Rs 93 cash for a
+           walk-in is refused.
+
 STAGE 1 DECISIONS
   D1 (rule 1) Editing a saved bill: a cashier may keep the bill's OWN stored price for a pack size (same
      customer only); any other price must match the price engine. Changing the customer re-prices.

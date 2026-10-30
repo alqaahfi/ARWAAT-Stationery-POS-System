@@ -20,10 +20,18 @@ export async function loadCurrencySymbol() {
   }
 }
 
-// Auto-compact currency for stat tiles: plain with thousands separators up to
-// 100K, then K/M so a tile value never runs long. Detail tables (once built)
-// should show the exact amount instead.
+// Rule 10: no rounding of totals. Money on bills, carts, payments and lists is
+// shown exactly as stored: thousands separators, paisa only when there are any
+// (Rs 1,250 / Rs 93.75 / Rs 125,000).
 export function formatCurrency(n) {
+  const value = Math.round((Number(n) || 0) * 100) / 100;
+  const decimals = Number.isInteger(value) ? 0 : 2;
+  return `${currencySymbol} ${value.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+}
+
+// Auto-compact currency for stat tiles and chart axes only (Home, report
+// summary cards): plain up to 100K, then K/M so a tile value never runs long.
+export function formatCurrencyCompact(n) {
   const value = Number(n || 0);
   const rounded = Math.round(value);
   const abs = Math.abs(rounded);
