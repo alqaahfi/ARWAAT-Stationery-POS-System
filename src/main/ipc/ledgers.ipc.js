@@ -55,7 +55,7 @@ function getPaymentHistory({ partyType, dateFrom, dateTo, method, search } = {})
     LEFT JOIN customers c ON p.party_type = 'customer' AND c.id = p.party_id
     LEFT JOIN suppliers s ON p.party_type = 'supplier' AND s.id = p.party_id
     LEFT JOIN sales sa ON sa.id = p.sale_id
-    WHERE 1 = 1
+    WHERE p.is_voided = 0
   `;
   const params = [];
 
@@ -96,9 +96,10 @@ function getLastActivityDate(db, partyType, partyId) {
   const otherDateCol = partyType === 'customer' ? 'created_at' : 'purchase_date';
   const otherIdCol = partyType === 'customer' ? 'customer_id' : 'supplier_id';
 
-  const otherRow = db.prepare(`SELECT MAX(${otherDateCol}) AS d FROM ${otherTable} WHERE ${otherIdCol} = ?`).get(partyId);
+  const voidFilter = partyType === 'customer' ? ' AND is_voided = 0' : '';
+  const otherRow = db.prepare(`SELECT MAX(${otherDateCol}) AS d FROM ${otherTable} WHERE ${otherIdCol} = ?${voidFilter}`).get(partyId);
   const paymentRow = db
-    .prepare('SELECT MAX(created_at) AS d FROM payments WHERE party_type = ? AND party_id = ?')
+    .prepare('SELECT MAX(created_at) AS d FROM payments WHERE party_type = ? AND party_id = ? AND is_voided = 0')
     .get(partyType, partyId);
   const adjustmentRow = db
     .prepare('SELECT MAX(created_at) AS d FROM ledger_adjustments WHERE party_type = ? AND party_id = ?')
@@ -162,7 +163,7 @@ function getAgingReport() {
   const rows = [];
   for (const c of customers) {
     const unpaidSales = db
-      .prepare('SELECT id, invoice_no, balance_due, created_at FROM sales WHERE customer_id = ? AND balance_due > 0 ORDER BY created_at')
+      .prepare('SELECT id, invoice_no, balance_due, created_at FROM sales WHERE customer_id = ? AND balance_due > 0 AND is_voided = 0 ORDER BY created_at')
       .all(c.id);
     if (unpaidSales.length === 0) continue;
 

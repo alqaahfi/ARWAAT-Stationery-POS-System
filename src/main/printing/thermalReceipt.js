@@ -92,6 +92,17 @@ async function print(saleId, { showDues } = {}) {
     printHeaderLines(printerDevice, settings);
     printerDevice.drawLine();
 
+    // VOIDED / DUPLICATE COPY lines (rules 5 and 14), centered and bold.
+    if (data.stampLines && data.stampLines.length) {
+      printerDevice.alignCenter();
+      data.stampLines.forEach((line, i) => {
+        printerDevice.bold(i === 0);
+        printerDevice.println(line);
+      });
+      printerDevice.bold(false);
+      printerDevice.drawLine();
+    }
+
     printerDevice.alignLeft();
     printerDevice.println(`Invoice: ${sale.invoice_no}`);
     printerDevice.println(`Date: ${sale.created_at}`);

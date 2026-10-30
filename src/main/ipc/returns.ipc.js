@@ -174,9 +174,10 @@ function getReturnable(input = {}) {
   if (!isAdmin(db, input.requestingUserId)) return DENIED;
 
   const sale = db
-    .prepare('SELECT id, invoice_no, created_at, sale_type, customer_id, total_amount FROM sales WHERE id = ?')
+    .prepare('SELECT id, invoice_no, created_at, sale_type, customer_id, total_amount, is_voided FROM sales WHERE id = ?')
     .get(input.saleId);
   if (!sale) return { success: false, notFound: true, reason: "This sale can't be found." };
+  if (sale.is_voided) return { success: false, voided: true, reason: 'This bill was voided, so nothing on it can be returned.' };
 
   let customer = null;
   if (sale.customer_id) {
@@ -211,8 +212,9 @@ function createReturn(input = {}) {
   const db = getDb();
   if (!isAdmin(db, input.requestingUserId)) return DENIED;
 
-  const sale = db.prepare('SELECT id, invoice_no, customer_id, total_amount FROM sales WHERE id = ?').get(input.saleId);
+  const sale = db.prepare('SELECT id, invoice_no, customer_id, total_amount, is_voided FROM sales WHERE id = ?').get(input.saleId);
   if (!sale) return { success: false, reason: "This sale can't be found." };
+  if (sale.is_voided) return { success: false, reason: 'This bill was voided, so nothing on it can be returned.' };
 
   const reason = String(input.reason || '');
   if (!REASONS.includes(reason)) return { success: false, reason: 'Choose why the items are coming back.' };

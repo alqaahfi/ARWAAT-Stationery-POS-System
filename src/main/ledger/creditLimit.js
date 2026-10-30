@@ -20,7 +20,7 @@ function creditLimitCheck(db, { customerId, addAmount, excludeSaleId } = {}) {
   let balanceBefore = getCustomerBalance(db, customer.id);
   if (excludeSaleId) {
     const own = db
-      .prepare('SELECT total_amount, paid_amount FROM sales WHERE id = ? AND customer_id = ?')
+      .prepare('SELECT total_amount, paid_amount FROM sales WHERE id = ? AND customer_id = ? AND is_voided = 0')
       .get(excludeSaleId, customer.id);
     if (own) balanceBefore -= own.total_amount - own.paid_amount;
   }

@@ -95,7 +95,11 @@ function listSales(input = {}) {
 
   const agg = db
     .prepare(
-      `SELECT COUNT(*) AS total, COALESCE(SUM(s.total_amount), 0) AS sumTotal, COALESCE(SUM(s.balance_due), 0) AS sumBalanceDue ${fromSql}`
+      // Voided bills stay in the list (red "Voided" badge) but count as zero in the totals (rule 5).
+      `SELECT COUNT(*) AS total,
+              COALESCE(SUM(CASE WHEN s.is_voided = 0 THEN s.total_amount ELSE 0 END), 0) AS sumTotal,
+              COALESCE(SUM(CASE WHEN s.is_voided = 0 THEN s.balance_due ELSE 0 END), 0) AS sumBalanceDue,
+              COALESCE(SUM(s.is_voided), 0) AS voidedCount ${fromSql}`
     )
     .get(...params);
 
@@ -103,6 +107,7 @@ function listSales(input = {}) {
     .prepare(
       `SELECT s.id, s.invoice_no, s.created_at, s.sale_type, s.customer_id, c.name AS customer_name,
               s.cashier_id, u.full_name AS cashier_name, s.total_amount, s.paid_amount, s.balance_due, s.payment_status,
+              s.is_voided, s.voided_at,
               ${RETURNED_AMOUNT_SQL} AS returned_amount,
               ${RETURN_STATUS_SQL} AS return_status
        ${fromSql}
@@ -115,7 +120,7 @@ function listSales(input = {}) {
     success: true,
     rows,
     total: agg.total,
-    totals: { sumTotal: agg.sumTotal, sumBalanceDue: agg.sumBalanceDue },
+    totals: { sumTotal: agg.sumTotal, sumBalanceDue: agg.sumBalanceDue, voidedCount: agg.voidedCount },
     hasMore: offset + rows.length < agg.total,
   };
 }
@@ -130,9 +135,11 @@ function getSaleDetail(input = {}) {
     .prepare(
       `SELECT s.id, s.invoice_no, s.created_at, s.sale_type, s.customer_id, s.cashier_id, u.full_name AS cashier_name,
               s.origin_pc, s.subtotal, s.discount_amount, s.tax_amount, s.total_amount, s.paid_amount, s.balance_due,
-              s.payment_status, ${RETURNED_AMOUNT_SQL} AS returned_amount, ${RETURN_STATUS_SQL} AS return_status
+              s.payment_status, ${RETURNED_AMOUNT_SQL} AS returned_amount, ${RETURN_STATUS_SQL} AS return_status,
+              s.is_voided, s.voided_at, vu.full_name AS voided_by_name
        FROM sales s
        JOIN users u ON u.id = s.cashier_id
+       LEFT JOIN users vu ON vu.id = s.voided_by
        WHERE s.id = ?`
     )
     .get(input.id);
@@ -161,7 +168,7 @@ function getSaleDetail(input = {}) {
     .map((l) => ({ ...l, variant_name: l.variant_name && l.variant_name !== 'Standard' ? l.variant_name : null }));
 
   const payments = db
-    .prepare('SELECT id, amount, payment_method, created_at, note FROM payments WHERE sale_id = ? ORDER BY created_at, id')
+    .prepare('SELECT id, amount, payment_method, created_at, note, is_voided FROM payments WHERE sale_id = ? ORDER BY created_at, id')
     .all(sale.id);
 
   const returns = db

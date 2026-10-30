@@ -220,6 +220,22 @@ function assertCanChange(db, sale, actorId) {
   if (day !== localToday(db)) throw new SaleError('You can only change bills made today.');
 }
 
+// Rule 5: a voided bill is kept for history but can never be edited, voided again or returned.
+function assertNotVoided(sale) {
+  if (sale && sale.is_voided) throw new SaleError('This bill was voided. It can no longer be changed.');
+}
+
+// last_sold_at follows the newest bill that still counts (a void takes its bill out).
+function refreshLastSold(db, variantIds) {
+  const set = db.prepare(
+    `UPDATE product_variants SET last_sold_at = (
+       SELECT MAX(s.created_at) FROM sale_items si JOIN sales s ON s.id = si.sale_id
+       WHERE si.product_variant_id = product_variants.id AND s.is_voided = 0
+     ) WHERE id = ?`
+  );
+  for (const id of new Set(variantIds)) set.run(id);
+}
+
 function assertNoReturns(db, saleId) {
   const n = db.prepare('SELECT COUNT(*) AS n FROM sale_returns WHERE sale_id = ?').get(saleId).n;
   if (n > 0) throw new SaleError('Items from this bill were already returned, so it can no longer be changed.');
@@ -376,6 +392,7 @@ function saveSale(payload, editSaleId) {
     if (editSaleId) {
       const existing = db.prepare('SELECT * FROM sales WHERE id = ?').get(editSaleId);
       if (!existing) throw new SaleError('That bill no longer exists.');
+      assertNotVoided(existing);
       assertCanChange(db, existing, cashierId);
       assertNoReturns(db, editSaleId);
       reverseSaleStock(db, existing, { keepReference: true, note: `Reversed for edit of ${existing.invoice_no}` });
@@ -506,18 +523,22 @@ function updateSale(payload) {
   return saveSale(payload, payload.saleId);
 }
 
+// Rule 5: a void keeps the bill (is_voided, voided_at, voided_by) and its lines for history,
+// puts the stock back, and marks the bill's payments voided — from then on it counts as zero
+// everywhere. Its invoice number stays taken, so it is never handed out again.
 function voidSale({ saleId, userId } = {}) {
   const db = getDb();
   try {
     const sale = db.transaction(() => {
       const row = db.prepare('SELECT * FROM sales WHERE id = ?').get(saleId);
       if (!row) throw new SaleError('That bill no longer exists.');
+      if (row.is_voided) throw new SaleError('This bill was already voided.');
       assertCanChange(db, row, userId);
       assertNoReturns(db, saleId);
-      reverseSaleStock(db, row, { keepReference: false, note: `Voided ${row.invoice_no}` });
-      db.prepare("DELETE FROM payments WHERE sale_id = ? AND party_type = 'customer'").run(saleId);
-      db.prepare('DELETE FROM sale_items WHERE sale_id = ?').run(saleId);
-      db.prepare('DELETE FROM sales WHERE id = ?').run(saleId);
+      reverseSaleStock(db, row, { keepReference: true, note: `Voided ${row.invoice_no}` });
+      db.prepare("UPDATE payments SET is_voided = 1 WHERE sale_id = ? AND party_type = 'customer'").run(saleId);
+      db.prepare("UPDATE sales SET is_voided = 1, voided_at = datetime('now'), voided_by = ? WHERE id = ?").run(userId, saleId);
+      refreshLastSold(db, db.prepare('SELECT product_variant_id FROM sale_items WHERE sale_id = ?').all(saleId).map((r) => r.product_variant_id));
       return row;
     })();
     logActivity(db, {
@@ -544,7 +565,8 @@ function listRecent({ userId } = {}) {
       `SELECT s.id, s.invoice_no, s.created_at, s.total_amount, s.paid_amount, s.balance_due, s.sale_type, s.cashier_id,
               c.name AS customer_name, u.full_name AS cashier_name,
               (SELECT COUNT(*) FROM sale_items si WHERE si.sale_id = s.id) AS item_count,
-              (SELECT COUNT(*) FROM sale_returns r WHERE r.sale_id = s.id) AS return_count
+              (SELECT COUNT(*) FROM sale_returns r WHERE r.sale_id = s.id) AS return_count,
+              s.is_voided
        FROM sales s
        LEFT JOIN customers c ON c.id = s.customer_id
        JOIN users u ON u.id = s.cashier_id
@@ -553,7 +575,7 @@ function listRecent({ userId } = {}) {
        ORDER BY s.created_at DESC, s.id DESC`
     )
     .all(user.role, userId);
-  return rows.map((r) => ({ ...r, locked: r.return_count > 0 }));
+  return rows.map((r) => ({ ...r, is_voided: !!r.is_voided, locked: r.return_count > 0 || !!r.is_voided }));
 }
 
 // Everything the POS needs to rebuild the cart from a saved bill (edit mode).
@@ -562,6 +584,7 @@ function getForEdit({ saleId, userId } = {}) {
   const sale = db.prepare('SELECT * FROM sales WHERE id = ?').get(saleId);
   if (!sale) return { success: false, reason: 'That bill no longer exists.' };
   try {
+    assertNotVoided(sale);
     assertCanChange(db, sale, userId);
     assertNoReturns(db, saleId);
   } catch (err) {
@@ -579,7 +602,7 @@ function getForEdit({ saleId, userId } = {}) {
     )
     .all(saleId);
   const payment = db
-    .prepare("SELECT payment_method FROM payments WHERE sale_id = ? AND party_type = 'customer' LIMIT 1")
+    .prepare("SELECT payment_method FROM payments WHERE sale_id = ? AND party_type = 'customer' AND is_voided = 0 LIMIT 1")
     .get(saleId);
   const customer = sale.customer_id
     ? db.prepare('SELECT id, name, customer_type, tier, phone FROM customers WHERE id = ?').get(sale.customer_id)

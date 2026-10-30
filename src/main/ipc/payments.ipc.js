@@ -66,6 +66,7 @@ function deletePayment({ paymentId, requestingUserId } = {}) {
   }
   const payment = paymentId ? db.prepare('SELECT * FROM payments WHERE id = ?').get(paymentId) : null;
   if (!payment) return { success: false, reason: 'This payment was already removed.' };
+  if (payment.is_voided) return { success: false, reason: 'This payment belongs to a voided bill and no longer counts, so there is nothing to remove.' };
 
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 

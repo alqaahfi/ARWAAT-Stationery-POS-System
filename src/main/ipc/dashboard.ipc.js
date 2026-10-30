@@ -14,7 +14,7 @@ function getSummary() {
     .prepare(
       `SELECT COUNT(*) AS count, COALESCE(SUM(total_amount), 0) AS total
        FROM sales
-       WHERE date(created_at, 'localtime') = date('now', 'localtime')`
+       WHERE date(created_at, 'localtime') = date('now', 'localtime') AND is_voided = 0`
     )
     .get();
   const todayReturns = db
@@ -59,6 +59,7 @@ function getSummary() {
        FROM sales s
        LEFT JOIN customers c ON c.id = s.customer_id
        JOIN users u ON u.id = s.cashier_id
+       WHERE s.is_voided = 0
        ORDER BY s.created_at DESC
        LIMIT 5`
     )
@@ -94,7 +95,7 @@ function getRevenueTrend(days) {
     .prepare(
       `SELECT date(created_at, 'localtime') AS day, COALESCE(SUM(total_amount), 0) AS total
        FROM sales
-       WHERE date(created_at, 'localtime') >= date('now', 'localtime', ?)
+       WHERE date(created_at, 'localtime') >= date('now', 'localtime', ?) AND is_voided = 0
        GROUP BY day`
     )
     .all(sinceArg);

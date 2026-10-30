@@ -29,6 +29,19 @@ export default function ThermalContent({ data, settings }) {
       </div>
       <div style={styles.hr} />
 
+      {data.stampLines && data.stampLines.length > 0 && (
+        <>
+          <div style={styles.center}>
+            {data.stampLines.map((line, i) => (
+              <div key={i} style={i === 0 ? { fontWeight: 700, fontSize: '1.2em' } : undefined}>
+                {line}
+              </div>
+            ))}
+          </div>
+          <div style={styles.hr} />
+        </>
+      )}
+
       <div>Invoice: {sale.invoice_no}</div>
       <div>Date: {formatDateTime(sale.created_at)}</div>
       <div>Cashier: {sale.cashier_name}</div>

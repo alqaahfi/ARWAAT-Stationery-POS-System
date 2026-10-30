@@ -66,8 +66,8 @@ export function SalesTable({ rows, isAdmin, loading, onOpen }) {
             const ret = RETURN_STATUS[r.return_status];
             return (
               <div>
-                {s && <Badge tone={s.tone}>{s.label}</Badge>}
-                {r.payment_status !== 'paid' && r.balance_due > 0 && (
+                {r.is_voided ? <Badge tone="red">Voided</Badge> : s && <Badge tone={s.tone}>{s.label}</Badge>}
+                {!r.is_voided && r.payment_status !== 'paid' && r.balance_due > 0 && (
                   <div style={{ ...styles.foot, ...theme.font.numeric }}>{formatCurrencyExact(r.balance_due)} unpaid</div>
                 )}
                 {ret && (

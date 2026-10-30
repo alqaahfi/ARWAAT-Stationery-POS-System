@@ -50,7 +50,7 @@ export function SaleDetailSheet({ saleId, userId, isAdmin, onClose, onOpenCustom
   const title = sale ? (
     <span style={styles.titleRow}>
       {sale.invoice_no}
-      {status && <Badge tone={status.tone}>{status.label}</Badge>}
+      {sale.is_voided ? <Badge tone="red">Voided</Badge> : status && <Badge tone={status.tone}>{status.label}</Badge>}
       {returnBadge && (
         <Badge tone="neutral">
           <Icon icon={Undo2} size={12} />
@@ -62,7 +62,14 @@ export function SaleDetailSheet({ saleId, userId, isAdmin, onClose, onOpenCustom
     'Sale'
   );
   const subtitle = sale
-    ? [formatLocalDateTime(sale.created_at), `Sold by ${sale.cashier_name}`, sale.origin_pc && `Computer ${sale.origin_pc}`].filter(Boolean).join(' · ')
+    ? [
+        formatLocalDateTime(sale.created_at),
+        `Sold by ${sale.cashier_name}`,
+        sale.origin_pc && `Computer ${sale.origin_pc}`,
+        sale.is_voided && `Voided ${sale.voided_at ? formatLocalDateTime(sale.voided_at) : ''}${sale.voided_by_name ? ` by ${sale.voided_by_name}` : ''} — counts as zero`,
+      ]
+        .filter(Boolean)
+        .join(' · ')
     : undefined;
 
   const isRetail = sale?.sale_type !== 'wholesale';
@@ -71,7 +78,7 @@ export function SaleDetailSheet({ saleId, userId, isAdmin, onClose, onOpenCustom
       <Button variant="plain" onClick={onClose} style={{ marginRight: 'auto' }}>
         Close
       </Button>
-      {sale && isAdmin && onReturnItems && sale.return_status !== 'full' && (
+      {sale && !sale.is_voided && isAdmin && onReturnItems && sale.return_status !== 'full' && (
         <Button variant="tinted" icon={Undo2} onClick={() => onReturnItems(sale.id)}>
           {glossary.returnItems}
         </Button>

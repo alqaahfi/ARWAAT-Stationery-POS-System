@@ -132,7 +132,7 @@ function getLedger(supplierId) {
     .all(supplierId);
   const payments = db
     .prepare(
-      "SELECT id, amount, payment_method, note, created_at FROM payments WHERE party_type = 'supplier' AND party_id = ? ORDER BY created_at"
+      "SELECT id, amount, payment_method, note, created_at FROM payments WHERE party_type = 'supplier' AND party_id = ? AND is_voided = 0 ORDER BY created_at"
     )
     .all(supplierId);
   const adjustments = getAdjustmentRows(db, 'supplier', supplierId);

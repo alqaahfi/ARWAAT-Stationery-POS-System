@@ -110,6 +110,15 @@ async function buildMergedInvoicePdf({ templatePath, data, settings, marginTopMm
   // -------- bordered info block: Bill To / Cashier (left) + Invoice, Date & Time (right) --------
   // Everything essential up front, per a glance at the top of the invoice.
   function drawInfoBox() {
+    // VOIDED / DUPLICATE COPY lines (rules 5 and 14), centered above the info box.
+    (data.stampLines || []).forEach((line, i) => {
+      const size = i === 0 ? 14 : 9;
+      const f = i === 0 ? fontBold : font;
+      const w = f.widthOfTextAtSize(String(line), size);
+      y -= size + 2;
+      page.drawText(String(line), { x: marginX + (rightX - marginX - w) / 2, y, size, font: f, color: TEXT_COLOR });
+    });
+    if ((data.stampLines || []).length) y -= 8;
     const boxTop = y;
     const boxBottom = y - infoBoxHeight;
     const midX = marginX + (rightX - marginX) / 2;

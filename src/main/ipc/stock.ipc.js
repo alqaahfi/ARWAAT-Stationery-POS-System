@@ -232,7 +232,7 @@ function getProductStats(productId) {
        FROM sale_items si
        JOIN sales s ON s.id = si.sale_id
        JOIN product_units pu ON pu.id = si.product_unit_id
-       WHERE si.product_id = ?`
+       WHERE si.product_id = ? AND s.is_voided = 0`
     )
     .get(productId);
   const last30 = db
@@ -242,7 +242,7 @@ function getProductStats(productId) {
        FROM sale_items si
        JOIN sales s ON s.id = si.sale_id
        JOIN product_units pu ON pu.id = si.product_unit_id
-       WHERE si.product_id = ? AND s.created_at >= datetime('now', '-30 days')`
+       WHERE si.product_id = ? AND s.is_voided = 0 AND s.created_at >= datetime('now', '-30 days')`
     )
     .get(productId);
   const lastPurchased = db.prepare('SELECT MAX(last_purchased_at) AS at FROM product_variants WHERE product_id = ?').get(productId);

@@ -51,6 +51,15 @@ export default function PrintInvoice({ saleId, purchaseId, showDues }) {
       </div>
 
       <div style={styles.title}>{labels.title}</div>
+      {data.stampLines && data.stampLines.length > 0 && (
+        <div style={{ textAlign: 'center', margin: '0 0 8px' }}>
+          {data.stampLines.map((line, i) => (
+            <div key={i} style={i === 0 ? { fontWeight: 700, fontSize: '18px' } : { fontSize: '11px' }}>
+              {line}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={styles.infoBox}>
         <div>

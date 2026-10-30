@@ -12,7 +12,7 @@ function getSaleDetail(saleId) {
   const sale = db
     .prepare(
       `SELECT s.*, c.name AS customer_name, c.phone AS customer_phone, c.address AS customer_address,
-              u.full_name AS cashier_name,
+              u.full_name AS cashier_name, datetime(s.voided_at, 'localtime') AS voided_at_local,
               l.name AS letterhead_name, l.pdf_template_path AS letterhead_pdf_path,
               l.content_margin_top_mm AS letterhead_margin_top_mm, l.content_margin_bottom_mm AS letterhead_margin_bottom_mm
        FROM sales s
@@ -86,15 +86,25 @@ function groupReceiptItems(items) {
 // outstandingBalance reflects the customer's balance AFTER this sale, since
 // the sale (and any linked payment) is already committed by the time this
 // runs.
+// Big centered lines printed above the bill on every print path (thermal,
+// thermal preview, A4 letterhead PDF, A4 fallback). Rule 5: a voided bill
+// always prints "VOIDED".
+function buildStampLines(sale) {
+  const lines = [];
+  if (sale.is_voided) lines.push('*** VOIDED ***', `This bill was voided${sale.voided_at_local ? ` on ${sale.voided_at_local}` : ''}. It is not a valid bill.`);
+  return lines;
+}
+
 function buildReceiptData(saleId, { showDues } = {}) {
   const detail = getSaleDetail(saleId);
   if (!detail) return null;
 
   const { sale, items } = detail;
-  const applyDues = !!showDues && !!sale.customer_id;
+  // A voided bill no longer counts, so its "outstanding balance" is never printed.
+  const applyDues = !!showDues && !!sale.customer_id && !sale.is_voided;
   const outstandingBalance = applyDues ? getCustomerBalance(getDb(), sale.customer_id) : null;
 
-  return { sale, items, groups: groupReceiptItems(items), showDues: applyDues, outstandingBalance };
+  return { sale, items, groups: groupReceiptItems(items), showDues: applyDues, outstandingBalance, stampLines: buildStampLines(sale) };
 }
 
 module.exports = { getSaleDetail, buildReceiptData, groupReceiptItems };

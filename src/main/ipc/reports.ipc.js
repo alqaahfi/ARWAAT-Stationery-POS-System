@@ -64,7 +64,7 @@ function getSalesReport(filters, requestingUserId) {
        FROM sales s
        JOIN users u ON u.id = s.cashier_id
        LEFT JOIN customers c ON c.id = s.customer_id
-       WHERE date(s.created_at, 'localtime') BETWEEN date(?) AND date(?)${saleFilterSql}
+       WHERE date(s.created_at, 'localtime') BETWEEN date(?) AND date(?) AND s.is_voided = 0${saleFilterSql}
        ORDER BY s.created_at`
     )
     .all(from, to, ...saleFilterParams);
@@ -158,7 +158,7 @@ function getProfitLoss(filters) {
   const revenueRows = db
     .prepare(
       `SELECT ${salesExpr} AS bucket, COALESCE(SUM(s.total_amount), 0) AS revenue
-       FROM sales s WHERE date(s.created_at, 'localtime') BETWEEN date(?) AND date(?) GROUP BY bucket`
+       FROM sales s WHERE date(s.created_at, 'localtime') BETWEEN date(?) AND date(?) AND s.is_voided = 0 GROUP BY bucket`
     )
     .all(from, to);
 
@@ -179,7 +179,7 @@ function getProfitLoss(filters) {
        FROM sale_items si
        JOIN sales s ON s.id = si.sale_id
        JOIN product_units pu ON pu.id = si.product_unit_id
-       WHERE date(s.created_at, 'localtime') BETWEEN date(?) AND date(?)
+       WHERE date(s.created_at, 'localtime') BETWEEN date(?) AND date(?) AND s.is_voided = 0
        GROUP BY bucket`
     )
     .all(from, to);
@@ -427,7 +427,7 @@ function getCashierPerformance(filters) {
               COALESCE(SUM(s.total_amount), 0) AS gross_revenue,
               COALESCE(SUM(s.discount_amount), 0) AS total_discounts
        FROM sales s
-       WHERE date(s.created_at, 'localtime') BETWEEN date(?) AND date(?)
+       WHERE date(s.created_at, 'localtime') BETWEEN date(?) AND date(?) AND s.is_voided = 0
        GROUP BY s.cashier_id`
     )
     .all(from, to);

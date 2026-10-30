@@ -90,11 +90,12 @@ const SYNC_TABLES = {
   },
   sales: {
     kind: 'upsert',
-    deletable: true, // bills can be edited/voided (030)
+    deletable: true, // bills can be edited (030); since 036 a void is an update (is_voided, voided_at, voided_by)
     fks: {
       customer_id: { table: 'customers', nullable: true },
       cashier_id: { table: 'users' },
       letterhead_id: { table: 'letterheads', nullable: true },
+      voided_by: { table: 'users', nullable: true },
     },
   },
   sale_items: {
@@ -124,7 +125,8 @@ const SYNC_TABLES = {
   },
   payments: {
     kind: 'upsert',
-    deletable: true, // bills can be edited/voided (030)
+    // bills can be edited (030); is_voided (036) syncs as a plain column through trg_payments_au
+    deletable: true,
     fks: { sale_id: { table: 'sales', nullable: true }, received_by: { table: 'users', nullable: true } },
     polymorphicFk: { column: 'party_id', typeColumn: 'party_type', targets: { customer: 'customers', supplier: 'suppliers' } },
   },

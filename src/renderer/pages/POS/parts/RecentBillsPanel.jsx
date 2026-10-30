@@ -132,6 +132,7 @@ export default function RecentBillsPanel({ userId, onClose, onEdit, onVoided }) 
                     <div style={{ ...theme.type.footnote, color: c.labelSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {b.customer_name || 'Walk-in'} · {b.item_count} {b.item_count === 1 ? 'item' : 'items'}
                     </div>
+                    {b.is_voided && <Badge tone="red" size="sm">Voided</Badge>}
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <Money value={formatCurrency(b.total_amount)} style={{ ...theme.type.body, fontWeight: theme.font.weightSemibold, color: c.label }} />
@@ -213,11 +214,12 @@ function BillDetail({ detail, locked, confirmVoid, busy, onEdit, onAskVoid, onVo
 
       {locked ? (
         <InlineMessage tone="info">
-          <Lock size={12} aria-hidden="true" /> Items were returned from this bill, so it can't be changed.
+          <Lock size={12} aria-hidden="true" />{' '}
+          {sale.is_voided ? 'This bill was voided. It counts as zero and can no longer be changed.' : "Items were returned from this bill, so it can't be changed."}
         </InlineMessage>
       ) : confirmVoid ? (
         <div style={{ marginTop: theme.spacing.smd }} onMouseDown={keepFocus}>
-          <InlineMessage tone="warning">Void this bill? Stock goes back on the shelf and the customer's balance is corrected.</InlineMessage>
+          <InlineMessage tone="warning">Void this bill? Stock goes back on the shelf and the customer's balance is corrected. The bill stays in Sales History marked Voided.</InlineMessage>
           <div style={{ display: 'flex', gap: theme.spacing.sm, marginTop: theme.spacing.sm }}>
             <Button variant="secondary" fullWidth tabIndex={-1} onClick={onKeep}>
               Keep bill <Kbd>Esc</Kbd>

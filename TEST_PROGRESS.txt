@@ -202,6 +202,45 @@ RULE 4 - Barcodes stay per product/Type; a scan adds 1 of the default pack size
   Stage 3 e2e: in the quick Sale overlay scan a Type barcode of a several-Types product -> 1 line, qty 1,
           default pack size, no Types panel.
 
+RULE 5 - Voids are kept, count as ZERO everywhere
+  Migration 036_voids_kept.sql: sales.is_voided/voided_at/voided_by, payments.is_voided, indexes,
+           trg_payments_au (payment updates now reach other PCs). syncSchema: sales.voided_by FK (nullable);
+           is_voided columns travel through the generic column copy; a void is now an UPDATE (never a delete).
+  Approach for linked payments: MARKED voided (payments.is_voided = 1) at void time; every sum/list filters
+           "is_voided = 0" on sales and on payments (one simple filter, applied everywhere below).
+  sales:void: stock back (movements keep reference_type 'sale' + note "Voided X"), payments marked voided,
+           sale row kept (is_voided=1, voided_at, voided_by), lines kept, last_sold_at recomputed from bills that
+           still count. Invoice numbers: voided rows stay, so the max+1 never reuses them.
+  Refused for a voided bill: sales:update, sales:void (again), sales:get-for-edit, returns:get-returnable,
+           returns:create, payments:delete of its (voided) payment.
+  QUERIES TOUCHED (rule 5):
+    ledger/balanceEngine.js   getCustomerBalance sales+payments, getBalancesForCustomers sales+payments,
+                              getSupplierBalance payments, getBalancesForSuppliers payments
+    ledger/creditLimit.js     own-bill lookup (edit)
+    ipc/customers.ipc.js      getLedger sales + payments (timeline)
+    ipc/suppliers.ipc.js      getLedger payments
+    ipc/dashboard.ipc.js      getSummary today sales, recentSales; getRevenueTrend sales
+    ipc/ledgers.ipc.js        getPaymentHistory, getLastActivityDate (sales + payments), getAgingReport
+    ipc/reports.ipc.js        Sales report rows, P&L revenue, P&L cost of goods, Cashier performance sales
+                              (customer statements / overview / advances use balanceEngine)
+    ipc/stock.ipc.js          getProductStats sold + last 30 days
+    ipc/salesHistory.ipc.js   list: rows keep voided (flag) but sumTotal/sumBalanceDue exclude them (+voidedCount);
+                              detail: is_voided, voided_at, voided_by_name; payments list carries is_voided
+    ipc/sales.ipc.js          listRecent (voided shown + locked), getForEdit payment method, refreshLastSold
+    ipc/payments.ipc.js       deletePayment refuses a voided payment
+    ipc/returns.ipc.js        getReturnable / createReturn refuse a voided bill
+    printing/receiptData.js   stampLines "*** VOIDED ***" + voided date; no outstanding balance on a voided bill
+    printing/thermalReceipt.js, printing/pdfInvoiceMerge.js, renderer ThermalContent.jsx + PrintInvoice.jsx print stampLines
+    global search / customer statements / ledgers overview / advances / receipts balance -> via balanceEngine
+    NOT filtered on purpose: invoice-number lookup (voided numbers stay taken), single-row lookups by id,
+    returns sums (a voided bill can never have a return - both directions are refused server-side).
+  Renderer: Sales History table + detail sheet red "Voided" badge, voided date/by + "counts as zero", no Return
+           button; POS Today's bills shows "Voided" badge and locks the bill (message says voided).
+  Checks: R05-01..R05-17 (PASS).
+  Stage 3 e2e: void a credit bill from F2 -> it stays in Today's bills + Sales History with red Voided badge;
+           Home, Sales report, P&L, Cashier performance, customer ledger/statement all drop it; reprint shows
+           *** VOIDED ***; Edit/Return/void again refused.
+
 STAGE 1 DECISIONS
   D1 (rule 1) Editing a saved bill: a cashier may keep the bill's OWN stored price for a pack size (same
      customer only); any other price must match the price engine. Changing the customer re-prices.
@@ -209,3 +248,8 @@ STAGE 1 DECISIONS
      The keyboard POS has no price box (unchanged); Admin uses the quick Sale form to override.
   D3 (rule 3) Pack-size conversion factors (e.g. Box = 12) are not quantities typed at the counter and stay as
      they are. Old saved rows with decimal quantities are left untouched (they still display and count).
+  D4 (rule 5) Linked payments of a voided bill are MARKED voided (payments.is_voided) rather than excluded by a
+     join; every payment sum/list filters is_voided = 0. Voided bills are hidden from Home "Recent sales" and from
+     customer ledger timelines (zero effect), but stay visible (flagged) in Sales History and POS Today's bills.
+  D5 (rule 5) A return against a voided bill cannot be created locally; if two PCs void and return the same bill
+     at the same moment, sync keeps both (left visible, like other sync conflicts).

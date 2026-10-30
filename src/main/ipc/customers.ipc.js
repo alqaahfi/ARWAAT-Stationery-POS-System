@@ -169,11 +169,11 @@ function getLedger(customerId) {
   if (!customer) return { success: false, reason: 'Customer not found.' };
 
   const sales = db
-    .prepare('SELECT id, invoice_no, total_amount, created_at FROM sales WHERE customer_id = ? ORDER BY created_at')
+    .prepare('SELECT id, invoice_no, total_amount, created_at FROM sales WHERE customer_id = ? AND is_voided = 0 ORDER BY created_at')
     .all(customerId);
   const payments = db
     .prepare(
-      "SELECT id, amount, payment_method, note, created_at FROM payments WHERE party_type = 'customer' AND party_id = ? ORDER BY created_at"
+      "SELECT id, amount, payment_method, note, created_at FROM payments WHERE party_type = 'customer' AND party_id = ? AND is_voided = 0 ORDER BY created_at"
     )
     .all(customerId);
   const adjustments = getAdjustmentRows(db, 'customer', customerId);

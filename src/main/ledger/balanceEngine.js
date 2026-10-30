@@ -7,6 +7,9 @@
 // differs — sales vs. purchases), so both live together here rather than in
 // a customers-only file.
 //
+// Rule 5: voided bills (sales.is_voided) and the payments they carried
+// (payments.is_voided) count as zero — every sum here filters them out.
+//
 // This is the single source of truth for both balances — Customer/Supplier
 // Ledger, the Ledgers module (Overview, Advances & Credits, Aging, Manual
 // Adjustments), Reports' Customer/Supplier Statements, and the Dashboard all
@@ -53,10 +56,10 @@ function getCustomerBalance(db, customerId) {
   if (!customer) return 0;
 
   const salesTotal = db
-    .prepare('SELECT COALESCE(SUM(total_amount), 0) AS total FROM sales WHERE customer_id = ?')
+    .prepare('SELECT COALESCE(SUM(total_amount), 0) AS total FROM sales WHERE customer_id = ? AND is_voided = 0')
     .get(customerId).total;
   const paymentsTotal = db
-    .prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE party_type = 'customer' AND party_id = ?")
+    .prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE party_type = 'customer' AND party_id = ? AND is_voided = 0")
     .get(customerId).total;
   const adjustmentsTotal = getAdjustmentsTotal(db, 'customer', customerId);
 
@@ -76,11 +79,11 @@ function getBalancesForCustomers(db, customerIds) {
     .prepare(`SELECT id, opening_balance FROM customers WHERE id IN (${placeholders})`)
     .all(...customerIds);
   const salesRows = db
-    .prepare(`SELECT customer_id, COALESCE(SUM(total_amount), 0) AS total FROM sales WHERE customer_id IN (${placeholders}) GROUP BY customer_id`)
+    .prepare(`SELECT customer_id, COALESCE(SUM(total_amount), 0) AS total FROM sales WHERE customer_id IN (${placeholders}) AND is_voided = 0 GROUP BY customer_id`)
     .all(...customerIds);
   const paymentRows = db
     .prepare(
-      `SELECT party_id, COALESCE(SUM(amount), 0) AS total FROM payments WHERE party_type = 'customer' AND party_id IN (${placeholders}) GROUP BY party_id`
+      `SELECT party_id, COALESCE(SUM(amount), 0) AS total FROM payments WHERE party_type = 'customer' AND party_id IN (${placeholders}) AND is_voided = 0 GROUP BY party_id`
     )
     .all(...customerIds);
 
@@ -106,7 +109,7 @@ function getSupplierBalance(db, supplierId) {
     .prepare('SELECT COALESCE(SUM(total_amount), 0) AS total FROM purchases WHERE supplier_id = ?')
     .get(supplierId).total;
   const paymentsTotal = db
-    .prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE party_type = 'supplier' AND party_id = ?")
+    .prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE party_type = 'supplier' AND party_id = ? AND is_voided = 0")
     .get(supplierId).total;
   const adjustmentsTotal = getAdjustmentsTotal(db, 'supplier', supplierId);
 
@@ -126,7 +129,7 @@ function getBalancesForSuppliers(db, supplierIds) {
     .all(...supplierIds);
   const paymentRows = db
     .prepare(
-      `SELECT party_id, COALESCE(SUM(amount), 0) AS total FROM payments WHERE party_type = 'supplier' AND party_id IN (${placeholders}) GROUP BY party_id`
+      `SELECT party_id, COALESCE(SUM(amount), 0) AS total FROM payments WHERE party_type = 'supplier' AND party_id IN (${placeholders}) AND is_voided = 0 GROUP BY party_id`
     )
     .all(...supplierIds);
 
