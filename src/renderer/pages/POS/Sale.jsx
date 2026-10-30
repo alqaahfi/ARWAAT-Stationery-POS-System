@@ -744,7 +744,9 @@ export default function Sale() {
   }
 
   async function handleItemSearchEnter() {
-    const raw = searchQuery.trim();
+    // Read the box itself: the key listener is re-bound after every render, so during a burst of scanner
+    // keystrokes it can still hold an older searchQuery.
+    const raw = (searchInputRef.current ? searchInputRef.current.value : searchQuery).trim();
     if (!raw) return;
 
     // A scanner sends the next code right after Enter. Empty the box now, before the async
@@ -1225,7 +1227,7 @@ export default function Sale() {
           e.preventDefault();
           setCartHighlight(e.key === 'ArrowDown' ? 0 : cartLines.length - 1);
           setStage('cart-edit');
-        } else if (e.key === 'Enter' && searchQuery.trim()) {
+        } else if (e.key === 'Enter' && (searchInputRef.current ? searchInputRef.current.value : searchQuery).trim()) {
           e.preventDefault();
           handleItemSearchEnter();
         }
