@@ -154,6 +154,9 @@ export default function Sale() {
   const [customer, setCustomer] = useState(null);
   const [letterheadId, setLetterheadId] = useState(null);
   const [cartLines, setCartLines] = useState([]);
+  // Base units added by scans that the cart state has not rendered yet (back-to-back scans).
+  const scanPendingRef = useRef({});
+  useEffect(() => { scanPendingRef.current = {}; }, [cartLines]);
   const [discountMode, setDiscountMode] = useState('percentage');
   const [discountInput, setDiscountInput] = useState(0);
   const [amountTendered, setAmountTendered] = useState('');
@@ -744,6 +747,11 @@ export default function Sale() {
     const raw = searchQuery.trim();
     if (!raw) return;
 
+    // A scanner sends the next code right after Enter. Empty the box now, before the async
+    // lookup, so the next code is not glued onto this one.
+    const looksLikeScan = !searchNavigated && /^\d{3,}$/.test(raw);
+    if (looksLikeScan) setSearchQuery('');
+
     if (!searchNavigated) {
       const match = await window.api.sales.getVariantByBarcode({ barcode: raw });
       if (match) {
@@ -761,10 +769,12 @@ export default function Sale() {
             .reduce((sum, l) => sum + ((Number(l.quantity) || 0) + (Number(l.focQuantity) || 0)) * l.conversionFactor, 0);
           setSearchQuery('');
           setSearchResults([]);
-          if (inCartBase + unit.conversionFactor > detail.variant.stockQty) {
+          const pending = scanPendingRef.current[detail.variant.id] || 0;
+          if (inCartBase + pending + unit.conversionFactor > detail.variant.stockQty) {
             toast.error(`Only ${formatCount(detail.variant.stockQty / unit.conversionFactor)} in stock for ${detail.product.name}.`);
             return;
           }
+          scanPendingRef.current[detail.variant.id] = pending + unit.conversionFactor;
           addOrMergeCartLine({
             variantId: detail.variant.id,
             variantName: detail.variant.variantName,
@@ -783,6 +793,8 @@ export default function Sale() {
           return;
         }
       }
+      // Not a known barcode: put the typed text back so the normal search results show.
+      if (looksLikeScan) setSearchQuery((cur) => cur || raw);
     }
 
     if (searchResults[searchHighlight]) {
