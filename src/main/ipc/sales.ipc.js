@@ -259,6 +259,22 @@ function saveSale(payload, editSaleId) {
   const taxAmount = 0;
   const totalAmount = Math.max(0, subtotal - discount + taxAmount);
   const paid = Number(paidAmount) || 0;
+
+  // Server-side checks: the screen already blocks these, but the main process must not trust it.
+  for (const item of items) {
+    const qty = Number(item.quantity), foc = Number(item.focQuantity) || 0, price = Number(item.unitPrice), line = Number(item.lineTotal);
+    if (!Number.isFinite(qty) || qty <= 0 || qty > 1e6) return { success: false, reason: 'Every item needs a quantity above zero.' };
+    if (!Number.isFinite(foc) || foc < 0) return { success: false, reason: 'Free quantity cannot be negative.' };
+    if (!Number.isFinite(price) || price < 0 || !Number.isFinite(line) || line < 0) return { success: false, reason: 'An item has an invalid price.' };
+    if (Math.abs(line - qty * price) > 0.02) return { success: false, reason: 'An item total does not match its quantity and price.' };
+  }
+  if (!Number.isFinite(Number(discountAmount || 0)) || discount < 0) return { success: false, reason: 'Discount cannot be negative.' };
+  if (discount > subtotal + 0.005) return { success: false, reason: 'Discount cannot be more than the bill total.' };
+  if (!Number.isFinite(Number(paidAmount || 0)) || paid < 0) return { success: false, reason: 'Amount paid cannot be negative.' };
+  const discountCap = getCashierDiscountCap(cashierId); // null = Admin, no cap
+  if (discountCap !== null && subtotal > 0 && discount > (subtotal * discountCap) / 100 + 0.01) {
+    return { success: false, reason: `Discount is more than your limit of ${discountCap}%.` };
+  }
   const balanceDue = Math.max(0, totalAmount - paid);
 
   if (balanceDue > 0 && !customerId) {
