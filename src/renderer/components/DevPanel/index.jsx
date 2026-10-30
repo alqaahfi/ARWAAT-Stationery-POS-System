@@ -5,6 +5,7 @@ import DatabaseBrowserTab from './DatabaseBrowserTab';
 import UsersSessionsTab from './UsersSessionsTab';
 import SystemInfoTab from './SystemInfoTab';
 import AccessLogTab from './AccessLogTab';
+import PasswordTab from './PasswordTab';
 
 const TABS = [
   { key: 'audit', label: 'Audit Log', Component: AuditLogTab },
@@ -12,11 +13,12 @@ const TABS = [
   { key: 'users', label: 'Users & Sessions', Component: UsersSessionsTab },
   { key: 'system', label: 'System Info', Component: SystemInfoTab },
   { key: 'access', label: 'Access Log', Component: AccessLogTab },
+  { key: 'password', label: 'Password', Component: PasswordTab },
 ];
 
 // Full-screen diagnostic overlay — a layer over whatever screen was active,
 // not a route in the normal router (see DevPanelTrigger.jsx). Read-only:
-// nothing under here calls a write IPC channel.
+// the only write is changing this panel's own password (Password tab).
 export default function DevPanel({ onClose }) {
   const [activeTab, setActiveTab] = useState('audit');
 

@@ -251,6 +251,24 @@ function verifyPassword(password, stationCode) {
   return ok ? { success: true } : { success: false, reason: 'Incorrect password.' };
 }
 
+const MIN_PASSWORD_LENGTH = 8;
+
+// Changing the password needs the panel to be unlocked (the IPC guard) AND the current
+// password again. Only the new bcrypt hash is stored.
+function changePassword({ currentPassword, newPassword } = {}, stationCode) {
+  const db = getDb();
+  const config = db.prepare('SELECT password_hash FROM dev_panel_config WHERE id = 1').get();
+  if (!config || !currentPassword || !bcrypt.compareSync(String(currentPassword), config.password_hash)) {
+    db.prepare('INSERT INTO dev_panel_access_log (station_code, success) VALUES (?, 0)').run(stationCode || null);
+    return { success: false, reason: 'The current password is not correct.' };
+  }
+  const next = String(newPassword || '');
+  if (next.length < MIN_PASSWORD_LENGTH) return { success: false, reason: `The new password must be at least ${MIN_PASSWORD_LENGTH} characters.` };
+  if (next === String(currentPassword)) return { success: false, reason: 'The new password is the same as the current one.' };
+  db.prepare('UPDATE dev_panel_config SET password_hash = ? WHERE id = 1').run(bcrypt.hashSync(next, 10));
+  return { success: true };
+}
+
 function getStationCode() {
   const row = getDb().prepare('SELECT station_code FROM station_config WHERE id = 1').get();
   return row?.station_code || null;
@@ -264,6 +282,7 @@ function registerDevPanelIpc(ipc = ipcMain) {
     if (result.success) markDevUnlocked(event.sender.id);
     return result;
   });
+  ipc.handle('devpanel:change-password', (event, payload) => changePassword(payload || {}, getStationCode()));
   ipc.handle('devpanel:get-audit-log', (event, payload) => getAuditLog(payload || {}));
   ipc.handle('devpanel:list-tables', () => listTables());
   ipc.handle('devpanel:get-table-rows', (event, payload) => getTableRows(payload || {}));

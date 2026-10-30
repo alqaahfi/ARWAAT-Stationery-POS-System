@@ -112,6 +112,7 @@ for (const [file, fn] of [
   ['ipc/approvals.ipc', 'registerApprovalsIpc'],
   ['ipc/sync.ipc', 'registerSyncIpc'],
   ['ipc/updates.ipc', 'registerUpdatesIpc'],
+  ['ipc/devpanel.ipc', 'registerDevPanelIpc'],
 ]) {
   try {
     const mod = m(file);

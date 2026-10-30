@@ -285,6 +285,7 @@ contextBridge.exposeInMainWorld('api', {
 
   devpanel: {
     verifyPassword: (data) => invoke('devpanel:verify-password', data),
+    changePassword: (data) => invoke('devpanel:change-password', data),
     getAuditLog: (data) => invoke('devpanel:get-audit-log', data),
     listTables: () => invoke('devpanel:list-tables'),
     getTableRows: (data) => invoke('devpanel:get-table-rows', data),
