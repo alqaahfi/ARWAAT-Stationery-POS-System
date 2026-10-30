@@ -352,6 +352,18 @@ RULE 13 - Cashier bill edits/voids: own bills, 10 minutes, then Admin approval
   Stage 3 e2e: cashier F2 -> bill saved 11+ minutes ago -> Delete -> approval box; Edit -> save -> approval box;
            a fresh bill edits/voids without the box.
 
+RULE 14 - Reprints print "DUPLICATE COPY" + reprint date/time
+  Migration 039_sale_prints.sql: sale_prints (sale, copy original|duplicate, print type, printed_by, printed_at;
+           insert-only sync; factory reset clears it). syncSchema entry.
+  Server: printing:print-sale records a row only when the print succeeded (printer off / not set = not counted).
+           receiptData.buildReceiptData: duplicate = a print was already recorded -> stampLines
+           ["DUPLICATE COPY", "Reprinted dd-mm-yyyy hh:mm"] (local time), after "*** VOIDED ***" for voided bills.
+           The same stampLines print on thermal ESC/POS, the thermal preview/on-screen copy (ThermalContent), the A4
+           letterhead PDF (pdfInvoiceMerge) and the A4 fallback (PrintInvoice) - so preview = what prints.
+  Checks: R14-01..R14-06 (PASS).
+  Stage 3 e2e: save a sale -> preview shows no stamp -> Print -> reprint from Sales History -> preview shows
+           DUPLICATE COPY + time (thermal and A4). Printer missing -> sale saved, message, next print is still original.
+
 STAGE 1 DECISIONS
   D1 (rule 1) Editing a saved bill: a cashier may keep the bill's OWN stored price for a pack size (same
      customer only); any other price must match the price engine. Changing the customer re-prices.
@@ -378,3 +390,5 @@ STAGE 1 DECISIONS
      A cashier can never change another cashier's bill, even with approval (own bills only).
   D10 (rule 13) The 10 minutes count from the bill's created_at (first save); editing does not restart the window.
      A computer clock set earlier than the bill counts as inside the window (the wrong-clock banner, rule 15, warns).
+  D11 (rule 14) "Original" = the first SUCCESSFUL print; a preview never counts. Payment receipts and purchase
+     receipts are not stamped (the rule is about bills).

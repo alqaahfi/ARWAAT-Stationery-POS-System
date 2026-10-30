@@ -3,6 +3,8 @@ const fs = require('fs');
 const thermalReceipt = require('../printing/thermalReceipt');
 const { printInvoice, printPaymentReceipt: printPaymentReceiptA4, printPurchaseReceipt } = require('../printing/printA4Invoice');
 const { previewSale, previewPurchase } = require('../printing/previewDocument');
+const { recordSalePrint } = require('../printing/receiptData');
+const { getCaller } = require('../security/ipcGuard');
 
 // Retail sales print silently to the thermal receipt printer; wholesale
 // sales open the normal OS print dialog against an A4 invoice, so whoever's
@@ -11,13 +13,19 @@ const { previewSale, previewPurchase } = require('../printing/previewDocument');
 // This is only reached from the Print button of the renderer's print preview
 // (PrintPreviewModal) — a sale is never sent to hardware automatically. The
 // preview itself comes from `printing:preview-sale` below.
-async function printSale(saleId, printType, showDues) {
+async function printSale(saleId, printType, showDues, userId) {
   if (!saleId) return { success: false, reason: 'Missing sale id.' };
 
-  if (printType === 'wholesale-a4') {
-    return printInvoice({ saleId, showDues });
+  const res = printType === 'wholesale-a4' ? await printInvoice({ saleId, showDues }) : await thermalReceipt.print(saleId, { showDues });
+  // Rule 14: a successful print is remembered, so every later print says DUPLICATE COPY.
+  if (res && res.success) {
+    try {
+      res.copy = recordSalePrint(saleId, { printType, userId });
+    } catch {
+      // Printing already happened; failing to note it must not turn into a print error.
+    }
   }
-  return thermalReceipt.print(saleId, { showDues });
+  return res;
 }
 
 // The preview's Save button — writes the already-rendered preview PDF
@@ -51,7 +59,7 @@ async function printPaymentReceipt(paymentId, format) {
 }
 
 function registerPrintingIpc() {
-  ipcMain.handle('printing:print-sale', (event, { saleId, printType, showDues } = {}) => printSale(saleId, printType, showDues));
+  ipcMain.handle('printing:print-sale', (event, { saleId, printType, showDues } = {}) => printSale(saleId, printType, showDues, getCaller(event)?.userId));
   ipcMain.handle('printing:print-payment-receipt', (event, { paymentId, format } = {}) => printPaymentReceipt(paymentId, format));
   ipcMain.handle('printing:preview-sale', (event, { saleId, printType, showDues } = {}) => previewSale({ saleId, printType, showDues }));
   ipcMain.handle('printing:preview-purchase', (event, { purchaseId } = {}) => previewPurchase({ purchaseId }));

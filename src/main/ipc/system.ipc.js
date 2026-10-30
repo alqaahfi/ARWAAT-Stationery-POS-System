@@ -16,6 +16,7 @@ const { getDb } = require('../db/connection');
 const TABLES_TO_CLEAR = [
   'approvals',
   'stock_recount',
+  'sale_prints',
   'sale_return_items',
   'sale_returns',
   'sales',

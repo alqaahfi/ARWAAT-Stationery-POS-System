@@ -168,6 +168,11 @@ const SYNC_TABLES = {
       resolved_by: { table: 'users', nullable: true },
     },
   },
+  // Rule 14 (039): each successful sale print; any print after the first is a DUPLICATE COPY.
+  sale_prints: {
+    kind: 'insert_only',
+    fks: { sale_id: { table: 'sales' }, printed_by: { table: 'users', nullable: true } },
+  },
   stock_movements: {
     kind: 'stock_movement',
     fks: { product_variant_id: { table: 'product_variants' }, created_by: { table: 'users', nullable: true } },

@@ -89,10 +89,26 @@ function groupReceiptItems(items) {
 // Big centered lines printed above the bill on every print path (thermal,
 // thermal preview, A4 letterhead PDF, A4 fallback). Rule 5: a voided bill
 // always prints "VOIDED".
-function buildStampLines(sale) {
+// Rule 14: the first print after saving is the original; once a print has been
+// recorded (sale_prints), every later print or preview is a DUPLICATE COPY with
+// the reprint date/time.
+function isReprint(db, saleId) {
+  return !!db.prepare('SELECT 1 FROM sale_prints WHERE sale_id = ? LIMIT 1').get(saleId);
+}
+
+function buildStampLines(sale, { duplicate, reprintAt } = {}) {
   const lines = [];
   if (sale.is_voided) lines.push('*** VOIDED ***', `This bill was voided${sale.voided_at_local ? ` on ${sale.voided_at_local}` : ''}. It is not a valid bill.`);
+  if (duplicate) lines.push('DUPLICATE COPY', `Reprinted ${reprintAt}`);
   return lines;
+}
+
+// Records one successful print of a sale (rule 14).
+function recordSalePrint(saleId, { printType, userId } = {}) {
+  const db = getDb();
+  const copy = isReprint(db, saleId) ? 'duplicate' : 'original';
+  db.prepare('INSERT INTO sale_prints (sale_id, copy, print_type, printed_by) VALUES (?, ?, ?, ?)').run(saleId, copy, printType || null, userId || null);
+  return copy;
 }
 
 function buildReceiptData(saleId, { showDues } = {}) {
@@ -103,8 +119,19 @@ function buildReceiptData(saleId, { showDues } = {}) {
   // A voided bill no longer counts, so its "outstanding balance" is never printed.
   const applyDues = !!showDues && !!sale.customer_id && !sale.is_voided;
   const outstandingBalance = applyDues ? getCustomerBalance(getDb(), sale.customer_id) : null;
+  const duplicate = isReprint(getDb(), sale.id);
+  const reprintAt = duplicate ? getDb().prepare("SELECT strftime('%d-%m-%Y %H:%M', 'now', 'localtime') AS t").get().t : null;
 
-  return { sale, items, groups: groupReceiptItems(items), showDues: applyDues, outstandingBalance, stampLines: buildStampLines(sale) };
+  return {
+    sale,
+    items,
+    groups: groupReceiptItems(items),
+    showDues: applyDues,
+    outstandingBalance,
+    duplicate,
+    reprintAt,
+    stampLines: buildStampLines(sale, { duplicate, reprintAt }),
+  };
 }
 
-module.exports = { getSaleDetail, buildReceiptData, groupReceiptItems };
+module.exports = { getSaleDetail, buildReceiptData, groupReceiptItems, recordSalePrint, isReprint };
