@@ -365,6 +365,15 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
       // Falls back to the limit already loaded.
     }
 
+    // Rule 2: going over a customer's credit limit is a warning only — they can save anyway.
+    if (party && totals.balanceDue > 0) {
+      const credit = await window.api.customers.creditCheck({ customerId: party.id, addAmount: totals.balanceDue }).catch(() => null);
+      if (credit?.overLimit) {
+        const ok = await confirm({ title: 'Over the credit limit', message: credit.message, confirmLabel: 'Save anyway', cancelLabel: 'Go back' });
+        if (!ok) return;
+      }
+    }
+
     const letterheads = await window.api.letterheads.list().catch(() => []);
     const payload = {
       saleType: party ? party.customer_type : 'retail',

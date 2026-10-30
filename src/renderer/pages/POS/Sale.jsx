@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import glossary from '../../config/glossary';
 import theme from '../../config/theme';
 import { formatCount } from '../../utils/format';
-import { Card, EmptyState, useToast } from '../../components/ui';
+import { Card, EmptyState, useConfirm, useToast } from '../../components/ui';
 import StepStrip from './parts/StepStrip';
 import IdlePanel from './parts/IdlePanel';
 import CustomerPanel from './parts/CustomerPanel';
@@ -137,6 +137,17 @@ export default function Sale() {
   const isAdmin = user.role === 'admin';
   const canSell = hasPermission('make_sale');
   const toast = useToast();
+  const confirm = useConfirm();
+  // True while a confirm dialog is up: the dialog owns Enter/Esc, the sale's key handler stays out.
+  const dialogOpenRef = useRef(false);
+  async function askConfirm(opts) {
+    dialogOpenRef.current = true;
+    try {
+      return await confirm(opts);
+    } finally {
+      dialogOpenRef.current = false;
+    }
+  }
 
   // ---------------- stage machine ----------------
   const [stage, setStage] = useState('idle');
@@ -972,6 +983,15 @@ export default function Sale() {
       return;
     }
 
+    // Rule 2: going over a customer's credit limit is a warning only — they can save anyway.
+    if (customer && balanceDue > 0) {
+      const credit = await window.api.customers.creditCheck({ customerId: customer.id, addAmount: balanceDue, excludeSaleId: editingSale?.id || null });
+      if (credit?.overLimit) {
+        const ok = await askConfirm({ title: 'Over the credit limit', message: credit.message, confirmLabel: 'Save anyway', cancelLabel: 'Go back' });
+        if (!ok) return;
+      }
+    }
+
     setCompleting(true);
     const payload = {
       saleType,
@@ -1097,8 +1117,8 @@ export default function Sale() {
   // ---------------- central keyboard handler ----------------
 
   function handleKeyDown(e) {
-    // The print preview window owns the keyboard while it is open.
-    if (showPrintPreview) return;
+    // The print preview window owns the keyboard while it is open, and so does a confirm dialog.
+    if (showPrintPreview || dialogOpenRef.current) return;
 
     // The Today's bills and Held bills panels run their own keys while open.
     if (showRecent || showRecall || showReturn) return;

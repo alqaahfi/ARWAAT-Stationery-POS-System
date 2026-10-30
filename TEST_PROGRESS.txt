@@ -171,6 +171,17 @@ RULE 1 - Server checks every sale price
   Stage 3 e2e: Admin changes a price while a cashier bill is open -> cashier presses Pay -> message
            "The price of X is now ..." + cart shows the new price; second Pay saves at the new price.
 
+RULE 2 - Credit limit = warning only
+  Changed: src/main/ledger/creditLimit.js (creditLimitCheck: balance before/after, limit, message with numbers,
+           excludes the bill being edited), IPC customers:credit-check (signed-in), preload customers.creditCheck.
+           Sale.jsx + QuickBillForm.jsx ask it before saving a credit sale and show "Over the credit limit"
+           confirm ("This puts Ahmed at Rs. 12,500, over their credit limit of Rs. 10,000." - Save anyway / Go back).
+           Sale.jsx: new askConfirm() keeps the POS key handler out while a dialog is open.
+           Customer form hint updated (0 = no limit, warning only). The server never blocks on the limit.
+  Checks: R02-01..R02-04 (PASS).
+  Stage 3 e2e: credit sale for a customer with a limit -> warning dialog with numbers -> Enter saves; Esc/Go back
+           returns to payment without saving.
+
 STAGE 1 DECISIONS
   D1 (rule 1) Editing a saved bill: a cashier may keep the bill's OWN stored price for a pack size (same
      customer only); any other price must match the price engine. Changing the customer re-prices.

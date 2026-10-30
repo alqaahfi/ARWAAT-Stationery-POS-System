@@ -83,7 +83,7 @@ export function PricingRows({ tier, onTier, customerType, letterheads, letterhea
 export function CreditRows({ creditLimit, onCreditLimit, joiningDate, onJoiningDate }) {
   return (
     <>
-      <FormRow label="Credit limit" hint="0 means no limit. Saved for reference only.">
+      <FormRow label="Credit limit" hint="0 means no limit. A credit sale that goes over it shows a warning (it is never blocked).">
         <NumberInput value={creditLimit} onChange={(e) => onCreditLimit(e.target.value)} />
       </FormRow>
       <FormRow label="Joined">

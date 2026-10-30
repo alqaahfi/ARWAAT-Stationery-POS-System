@@ -4,6 +4,7 @@ const { getNextId } = require('../db/nextId');
 const { getCustomerBalance, getBalancesForCustomers } = require('../ledger/balanceEngine');
 const { getAdjustmentRows } = require('../ledger/adjustmentRows');
 const { getReturnRows } = require('../ledger/returnRows');
+const { creditLimitCheck } = require('../ledger/creditLimit');
 
 // Fixed 5-tier structure — not admin-configurable. Validated here rather than
 // with a DB-level CHECK, consistent with how SKU/username uniqueness is
@@ -245,6 +246,8 @@ function registerCustomersIpc() {
   ipcMain.handle('customers:search-minimal', (event, payload) => searchMinimal(payload || {}));
   ipcMain.handle('customers:get-next-id', () => ({ success: true, id: getNextId(getDb(), 'customers') }));
   ipcMain.handle('customers:get-ledger', (event, { id } = {}) => getLedger(id));
+  // Rule 2: credit limit is a warning only (asked by the sale screens before saving; never blocks).
+  ipcMain.handle('customers:credit-check', (event, payload) => creditLimitCheck(getDb(), payload || {}));
 
 }
 

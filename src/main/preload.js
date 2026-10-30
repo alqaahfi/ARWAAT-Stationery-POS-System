@@ -128,6 +128,7 @@ contextBridge.exposeInMainWorld('api', {
     searchMinimal: (data) => invoke('customers:search-minimal', data),
     getLedger: (data) => invoke('customers:get-ledger', data),
     getNextId: () => invoke('customers:get-next-id'),
+    creditCheck: (data) => invoke('customers:credit-check', data),
   },
 
   ledgers: {
