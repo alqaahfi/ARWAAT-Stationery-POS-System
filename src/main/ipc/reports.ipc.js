@@ -23,6 +23,16 @@ function dateRangeParams(filters) {
   return { from, to };
 }
 
+function localOffsetMod() {
+  const mins = -new Date().getTimezoneOffset();
+  return `${mins >= 0 ? '+' : ''}${mins} minutes`;
+}
+
+function inverseLocalOffsetMod() {
+  const mins = new Date().getTimezoneOffset();
+  return `${mins >= 0 ? '+' : ''}${mins} minutes`;
+}
+
 // ---------------- 1. Sales Report ----------------
 // Money rules shared by every date-ranged report here: sales/returns are
 // stored in UTC (datetime('now')) but filtered and grouped by the shop's
@@ -31,6 +41,16 @@ function dateRangeParams(filters) {
 function getSalesReport(filters, requestingUserId) {
   const db = getDb();
   const { from, to } = dateRangeParams(filters);
+  const tzMod = localOffsetMod();
+  const invTzMod = inverseLocalOffsetMod();
+  db.exec('CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales(created_at)');
+
+  const startUtc = filters?.dateFrom
+    ? db.prepare('SELECT datetime(date(?), ?) AS v').get(from, invTzMod)?.v || '0000-01-01 00:00:00'
+    : '0000-01-01 00:00:00';
+  const endUtc = filters?.dateTo
+    ? db.prepare("SELECT datetime(date(?, '+1 day'), ?) AS v").get(to, invTzMod)?.v || '9999-12-31 23:59:59'
+    : '9999-12-31 23:59:59';
 
   // Cashier access is locked server-side — a non-admin caller can never see
   // another cashier's sales, no matter what cashierId a crafted call passes.
@@ -59,26 +79,26 @@ function getSalesReport(filters, requestingUserId) {
 
   const rows = db
     .prepare(
-      `SELECT s.id, s.invoice_no, s.created_at, date(s.created_at, 'localtime') AS sale_day, s.sale_type, s.total_amount,
+      `SELECT s.id, s.invoice_no, s.created_at, date(s.created_at, ?) AS sale_day, s.sale_type, s.total_amount,
               s.discount_amount, s.payment_status, s.cashier_id, u.full_name AS cashier_name,
               s.customer_id, c.name AS customer_name
        FROM sales s
        JOIN users u ON u.id = s.cashier_id
        LEFT JOIN customers c ON c.id = s.customer_id
-       WHERE date(s.created_at, 'localtime') BETWEEN date(?) AND date(?) AND s.is_voided = 0${saleFilterSql}
+       WHERE s.created_at >= ? AND s.created_at < ? AND s.is_voided = 0${saleFilterSql}
        ORDER BY s.created_at`
     )
-    .all(from, to, ...saleFilterParams);
+    .all(tzMod, startUtc, endUtc, ...saleFilterParams);
 
   const returnsByDay = db
     .prepare(
-      `SELECT date(r.created_at, 'localtime') AS day, COUNT(*) AS count, COALESCE(SUM(r.total_amount), 0) AS total
+      `SELECT date(r.created_at, ?) AS day, COUNT(*) AS count, COALESCE(SUM(r.total_amount), 0) AS total
        FROM sale_returns r
        LEFT JOIN sales s ON s.id = r.sale_id
-       WHERE date(r.created_at, 'localtime') BETWEEN date(?) AND date(?)${saleFilterSql}
+       WHERE date(r.created_at, ?) BETWEEN date(?) AND date(?)${saleFilterSql}
        GROUP BY day`
     )
-    .all(from, to, ...saleFilterParams);
+    .all(tzMod, tzMod, from, to, ...saleFilterParams);
 
   const grossRevenue = rows.reduce((sum, r) => sum + r.total_amount, 0);
   const returnsTotal = returnsByDay.reduce((sum, r) => sum + r.total, 0);
