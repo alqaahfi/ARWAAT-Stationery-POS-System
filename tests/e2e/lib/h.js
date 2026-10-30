@@ -84,6 +84,7 @@ async function ensureVite() {
 function devEnv() { const e = { ...process.env, NODE_ENV: 'development', ARWAAT_TEST_MODE: '1' }; delete e.ELECTRON_RUN_AS_NODE; return e; }
 function launchExe(mode) {
   const args = [`--mode=${mode}`, `--remote-debugging-port=${PORT}`];
+  if (process.env.ARWAAT_INSPECT) args.unshift(`--inspect=${process.env.ARWAAT_INSPECT}`);
   const child = DEV
     ? spawn(ELECTRON, ['.', ...args], { cwd: ROOT, detached: true, stdio: 'ignore', env: devEnv() })
     : spawn(EXE, args, { detached: true, stdio: 'ignore' });

@@ -11,3 +11,4 @@ scripts/private_key.pem
 test-backups/
 test-results/
 tests/e2e/.tmp/
+test-backups/antigravity-load-db/

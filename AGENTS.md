@@ -24,7 +24,7 @@ Read this file first, then SYSTEM_STATUS.md (code wins when they disagree), then
 |---|---|---|---|
 | 1 | 17 business rules + anomaly handling (server first, then UI), one commit per rule | DONE (R1-R17 + anomalies R18, 128/128 rules checks pass) | - |
 | 2 | Reliable harness (ARWAAT_TEST_MODE, state-based waits, TEST_SPEED=fast, CLEAN-MASTER rebuild) | DONE (ARWAAT_TEST_MODE=1 dialog bypass, state-based waits, CLEAN-MASTER rebuilt) | - |
-| 3 | Run everything A-Q + per-rule + anomaly checks, bombard, crash, concurrency, load, dates, security | IN PROGRESS | Run full E2E suite + Stage 1 UI flows + bombard/load/date checks |
+| 3 | Run everything A-Q + per-rule + anomaly checks, bombard, crash, concurrency, load, dates, security | IN PROGRESS (NOT complete, see FINAL-TEST.md) | Fix the Admin freeze on the load DB (FINAL-TEST.md 3.1), then re-run the e2e chain |
 | 4 | Screenshot every page/form/print at 1366x768, 1920x1080, 683x768; fix UI bugs | NOT STARTED | - |
 
 Model note: Recommended: run Stage 1 with the strongest available model (money/stock/balance logic), Stages 2-4 with a faster one. If a bug survives 3 honest attempts in Stages 2-4, hand just that bug to the strongest model.
@@ -66,3 +66,6 @@ Anomalies to handle + test (Stage 3): see the brief list (draft recovery after c
 - NEXT: run `npm run test:rules` and fix r17; finish Returns step 1 search UI (by item/barcode, customer, date) and wire NoBillReturnDialog (Admin only, cash, refund = lowest price in last 30 days else current retail, no sale link, keep out of per-sale returnable logic); check migration 040 numbering is clean (036-039 used by earlier rules); commit.
 - THEN: remaining anomaly handling (qty > 100 or line > Rs 100,000 confirm; double Enter/click on Pay = one sale; scanner trim/lowercase/barcode-equals-name; price changed while bill open; product/customer deactivated mid-sale; sign-out with open cart holds it; printer off = sale saved + message; two cashiers selling last unit) - see BRIEF.md section 2 and TEST_PROGRESS.txt; none of these were done yet except what the rule commits already cover.
 - THEN Stages 2, 3, 4 (NOT STARTED). Stage 2 first step: ARWAAT_TEST_MODE=1 bypass for file dialogs in backup/restore/export/letterhead pickers.
+
+## LATEST (see FINAL-TEST.md)
+- FINAL-TEST.md in the project root is the honest end-of-session report: 128/128 rules checks pass; e2e Stage 3 incomplete; Stage 4 not started; possible app freeze on the 50k-sale DB (kept at test-backups/antigravity-load-db/).
