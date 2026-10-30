@@ -116,6 +116,13 @@ export default function PrintPreviewModal({ saleId, purchaseId, printType, showD
         </>
       }
     >
+      {doc?.stampLines?.length > 0 && (
+        <div style={{ marginBottom: theme.spacing.sm }}>
+          <Banner tone={doc.stampLines.some((s) => s.includes('VOIDED')) ? 'danger' : 'warning'}>
+            {doc.stampLines.join(' · ')}
+          </Banner>
+        </div>
+      )}
       <div style={{ ...styles.stage, height: isThermal ? '520px' : '620px' }}>
         {state.loading && (
           <div style={styles.note}>

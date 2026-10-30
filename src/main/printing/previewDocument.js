@@ -1,5 +1,6 @@
 const { getDb } = require('../db/connection');
 const { buildInvoicePdf, buildPurchasePdf } = require('./printA4Invoice');
+const { buildReceiptData } = require('./receiptData');
 const { createHiddenRendererWindow, loadRenderer } = require('../windows');
 
 const MM_TO_PX = 96 / 25.4;
@@ -51,18 +52,20 @@ async function previewSale({ saleId, printType, showDues }) {
   const dues = showDues ? '1' : '0';
 
   try {
+    const rData = buildReceiptData(saleId, { showDues });
+    const stampLines = rData ? rData.stampLines : [];
     if (printType === 'wholesale-a4') {
       const built = await buildInvoicePdf({ saleId, showDues });
       if (!built.success) return built;
       const bytes = built.fallback
         ? await renderViewToPdf(`?print=1&printMode=invoice-fallback&saleId=${encodeURIComponent(saleId)}&showDues=${dues}`, null)
         : built.pdfBytes;
-      return { success: true, format: 'a4', pdfBase64: Buffer.from(bytes).toString('base64'), invoiceNo: built.sale.invoice_no };
+      return { success: true, format: 'a4', pdfBase64: Buffer.from(bytes).toString('base64'), invoiceNo: built.sale.invoice_no, stampLines };
     }
 
     const widthMm = thermalWidthMm();
     const bytes = await renderViewToPdf(`?print=1&printMode=receipt&saleId=${encodeURIComponent(saleId)}&showDues=${dues}`, widthMm);
-    return { success: true, format: 'thermal', widthMm, pdfBase64: Buffer.from(bytes).toString('base64') };
+    return { success: true, format: 'thermal', widthMm, pdfBase64: Buffer.from(bytes).toString('base64'), stampLines };
   } catch (err) {
     return { success: false, reason: err.message || 'Could not build the print preview.' };
   }
