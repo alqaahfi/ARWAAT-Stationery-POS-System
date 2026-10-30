@@ -752,7 +752,20 @@ export default function Sale() {
           const unit = detail.units.find((u) => u.id === detail.defaultUnitId);
           const priceRes = await window.api.sales.resolvePrice({ productUnitId: detail.defaultUnitId, customerId: customer?.id || null });
           setMultiTypes(null); // a scanned barcode is one specific Type
-          setPendingItem({
+          // A scanner types the code and presses Enter, then the next code follows at once.
+          // So a scan adds ONE unit straight to the cart and leaves the focus in the search
+          // box; sending it to the quantity box would swallow the next scan as a quantity.
+          // (Quantity can still be changed afterwards in the cart.)
+          const inCartBase = cartLines
+            .filter((l) => l.variantId === detail.variant.id)
+            .reduce((sum, l) => sum + ((Number(l.quantity) || 0) + (Number(l.focQuantity) || 0)) * l.conversionFactor, 0);
+          setSearchQuery('');
+          setSearchResults([]);
+          if (inCartBase + unit.conversionFactor > detail.variant.stockQty) {
+            toast.error(`Only ${formatCount(detail.variant.stockQty / unit.conversionFactor)} in stock for ${detail.product.name}.`);
+            return;
+          }
+          addOrMergeCartLine({
             variantId: detail.variant.id,
             variantName: detail.variant.variantName,
             productId: detail.product.id,
@@ -764,12 +777,9 @@ export default function Sale() {
             conversionFactor: unit.conversionFactor,
             unitPrice: priceRes.price,
             costPrice: unit.costPrice,
+            quantity: 1,
+            focQuantity: 0,
           });
-          setQtyValue('1');
-          setFocValue('');
-          setSearchQuery('');
-          setSearchResults([]);
-          setStage('qty');
           return;
         }
       }
