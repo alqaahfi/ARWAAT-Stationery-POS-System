@@ -299,4 +299,5 @@ function stop() {
   clearInterval(intervalTimer);
 }
 
-module.exports = { start, stop, getState, checkForUpdates, downloadUpdate, installNow, isInstalling, consumeUpdatedNotice, noteUpdated, plainText, describeError };
+// _state is exposed for the rules checks only.
+module.exports = { _state: state, start, stop, getState, checkForUpdates, downloadUpdate, installNow, isInstalling, consumeUpdatedNotice, noteUpdated, plainText, describeError };

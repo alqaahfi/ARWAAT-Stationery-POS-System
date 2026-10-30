@@ -5,6 +5,7 @@ import { wholeNumber } from '../../../../utils/quantity';
 import { Banner, Button, Field, Modal, Select, TextInput } from '../../../../components/ui';
 import BillItemSearch from '../../../../components/billing/BillItemSearch';
 import { REASON_OPTIONS } from './returnUtils';
+import useEntryBusy from '../../../../utils/useEntryBusy';
 
 const c = theme.colors;
 
@@ -12,6 +13,7 @@ const c = theme.colors;
 // the refund is that item's lowest selling price in the last 30 days (or today's
 // retail price if it hasn't sold), paid in cash, and the stock goes back.
 export default function NoBillReturnDialog({ onClose, onDone }) {
+  useEntryBusy(true, 'no-bill-return');
   const [detail, setDetail] = useState(null);
   const [unitId, setUnitId] = useState('');
   const [qty, setQty] = useState('1');

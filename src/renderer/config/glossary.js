@@ -103,6 +103,7 @@ const glossary = {
   letterheads: 'Letterheads',
   printers: 'Printers',
   backupRestore: 'Backup & Restore',
+  updates: 'Updates',
   resetPassword: 'Reset Password',
   stillSignedIn: 'Still signed in',
   receiptPrinter: 'Receipt printer',

@@ -107,6 +107,7 @@ function StatusDot({ online }) {
 
 function PeerRow({ peer, syncing, disabled, onSync, separator }) {
   const subtitle = [
+    peer.versionPaused ? 'Sync paused' : null,
     peer.online ? 'Connected' : 'Not seen recently',
     peer.lastSyncSuccessAt ? `Last synced ${formatDateTime(peer.lastSyncSuccessAt)}` : 'Never synced',
     peer.ip,
@@ -125,7 +126,12 @@ function PeerRow({ peer, syncing, disabled, onSync, separator }) {
           </Badge>
         </span>
       }
-      subtitle={<span style={{ paddingLeft: '18px', display: 'block' }}>{subtitle}</span>}
+      subtitle={
+        <span style={{ paddingLeft: '18px', display: 'block' }}>
+          {subtitle}
+          {peer.versionPaused && <span style={{ display: 'block', color: c.orangeText, marginTop: '2px' }}>{peer.versionPaused}</span>}
+        </span>
+      }
       trailing={
         <Button size="sm" variant="secondary" onClick={onSync} loading={syncing} disabled={disabled}>
           Sync now

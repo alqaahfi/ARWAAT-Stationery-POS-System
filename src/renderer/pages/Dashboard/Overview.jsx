@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import theme from '../../config/theme';
 import appIcons from '../../config/appIcons';
 import glossary from '../../config/glossary';
-import { Button } from '../../components/ui';
+import { Button, useToast } from '../../components/ui';
 import { formatCount, formatCurrencyCompact } from '../../utils/format';
 import { Panel } from './parts/Panel';
 import GreetingHeader from './parts/GreetingHeader';
@@ -33,6 +33,7 @@ function useNarrow() {
 // its own trend per period. `onNavigate` drives every drill-in.
 export default function Overview({ onNavigate }) {
   const narrow = useNarrow();
+  const toast = useToast();
   const [summary, setSummary] = useState(null);
   const [summaryError, setSummaryError] = useState(false);
   const [sessions, setSessions] = useState(null);
@@ -51,6 +52,15 @@ export default function Overview({ onNavigate }) {
   }, []);
 
   useEffect(() => loadSummary(), [loadSummary]);
+
+  // Shown once after an update has been installed.
+  useEffect(() => {
+    window.api.updates
+      .consumeUpdatedNotice()
+      .then((res) => res?.version && toast.success(`Updated to version ${res.version}`))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let alive = true;

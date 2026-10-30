@@ -41,6 +41,11 @@ function noteMismatch(peer, { appVersion, migration } = {}) {
   return isNew;
 }
 
+// Every active pause as { machineId, stationCode, role, message }.
+function listMismatches() {
+  return [...mismatches.entries()].map(([machineId, entry]) => ({ machineId, stationCode: entry.stationCode, role: entry.role, message: messageFor(entry) }));
+}
+
 function clearMismatch(machineId) {
   mismatches.delete(machineId);
 }
@@ -57,4 +62,4 @@ function firstPausedMessage(isRelevant = () => true) {
   return null;
 }
 
-module.exports = { selfInfo, sameLayout, noteMismatch, clearMismatch, getMismatch, firstPausedMessage };
+module.exports = { selfInfo, sameLayout, noteMismatch, clearMismatch, getMismatch, listMismatches, firstPausedMessage };

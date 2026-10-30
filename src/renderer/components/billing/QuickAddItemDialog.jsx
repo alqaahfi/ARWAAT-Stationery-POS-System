@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import theme from '../../config/theme';
 import { formatCurrency } from '../../utils/format';
 import { Banner, Button, Field, Modal, NumberInput, TextInput } from '../ui';
+import useEntryBusy from '../../utils/useEntryBusy';
 
 const c = theme.colors;
 
@@ -16,6 +17,7 @@ export default function QuickAddItemDialog({ initial, onClose, onAdded, onPickEx
   const [similar, setSimilar] = useState([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  useEntryBusy(true, 'quick-add-item'); // open while the dialog is
   const nameRef = useRef(null);
   const priceRef = useRef(null);
 

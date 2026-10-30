@@ -74,6 +74,21 @@ function getPeers() {
       });
     }
   }
+  // A computer that was refused for a version difference before it ever got a row here.
+  for (const m of versionGate.listMismatches()) {
+    if (!merged.has(m.machineId)) {
+      merged.set(m.machineId, {
+        machineId: m.machineId,
+        stationCode: m.stationCode,
+        role: m.role,
+        ip: null,
+        online: false,
+        lastSeenAt: null,
+        lastSyncSuccessAt: null,
+        versionPaused: m.message,
+      });
+    }
+  }
   return Array.from(merged.values());
 }
 

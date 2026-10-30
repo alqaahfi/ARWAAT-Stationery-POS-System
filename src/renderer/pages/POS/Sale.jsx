@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import glossary from '../../config/glossary';
 import theme from '../../config/theme';
 import { formatCount } from '../../utils/format';
+import useEntryBusy from '../../utils/useEntryBusy';
 import { Card, EmptyState, useConfirm, useToast } from '../../components/ui';
 import StepStrip from './parts/StepStrip';
 import IdlePanel from './parts/IdlePanel';
@@ -241,6 +242,8 @@ export default function Sale() {
 
   // ---------------- refs ----------------
   const completingRef = useRef(false);
+  // A started bill (anything but idle / the saved-bill screen) or a save in progress blocks app updates.
+  useEntryBusy((stage !== 'idle' && stage !== 'confirm') || completing, 'pos-sale');
   const logoutHoldRef = useRef(() => {});
   const flushDraftRef = useRef(() => {});
   const customerInputRef = useRef(null);

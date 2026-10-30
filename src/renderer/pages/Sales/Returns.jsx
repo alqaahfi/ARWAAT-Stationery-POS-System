@@ -12,6 +12,7 @@ import { ItemsStep } from './parts/returns/ItemsStep';
 import { RefundStep } from './parts/returns/RefundStep';
 import { ReturnSuccess } from './parts/returns/ReturnSuccess';
 import NoBillReturnDialog from './parts/returns/NoBillReturnDialog';
+import useEntryBusy from '../../utils/useEntryBusy';
 import { cashCap, cleanQty, formatQty, previewTotal, round2 } from './parts/returns/returnUtils';
 
 const c = theme.colors;
@@ -221,6 +222,8 @@ function NewReturnFlow({ startSaleId, onExit, onOpenSale }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [done, setDone] = useState(null);
+  // Picking items / refund for a return is a bill being entered; finding the sale (or a saved return) is not.
+  useEntryBusy(step >= 1 && !done, 'return-flow');
 
   useEffect(() => () => clearTimeout(debounceRef.current), []);
 

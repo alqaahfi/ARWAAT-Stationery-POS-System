@@ -16,12 +16,14 @@ export const ALERT_TYPES = [
   { key: 'review', label: 'Items added at the counter (needs review)', route: '/products/needs-review', ...appIcons.products, tone: 'orange' },
   // Rule 12: sold without enough stock, or stock below zero.
   { key: 'recount', label: 'Stock to recount', route: '/stock/recount', ...appIcons.runningLow, tone: 'red' },
+  // A newer version is ready (Admin window only: the call is refused for a cashier).
+  { key: 'update', label: 'Update available', route: '/settings/updates', ...appIcons.sync, tone: 'blue' },
 ];
 
 // Counts per alert key, refreshed every minute and after each sale.
 // `loaded` turns true after the first successful fetch.
 export default function useAlerts() {
-  const [counts, setCounts] = useState({ low: 0, dead: 0, overdue: 0, review: 0, recount: 0, loaded: false });
+  const [counts, setCounts] = useState({ low: 0, dead: 0, overdue: 0, review: 0, recount: 0, update: 0, updateVersion: '', loaded: false });
   useEffect(() => {
     let alive = true;
     function refresh() {
@@ -31,8 +33,10 @@ export default function useAlerts() {
         window.api.ledgers.getAgingReport(),
         window.api.products.listNeedsReview().catch(() => null),
         window.api.stock.listRecount().catch(() => null),
+        window.api.updates.getState().catch(() => null),
       ])
-        .then(([low, dead, aging, review, recount]) => {
+        .then(([low, dead, aging, review, recount, update]) => {
+          const updateReady = ['available', 'downloading', 'downloaded'].includes(update?.status) && update?.available;
           if (alive) {
             setCounts({
               low: low.length,
@@ -40,6 +44,8 @@ export default function useAlerts() {
               overdue: aging.filter((r) => r.b90plus > 0).length,
               review: review?.rows?.length || 0,
               recount: recount?.count || 0,
+              update: updateReady ? 1 : 0,
+              updateVersion: updateReady ? update.available.version : '',
               loaded: true,
             });
           }

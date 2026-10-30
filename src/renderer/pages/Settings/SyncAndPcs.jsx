@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { useToast } from '../../components/ui';
+import { Banner, useToast } from '../../components/ui';
 import { LoadError, RestrictedNotice } from '../Parties/PartyParts';
 import { PageIntro, SettingsSkeleton, settingsColumn } from './parts/SettingsParts';
 import { ConnectionCodeCard, PeerList, StockWarningsCard, SyncLog, ThisComputerCard } from './parts/SyncParts';
@@ -61,6 +61,7 @@ export default function SyncAndPcs({ onNavigate }) {
   return (
     <div style={settingsColumn}>
       <PageIntro>Other computers connected to this shop, and when they last synced.</PageIntro>
+      <Banner tone="warning" style={{ marginTop: 0 }}>{status.versionPaused}</Banner>
       <ConnectionCodeCard code={secret} />
       <ThisComputerCard status={status} syncingAll={syncingPeer === 'all'} syncDisabled={syncingPeer !== null && syncingPeer !== 'all'} onSyncAll={() => handleSyncNow(null)} />
       <StockWarningsCard

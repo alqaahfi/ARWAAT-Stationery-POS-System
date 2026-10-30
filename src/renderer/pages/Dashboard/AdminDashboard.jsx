@@ -59,6 +59,7 @@ import SyncAndPcs from '../Settings/SyncAndPcs';
 import ReceiptContent from '../Settings/ReceiptContent';
 import PrinterSettings from '../Settings/PrinterSettings';
 import BackupRestore from '../Settings/BackupRestore';
+import Updates from '../Settings/Updates';
 import Preferences from '../Settings/Preferences';
 import theme from '../../config/theme';
 
@@ -282,6 +283,8 @@ export default function AdminDashboard() {
         return <SyncAndPcs onNavigate={navigate} />;
       case '/settings/backup':
         return <BackupRestore />;
+      case '/settings/updates':
+        return <Updates />;
       case '/settings/preferences':
         return <Preferences />;
 

@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import theme from '../../config/theme';
 import { Button, Card, EmptyState, Modal, useConfirm, useToast } from '../ui';
 import { formatCurrency } from '../../utils/format';
+import useEntryBusy from '../../utils/useEntryBusy';
 import SaleCompleteSheet from '../../pages/POS/parts/SaleCompleteSheet';
 import PrintPreviewModal from '../receipt/PrintPreviewModal';
 import { SALE_COMPLETED_EVENT } from '../../pages/POS/Sale';
@@ -55,6 +56,8 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(null);
+  // An open quick bill / purchase (not yet saved) or a save in progress blocks app updates.
+  useEntryBusy(!done || saving, isPurchase ? 'quick-purchase' : 'quick-sale');
   const [showPreview, setShowPreview] = useState(false);
   // A saved purchase opens its A4 receipt preview before the overlay closes.
   const [purchasePreviewId, setPurchasePreviewId] = useState(null);

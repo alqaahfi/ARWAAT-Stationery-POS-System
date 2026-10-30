@@ -23,6 +23,10 @@ const WORDING = {
     title: n === 1 ? '1 item needs a stock recount' : `${n} items need a stock recount`,
     subtitle: 'Sold without enough stock or below zero',
   }),
+  update: (n, counts) => ({
+    title: `Update available — version ${counts.updateVersion}`,
+    subtitle: 'Open Settings → Updates to install it',
+  }),
 };
 
 export default function NeedsAttentionCard({ onNavigate }) {
@@ -47,7 +51,7 @@ export default function NeedsAttentionCard({ onNavigate }) {
     body = (
       <RowList>
         {rows.map((a) => (
-          <NavRow key={a.key} icon={a.icon} color={a.color} {...WORDING[a.key](counts[a.key])} onClick={() => onNavigate(a.route)} />
+          <NavRow key={a.key} icon={a.icon} color={a.color} {...WORDING[a.key](counts[a.key], counts)} onClick={() => onNavigate(a.route)} />
         ))}
       </RowList>
     );

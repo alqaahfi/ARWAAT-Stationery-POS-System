@@ -73,10 +73,14 @@ export function SyncChip({ onNavigate }) {
   const { hovered, handlers } = useInteraction(!clickable);
   if (!status) return null;
 
-  const waiting = status.pendingCount > 0 || status.lastSync?.status === 'failed';
-  const label = waiting ? glossary.waitingToConnect : glossary.upToDate;
+  // Another computer is on a different version: sync is paused with it (changes wait safely).
+  const paused = !!status.versionPaused;
+  const waiting = paused || status.pendingCount > 0 || status.lastSync?.status === 'failed';
+  const label = paused ? 'Paused' : waiting ? glossary.waitingToConnect : glossary.upToDate;
   const station = status.thisPc?.stationCode;
-  const title = `${station ? `${glossary.computerName}: ${station} · ` : ''}${status.pendingCount} change(s) waiting to send`;
+  const title = paused
+    ? status.versionPaused
+    : `${station ? `${glossary.computerName}: ${station} · ` : ''}${status.pendingCount} change(s) waiting to send`;
   const Tag = clickable ? 'button' : 'span';
 
   return (
