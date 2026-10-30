@@ -11,7 +11,7 @@ import { reasonLabel } from './returnUtils';
 
 const c = theme.colors;
 
-export function ReturnsToolbar({ search, onSearch, range, onRange, onNew }) {
+export function ReturnsToolbar({ search, onSearch, range, onRange, onNew, onNoBill }) {
   return (
     <div style={styles.toolbar}>
       <div style={styles.row}>
@@ -22,9 +22,16 @@ export function ReturnsToolbar({ search, onSearch, range, onRange, onNew }) {
           aria-label="Search returns"
           style={{ flex: '1 1 280px', minWidth: '240px', maxWidth: '420px' }}
         />
-        <Button icon={Plus} onClick={onNew} style={{ marginLeft: 'auto' }}>
-          {glossary.newReturn}
-        </Button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm, marginLeft: 'auto' }}>
+          {onNoBill && (
+            <Button variant="tinted" onClick={onNoBill}>
+              Return without the bill
+            </Button>
+          )}
+          <Button icon={Plus} onClick={onNew}>
+            {glossary.newReturn}
+          </Button>
+        </div>
       </div>
       <DateRangePicker value={range} onChange={onRange} />
     </div>
@@ -63,19 +70,22 @@ export function ReturnsTable({ rows, loading, onOpen, onOpenSale }) {
       {
         key: 'sale',
         label: 'Original sale',
-        render: (r) => (
-          <Button
-            variant="plain"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenSale(r.sale_id);
-            }}
-            style={{ padding: '0 4px', marginLeft: '-4px' }}
-          >
-            {r.invoice_no}
-          </Button>
-        ),
+        render: (r) =>
+          r.sale_id && r.invoice_no ? (
+            <Button
+              variant="plain"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenSale(r.sale_id);
+              }}
+              style={{ padding: '0 4px', marginLeft: '-4px' }}
+            >
+              {r.invoice_no}
+            </Button>
+          ) : (
+            <span style={{ color: c.labelSecondary }}>No bill</span>
+          ),
       },
       { key: 'reason', label: 'Reason', render: (r) => reasonLabel(r.reason) },
       { key: 'items', label: 'Items', numeric: true, width: '70px', render: (r) => formatCount(r.item_count) },
@@ -112,7 +122,7 @@ export function ReturnsSummary({ total }) {
   );
 }
 
-export function ReturnsEmpty({ anyReturns, onNew, onClear }) {
+export function ReturnsEmpty({ anyReturns, onNew, onNoBill, onClear }) {
   return (
     <Card padding="0">
       {anyReturns ? (
@@ -132,7 +142,16 @@ export function ReturnsEmpty({ anyReturns, onNew, onClear }) {
           {...appIcons.returns}
           title="No returns yet"
           message="When a customer brings something back, record it here."
-          action={<Button onClick={onNew}>{glossary.newReturn}</Button>}
+          action={
+            <div style={{ display: 'flex', gap: theme.spacing.sm, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <Button onClick={onNew}>{glossary.newReturn}</Button>
+              {onNoBill && (
+                <Button variant="tinted" onClick={onNoBill}>
+                  Return without the bill
+                </Button>
+              )}
+            </div>
+          }
           style={{ padding: '56px 24px' }}
         />
       )}

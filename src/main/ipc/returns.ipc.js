@@ -373,7 +373,16 @@ function searchSalesForReturn(input = {}) {
     .prepare(
       `SELECT s.id, s.invoice_no, s.created_at, s.sale_type, s.customer_id, c.name AS customer_name, s.total_amount,
               s.paid_amount, s.balance_due, s.payment_status, u.full_name AS cashier_name,
-              (SELECT COALESCE(SUM(r.total_amount), 0) FROM sale_returns r WHERE r.sale_id = s.id) AS returned_amount
+              (SELECT COALESCE(SUM(r.total_amount), 0) FROM sale_returns r WHERE r.sale_id = s.id) AS returned_amount,
+              CASE
+                WHEN NOT EXISTS (SELECT 1 FROM sale_returns r WHERE r.sale_id = s.id) THEN 'none'
+                WHEN NOT EXISTS (
+                  SELECT 1 FROM sale_items si
+                  WHERE si.sale_id = s.id
+                    AND si.quantity - COALESCE((SELECT SUM(sri.quantity) FROM sale_return_items sri WHERE sri.sale_item_id = si.id), 0) > 0.0001
+                ) THEN 'full'
+                ELSE 'partial'
+              END AS return_status
        FROM sales s
        LEFT JOIN customers c ON c.id = s.customer_id
        JOIN users u ON u.id = s.cashier_id

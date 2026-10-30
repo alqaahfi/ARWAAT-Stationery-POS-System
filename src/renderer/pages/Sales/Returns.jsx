@@ -11,6 +11,7 @@ import { FindSaleStep } from './parts/returns/FindSaleStep';
 import { ItemsStep } from './parts/returns/ItemsStep';
 import { RefundStep } from './parts/returns/RefundStep';
 import { ReturnSuccess } from './parts/returns/ReturnSuccess';
+import NoBillReturnDialog from './parts/returns/NoBillReturnDialog';
 import { cashCap, cleanQty, formatQty, previewTotal, round2 } from './parts/returns/returnUtils';
 
 const c = theme.colors;
@@ -48,6 +49,7 @@ export default function Returns({ params = {}, onNavigate }) {
 
 function ReturnsListView({ initialReturnId, onNew, onOpenSale }) {
   const { user } = useAuth();
+  const toast = useToast();
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [range, setRange] = useState(defaultRange);
@@ -58,6 +60,7 @@ function ReturnsListView({ initialReturnId, onNew, onOpenSale }) {
   const [anyReturns, setAnyReturns] = useState(true);
   const [openId, setOpenId] = useState(initialReturnId || null);
   const [detail, setDetail] = useState({ loading: true, error: null, data: null });
+  const [noBillOpen, setNoBillOpen] = useState(false);
 
   const requestRef = useRef(0);
   const debounceRef = useRef(null);
@@ -138,7 +141,7 @@ function ReturnsListView({ initialReturnId, onNew, onOpenSale }) {
   if (error) {
     content = <LoadErrorCard message="Couldn't load returns." onRetry={load} />;
   } else if (!loading && result.rows.length === 0) {
-    content = <ReturnsEmpty anyReturns={anyReturns} onNew={onNew} onClear={clearFilters} />;
+    content = <ReturnsEmpty anyReturns={anyReturns} onNew={onNew} onNoBill={() => setNoBillOpen(true)} onClear={clearFilters} />;
   } else {
     content = (
       <>
@@ -158,7 +161,7 @@ function ReturnsListView({ initialReturnId, onNew, onOpenSale }) {
   return (
     <div style={{ paddingBottom: theme.spacing.xxl }}>
       <p style={styles.intro}>Items customers brought back, and what you gave them for them.</p>
-      <ReturnsToolbar search={searchInput} onSearch={onSearch} range={range} onRange={setRange} onNew={onNew} />
+      <ReturnsToolbar search={searchInput} onSearch={onSearch} range={range} onRange={setRange} onNew={onNew} onNoBill={() => setNoBillOpen(true)} />
       {content}
       {openId && (
         <ReturnDetailSheet
@@ -168,6 +171,16 @@ function ReturnsListView({ initialReturnId, onNew, onOpenSale }) {
           onOpenSale={(saleId) => {
             setOpenId(null);
             onOpenSale(saleId);
+          }}
+        />
+      )}
+      {noBillOpen && (
+        <NoBillReturnDialog
+          onClose={() => setNoBillOpen(false)}
+          onDone={(res) => {
+            setNoBillOpen(false);
+            toast.success(`Return ${res.return_no} recorded`);
+            load();
           }}
         />
       )}
@@ -184,14 +197,16 @@ function NewReturnFlow({ startSaleId, onExit, onOpenSale }) {
 
   const [step, setStep] = useState(startSaleId ? 1 : 0);
 
-  // Step 1 — finder
+  // Step 1 — finder (Rule 17: searches by bill number, item name/barcode, customer, date/range)
   const [query, setQuery] = useState('');
+  const [findRange, setFindRange] = useState(null);
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const [picking, setPicking] = useState(!!startSaleId);
   const [findMessage, setFindMessage] = useState(null);
+  const [noBillOpen, setNoBillOpen] = useState(false);
   const searchRef = useRef(0);
   const debounceRef = useRef(null);
 
@@ -210,9 +225,10 @@ function NewReturnFlow({ startSaleId, onExit, onOpenSale }) {
   useEffect(() => () => clearTimeout(debounceRef.current), []);
 
   const runSearch = useCallback(
-    async (text) => {
+    async (text, rangeArg) => {
       const id = ++searchRef.current;
-      if (!text) {
+      const hasRange = !!(rangeArg && (rangeArg.dateFrom || rangeArg.dateTo));
+      if (!text && !hasRange) {
         setResults([]);
         setSearching(false);
         return;
@@ -220,7 +236,13 @@ function NewReturnFlow({ startSaleId, onExit, onOpenSale }) {
       setSearching(true);
       setSearchError(false);
       try {
-        const res = await window.api.sales.list({ requestingUserId: user.id, search: text, limit: 20 });
+        const res = await window.api.returns.searchSales({
+          requestingUserId: user.id,
+          search: text,
+          dateFrom: rangeArg?.dateFrom,
+          dateTo: rangeArg?.dateTo,
+          limit: 30,
+        });
         if (id !== searchRef.current) return;
         if (!res?.success) throw new Error(res?.reason);
         setResults(res.rows);
@@ -237,7 +259,14 @@ function NewReturnFlow({ startSaleId, onExit, onOpenSale }) {
     setQuery(value);
     setFindMessage(null);
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => runSearch(value.trim()), 300);
+    debounceRef.current = setTimeout(() => runSearch(value.trim(), findRange), 300);
+  }
+
+  function onFindRange(nextRange) {
+    setFindRange(nextRange);
+    setFindMessage(null);
+    clearTimeout(debounceRef.current);
+    runSearch(query.trim(), nextRange);
   }
 
   const openSale = useCallback(
@@ -345,7 +374,14 @@ function NewReturnFlow({ startSaleId, onExit, onOpenSale }) {
   }
 
   if (done) {
-    return <ReturnSuccess result={done} named={!!customer} onDone={onExit} onSeeSale={() => onOpenSale(data.sale.id)} />;
+    return (
+      <ReturnSuccess
+        result={done}
+        named={!!customer && !!data}
+        onDone={onExit}
+        onSeeSale={data?.sale?.id ? () => onOpenSale(data.sale.id) : undefined}
+      />
+    );
   }
 
   let body;
@@ -355,10 +391,13 @@ function NewReturnFlow({ startSaleId, onExit, onOpenSale }) {
         <FindSaleStep
           query={query}
           onQuery={onQuery}
+          range={findRange}
+          onRange={onFindRange}
+          onNoBill={() => setNoBillOpen(true)}
           results={results}
           loading={searching}
           error={searchError}
-          onRetry={() => runSearch(query.trim())}
+          onRetry={() => runSearch(query.trim(), findRange)}
           highlight={highlight}
           onHighlight={setHighlight}
           onPick={(s) => openSale(s.id)}
@@ -370,6 +409,16 @@ function NewReturnFlow({ startSaleId, onExit, onOpenSale }) {
             Cancel
           </Button>
         </div>
+        {noBillOpen && (
+          <NoBillReturnDialog
+            onClose={() => setNoBillOpen(false)}
+            onDone={(res) => {
+              setNoBillOpen(false);
+              setDone(res);
+              toast.success(`Return ${res.return_no} recorded`);
+            }}
+          />
+        )}
       </>
     );
   } else if (!data) {

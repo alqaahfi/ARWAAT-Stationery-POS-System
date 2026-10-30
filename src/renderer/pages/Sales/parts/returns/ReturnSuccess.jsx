@@ -33,9 +33,11 @@ export function ReturnSuccess({ result, named, onDone, onSeeSale }) {
         <Button size="lg" fullWidth onClick={onDone} autoFocus>
           Done
         </Button>
-        <Button variant="plain" fullWidth onClick={onSeeSale}>
-          See the sale
-        </Button>
+        {onSeeSale && (
+          <Button variant="plain" fullWidth onClick={onSeeSale}>
+            See the sale
+          </Button>
+        )}
       </div>
     </Card>
   );

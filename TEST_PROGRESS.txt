@@ -390,6 +390,23 @@ RULE 16 - Automatic daily backup
   Stage 3 e2e: start the app -> backup file appears in Documents\ARWAAT Backups; Home shows the USB reminder until Done;
            point the folder at an unwritable place -> Home shows the failure. MANUAL: real USB copy.
 
+RULE 17 - Return search without the bill + no-bill return
+  Migration 040_no_bill_returns.sql: sale_returns.sale_id nullable; sale_return_items.sale_item_id nullable +
+           product_variant_id / product_unit_id. syncSchema: sale_returns.sale_id and sale_return_items.sale_item_id
+           nullable.
+  Server: returns.ipc.js - searchSalesForReturn (by invoice_no, customer name/phone/mobile, item name/search_alias/barcode,
+           typed date YYYY-MM-DD or DD-MM-YYYY, or date range; excludes voided bills, includes return_status),
+           getNoBillPrice & createNoBillReturn (Admin only; refund = lowest selling price in last 30 days of non-voided
+           sales after bill discount, else current retail price; cash only, stock back in, recorded with sale_id=NULL
+           and customer_id=NULL so it stays out of per-sale returnable quantities). reports.ipc.js: P&L and Cashier
+           performance count no-bill returns cleanly.
+  Renderer: Returns.jsx + FindSaleStep.jsx (wired returns.searchSales, date range filter, and "Return without the bill"
+           button), ReturnsList.jsx + ReturnDetailSheet.jsx + ReturnSuccess.jsx (display "No bill" when sale_id is null,
+           wire NoBillReturnDialog on list and finder).
+  Checks: R17-01..R17-08 (PASS).
+  Stage 3 e2e: in Returns step 1 search by item name/barcode/customer/date -> finds the bill; click "Return without the
+           bill" -> pick product + qty -> shows lowest 30-day price (or retail) -> saves cash return, stock restored.
+
 STAGE 1 DECISIONS
   D1 (rule 1) Editing a saved bill: a cashier may keep the bill's OWN stored price for a pack size (same
      customer only); any other price must match the price engine. Changing the customer re-prices.
@@ -418,3 +435,6 @@ STAGE 1 DECISIONS
      A computer clock set earlier than the bill counts as inside the window (the wrong-clock banner, rule 15, warns).
   D11 (rule 14) "Original" = the first SUCCESSFUL print; a preview never counts. Payment receipts and purchase
      receipts are not stamped (the rule is about bills).
+  D12 (rule 17) In a no-bill return, the 30-day lowest selling price accounts for bill-level discounts
+     (unit_price * total_amount / subtotal) so a customer never gets back more than the lowest discounted unit price
+     charged in the last 30 days. No-bill returns are charged to the Admin who recorded them in Cashier Performance.

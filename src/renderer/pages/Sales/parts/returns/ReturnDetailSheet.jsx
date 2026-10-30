@@ -72,9 +72,13 @@ function ReturnBody({ data, onOpenSale }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
       <div style={styles.line}>
         <span style={{ color: c.labelSecondary }}>Original sale</span>
-        <Button variant="plain" size="sm" onClick={() => onOpenSale(ret.sale_id)} style={{ padding: '0 4px' }}>
-          {ret.invoice_no}
-        </Button>
+        {ret.sale_id && ret.invoice_no ? (
+          <Button variant="plain" size="sm" onClick={() => onOpenSale(ret.sale_id)} style={{ padding: '0 4px' }}>
+            {ret.invoice_no}
+          </Button>
+        ) : (
+          <span style={{ color: c.labelSecondary }}>No bill</span>
+        )}
       </div>
 
       <div style={styles.line}>

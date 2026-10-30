@@ -5,15 +5,17 @@ import appIcons from '../../../../config/appIcons';
 import glossary from '../../../../config/glossary';
 import { Badge, Button, Card, EmptyState, Icon, SearchField, Skeleton, Spinner } from '../../../../components/ui';
 import { formatCurrencyExact } from '../../../../utils/format';
+import DateRangePicker, { getDefaultRange } from '../../../Reports/components/DateRangePicker';
 import { RETURN_STATUS, formatLocalDateTime } from '../saleLabels';
 
 const c = theme.colors;
 
 // Step 1: search sales and pick the one being returned. The input keeps focus;
 // Up/Down move the highlighted result, Enter picks it, Esc clears.
-export function FindSaleStep({ query, onQuery, results, loading, error, onRetry, highlight, onHighlight, onPick, picking, message }) {
+// Rule 17: also searches by item name/barcode, customer, and date/range; offers no-bill return.
+export function FindSaleStep({ query, onQuery, range, onRange, onNoBill, results, loading, error, onRetry, highlight, onHighlight, onPick, picking, message }) {
   const listId = useId();
-  const hasQuery = query.trim().length > 0;
+  const hasQuery = query.trim().length > 0 || !!(range && (range.dateFrom || range.dateTo));
   const optionId = (i) => `${listId}-opt-${i}`;
 
   function onKeyDown(e) {
@@ -32,7 +34,21 @@ export function FindSaleStep({ query, onQuery, results, loading, error, onRetry,
 
   let list;
   if (!hasQuery) {
-    list = <EmptyState {...appIcons.search} title="Find the sale" message="Search for the sale the customer is returning." style={{ padding: '40px 24px' }} />;
+    list = (
+      <EmptyState
+        {...appIcons.search}
+        title="Find the sale"
+        message="Search by invoice number, item name or barcode, customer name/phone, or date — or return without the bill."
+        action={
+          onNoBill && (
+            <Button variant="tinted" onClick={onNoBill}>
+              Return without the bill
+            </Button>
+          )
+        }
+        style={{ padding: '40px 24px' }}
+      />
+    );
   } else if (error) {
     list = (
       <div role="alert" style={styles.error}>
@@ -52,7 +68,21 @@ export function FindSaleStep({ query, onQuery, results, loading, error, onRetry,
       </div>
     );
   } else if (!results.length) {
-    list = <EmptyState icon={SearchX} title="No sales match" message="Check the invoice number, or search by customer name or phone." style={{ padding: '40px 24px' }} />;
+    list = (
+      <EmptyState
+        icon={SearchX}
+        title="No sales match"
+        message="Check the invoice number, item, customer or date — or record a return without the bill."
+        action={
+          onNoBill && (
+            <Button variant="tinted" onClick={onNoBill}>
+              Return without the bill
+            </Button>
+          )
+        }
+        style={{ padding: '40px 24px' }}
+      />
+    );
   } else {
     list = (
       <ul id={listId} role="listbox" aria-label="Sales" style={styles.list}>
@@ -65,19 +95,42 @@ export function FindSaleStep({ query, onQuery, results, loading, error, onRetry,
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
-      <SearchField
-        value={query}
-        onChange={onQuery}
-        onKeyDown={onKeyDown}
-        autoFocus
-        placeholder="Invoice number, customer name or phone"
-        aria-label="Find the sale"
-        aria-controls={results.length ? listId : undefined}
-        aria-activedescendant={results.length ? optionId(highlight) : undefined}
-        aria-autocomplete="list"
-        inputStyle={{ height: '44px', ...theme.type.headline, fontWeight: theme.font.weightNormal }}
-        style={{ maxWidth: '640px' }}
-      />
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: theme.spacing.sm, maxWidth: '760px' }}>
+        <SearchField
+          value={query}
+          onChange={onQuery}
+          onKeyDown={onKeyDown}
+          autoFocus
+          placeholder="Invoice number, item name/barcode, customer name/phone, or date"
+          aria-label="Find the sale"
+          aria-controls={results.length ? listId : undefined}
+          aria-activedescendant={results.length ? optionId(highlight) : undefined}
+          aria-autocomplete="list"
+          inputStyle={{ height: '44px', ...theme.type.headline, fontWeight: theme.font.weightNormal }}
+          style={{ flex: '1 1 320px', maxWidth: '640px' }}
+        />
+        {onNoBill && (
+          <Button variant="tinted" onClick={onNoBill}>
+            Return without the bill
+          </Button>
+        )}
+      </div>
+      {onRange && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.sm, flexWrap: 'wrap' }}>
+          {range ? (
+            <>
+              <DateRangePicker value={range} onChange={onRange} />
+              <Button size="sm" variant="plain" onClick={() => onRange(null)}>
+                Clear dates
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" variant="plain" onClick={() => onRange(getDefaultRange())}>
+              Filter by date range
+            </Button>
+          )}
+        </div>
+      )}
       {message && (
         <div role="alert" style={styles.error}>
           <Icon icon={CircleAlert} size={18} />
