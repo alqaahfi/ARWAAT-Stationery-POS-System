@@ -475,3 +475,11 @@ STAGE 2 - RELIABLE TEST HARNESS (BRIEF.md section 3)
       is_voided = 0 in shop.js balance queries, replace fixed sleeps with state-based waits.
     - Rebuilt test-backups/CLEAN-MASTER.db through the app UI (00-setup, 01-data, 03a-restore all PASS).
 
+
+=== Finish-up run (2026-10-30) ===
+Part A: Admin freeze on the 50k-sale DB FOUND + FIXED. Cause: ledgers:get-aging-report ran one query per customer
+(2,000 of them); SQLite picked idx_sales_voided_created (is_voided=?) for each, scanning all 50k sales every time = 48 s of
+blocking main-process CPU, called by the Admin Home alerts hook (and every 60 s). Fix: one grouped query (45 ms now).
+Also moved the CREATE INDEX idx_sales_voided_created out of getSalesReport into migration 041.
+Measured on the load DB (in-process handlers): start/migrations 16 ms, dashboard summary 54 ms, aging 45 ms, 1-month sales report 18 ms,
+1-year 129 ms (P&L 328 ms), POS item search 10 ms, stock report 39 ms. All targets met.

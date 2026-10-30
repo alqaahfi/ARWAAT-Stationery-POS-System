@@ -157,15 +157,27 @@ function getAdvances() {
 // specific invoices. Stated as a caveat in the UI too.
 function getAgingReport() {
   const db = getDb();
-  const customers = db.prepare('SELECT id, name FROM customers').all();
   const now = Date.now();
 
+  // One pass over the unpaid sales (a per-customer query made SQLite scan every
+  // sale once per customer on big databases), grouped by customer here.
+  const unpaidByCustomer = new Map();
+  const unpaid = db
+    .prepare(
+      `SELECT s.customer_id, s.balance_due, s.created_at, c.name
+       FROM sales s JOIN customers c ON c.id = s.customer_id
+       WHERE s.balance_due > 0 AND s.is_voided = 0
+       ORDER BY s.created_at`
+    )
+    .all();
+  for (const sale of unpaid) {
+    if (!unpaidByCustomer.has(sale.customer_id)) unpaidByCustomer.set(sale.customer_id, { name: sale.name, sales: [] });
+    unpaidByCustomer.get(sale.customer_id).sales.push(sale);
+  }
+
   const rows = [];
-  for (const c of customers) {
-    const unpaidSales = db
-      .prepare('SELECT id, invoice_no, balance_due, created_at FROM sales WHERE customer_id = ? AND balance_due > 0 AND is_voided = 0 ORDER BY created_at')
-      .all(c.id);
-    if (unpaidSales.length === 0) continue;
+  for (const [customerId, { name, sales: unpaidSales }] of unpaidByCustomer) {
+    const c = { id: customerId, name };
 
     const buckets = { b0_30: 0, b31_60: 0, b61_90: 0, b90plus: 0 };
     let totalOwed = 0;
