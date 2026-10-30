@@ -138,6 +138,28 @@ function update(payload) {
   return { success: true };
 }
 
+// Rule 7: the same phone/mobile on two customers is a WARNING (the form asks,
+// saving is still allowed). Numbers are compared by their digits, so
+// "0300-1234567", "0300 1234567" and "+92 300 1234567" are the same number.
+function phoneKey(value) {
+  let digits = String(value || '').replace(/\D/g, '');
+  if (digits.startsWith('92') && digits.length === 12) digits = `0${digits.slice(2)}`;
+  return digits.length >= 7 ? digits : '';
+}
+
+function findDuplicatePhones({ phone, mobile, excludeId } = {}) {
+  const db = getDb();
+  const wanted = new Set([phoneKey(phone), phoneKey(mobile)].filter(Boolean));
+  if (!wanted.size) return { success: true, matches: [] };
+  const rows = db
+    .prepare('SELECT id, name, phone, mobile, is_active FROM customers WHERE id != ? AND (phone IS NOT NULL OR mobile IS NOT NULL)')
+    .all(Number(excludeId) || 0);
+  const matches = rows
+    .filter((r) => wanted.has(phoneKey(r.phone)) || wanted.has(phoneKey(r.mobile)))
+    .map((r) => ({ id: r.id, name: r.name, phone: r.phone, mobile: r.mobile, isActive: !!r.is_active }));
+  return { success: true, matches };
+}
+
 function setActive({ id, isActive }) {
   const db = getDb();
   db.prepare('UPDATE customers SET is_active = ? WHERE id = ?').run(isActive ? 1 : 0, id);
@@ -247,6 +269,7 @@ function registerCustomersIpc() {
   ipcMain.handle('customers:get-next-id', () => ({ success: true, id: getNextId(getDb(), 'customers') }));
   ipcMain.handle('customers:get-ledger', (event, { id } = {}) => getLedger(id));
   // Rule 2: credit limit is a warning only (asked by the sale screens before saving; never blocks).
+  ipcMain.handle('customers:check-duplicate-phone', (event, payload) => findDuplicatePhones(payload || {}));
   ipcMain.handle('customers:credit-check', (event, payload) => creditLimitCheck(getDb(), payload || {}));
 
 }

@@ -101,6 +101,7 @@ const ADMIN_CHANNELS = new Set([
   'customers:update',
   'customers:set-active',
   'customers:get-next-id',
+  'customers:check-duplicate-phone',
   'users:list',
   'users:create-cashier',
   'users:update',

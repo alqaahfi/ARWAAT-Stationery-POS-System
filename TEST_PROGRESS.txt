@@ -252,6 +252,15 @@ RULE 6 - Below-cost price = warning
   Stage 3 e2e: product form with wholesale < buying -> warning dialog, Save anyway saves, Fix prices stays;
            quick Sale as Admin, type a price under the buying price -> warning before saving.
 
+RULE 7 - Duplicate customer phone/mobile = warning
+  Changed: customers.ipc.js findDuplicatePhones() + IPC customers:check-duplicate-phone (Admin-only, added to
+           ipcGuard ADMIN_CHANNELS; numbers compared by digits, +92 -> 0). preload customers.checkDuplicatePhone.
+           CustomerForm.jsx: "Same phone number" confirm naming the other customer(s) (Save anyway / Go back).
+           customers:create/update never block on it.
+  Checks: R07-01..R07-04 (PASS).
+  Stage 3 e2e: add a customer with Ahmed's number typed differently ("+92 300 ...") -> warning names Ahmed;
+           Save anyway saves; Go back keeps the form.
+
 STAGE 1 DECISIONS
   D1 (rule 1) Editing a saved bill: a cashier may keep the bill's OWN stored price for a pack size (same
      customer only); any other price must match the price engine. Changing the customer re-prices.

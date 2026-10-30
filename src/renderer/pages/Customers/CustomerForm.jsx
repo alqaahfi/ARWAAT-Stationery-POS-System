@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { UserX } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { Button, Card, EmptyState, useToast } from "../../components/ui";
+import { Button, Card, EmptyState, useConfirm, useToast } from "../../components/ui";
 import { StickyActions } from "../Products/form/StickyActions";
 import { StartingBalanceField } from "../Parties/StartingBalanceField";
 import {
@@ -40,6 +40,7 @@ export default function CustomerForm({
 }) {
   const { user } = useAuth();
   const toast = useToast();
+  const confirm = useConfirm();
   const isEdit = !!customerId;
 
   const [letterheads, setLetterheads] = useState([]);
@@ -181,6 +182,26 @@ export default function CustomerForm({
         joiningDate: joiningDate || null,
         notes: notes.trim() || null,
       };
+
+      // Rule 7: a phone/mobile another customer already has is a warning, not a block.
+      if (payload.phone || payload.mobile) {
+        const dup = await window.api.customers
+          .checkDuplicatePhone({ phone: payload.phone, mobile: payload.mobile, excludeId: customerId || null })
+          .catch(() => null);
+        if (dup?.matches?.length) {
+          const who = dup.matches
+            .slice(0, 3)
+            .map((m) => `${m.name} (${[m.phone, m.mobile].filter(Boolean).join(" / ")})${m.isActive ? "" : " - inactive"}`)
+            .join(", ");
+          const ok = await confirm({
+            title: "Same phone number",
+            message: `This number is already saved for ${who}. Save this customer anyway?`,
+            confirmLabel: "Save anyway",
+            cancelLabel: "Go back",
+          });
+          if (!ok) return;
+        }
+      }
 
       const res = isEdit
         ? await window.api.customers.update({ id: customerId, ...payload })

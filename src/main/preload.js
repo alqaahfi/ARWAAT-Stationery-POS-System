@@ -129,6 +129,7 @@ contextBridge.exposeInMainWorld('api', {
     getLedger: (data) => invoke('customers:get-ledger', data),
     getNextId: () => invoke('customers:get-next-id'),
     creditCheck: (data) => invoke('customers:credit-check', data),
+    checkDuplicatePhone: (data) => invoke('customers:check-duplicate-phone', data),
   },
 
   ledgers: {
