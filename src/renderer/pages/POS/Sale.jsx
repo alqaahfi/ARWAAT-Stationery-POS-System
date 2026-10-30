@@ -25,6 +25,7 @@ import SaleCompleteSheet from './parts/SaleCompleteSheet';
 import PrintPreviewModal from '../../components/receipt/PrintPreviewModal';
 import BillOverlay from '../../components/billing/BillOverlay';
 import QuickAddItemDialog from '../../components/billing/QuickAddItemDialog';
+import AdminApprovalDialog from '../../components/billing/AdminApprovalDialog';
 import Returns from '../Sales/Returns';
 import { InlineMessage, PanelTitle, packSizeName } from './parts/common';
 import { whileSaving } from '../../utils/appEvents';
@@ -205,6 +206,8 @@ export default function Sale() {
   // Rule 11: "Add missing items at the counter" dialog ({ barcode, name } to start with) or null.
   const [quickAdd, setQuickAdd] = useState(null);
   const canQuickAdd = hasPermission('add_missing_items');
+  // Rule 12: the Admin approval box ({ labels, message, retry(token) }) or null.
+  const [approval, setApproval] = useState(null);
 
   // ---------------- stage 3: qty ----------------
   const [pendingItem, setPendingItem] = useState(null);
@@ -632,6 +635,7 @@ export default function Sale() {
     clearSaleState();
 
     const { sale } = res;
+    if (res.needsApproval) toast.error('This is an older bill. The Admin will be asked to approve the change when you save.');
     // The bill's own stock is given back when saving, so it counts as available while editing.
     const givenBack = {};
     for (const l of res.lines) {
@@ -795,8 +799,7 @@ export default function Sale() {
           setSearchResults([]);
           const pending = scanPendingRef.current[detail.variant.id] || 0;
           if (!detail.product.needsReview && inCartBase + pending + unit.conversionFactor > detail.variant.stockQty) {
-            toast.error(`Only ${formatCount(detail.variant.stockQty / unit.conversionFactor)} in stock for ${detail.product.name}.`);
-            return;
+            toast.error(`Only ${formatCount(detail.variant.stockQty / unit.conversionFactor)} in stock for ${detail.product.name}. Selling more needs the Admin's approval at payment.`);
           }
           scanPendingRef.current[detail.variant.id] = pending + unit.conversionFactor;
           addOrMergeCartLine({
@@ -901,10 +904,7 @@ export default function Sale() {
       return;
     }
     const over = !pendingItem.allowNegative && entries.find((e) => e.quantity * pendingItem.conversionFactor > e.type.stockQty);
-    if (over) {
-      setMultiError(`Only ${formatCount(over.type.stockQty / pendingItem.conversionFactor)} of ${over.type.variantName} in stock.`);
-      return;
-    }
+    if (over) toast.error(`Only ${formatCount(over.type.stockQty / pendingItem.conversionFactor)} of ${over.type.variantName} in stock. Selling more needs the Admin's approval at payment.`);
     for (const { type, quantity } of entries) {
       addOrMergeCartLine({ ...pendingItem, variantId: type.variantId, variantName: type.variantName, stockQty: type.stockQty, quantity, focQuantity: 0 });
     }
@@ -912,7 +912,7 @@ export default function Sale() {
   }
 
   function confirmQty() {
-    if (!pendingItem || qtyNumber <= 0 || qtyStockError) return;
+    if (!pendingItem || qtyNumber <= 0) return; // a stock shortfall is shown, and approved at payment (rule 12)
     addOrMergeCartLine({ ...pendingItem, quantity: qtyNumber, focQuantity: focNumber });
     setPendingItem(null);
     setQtyValue('1');
@@ -955,7 +955,7 @@ export default function Sale() {
   }
 
   function confirmEditCartLine() {
-    if (editingLineIndex === null || editingQtyNumber <= 0 || editingQtyStockError) return;
+    if (editingLineIndex === null || editingQtyNumber <= 0) return; // shortfall approved at payment (rule 12)
     setCartLines((lines) => lines.map((l, i) => (i === editingLineIndex ? { ...l, quantity: editingQtyNumber, focQuantity: editingFocNumber } : l)));
     setEditingLineIndex(null);
     setEditingQtyValue('');
@@ -1000,10 +1000,8 @@ export default function Sale() {
   // ---------------- stage 5/6: discount / format ----------------
 
   function advanceFromDiscount() {
-    if (discountExceedsCap) {
-      setDiscountError(`Discount exceeds your limit of ${effectiveDiscountCap}%.`);
-      return;
-    }
+    // Rule 12: above the cashier's limit the Admin approves it when the bill is saved.
+    if (discountExceedsCap) toast.error(`Discount is above your limit of ${effectiveDiscountCap}%. The Admin will be asked to approve it when you save.`);
     setDiscountError('');
     setPrintFormat(saleType === 'wholesale' ? 'wholesale-a4' : 'retail-thermal');
     setStage('format');
@@ -1015,7 +1013,7 @@ export default function Sale() {
 
   // ---------------- stage 7/8: payment / finalize ----------------
 
-  async function finalizeSale() {
+  async function finalizeSale(opts = {}) {
     setFinalizeError('');
     if (partialBlockedNoCustomer) {
       setPaymentError('Select a customer to allow partial payment.');
@@ -1023,30 +1021,20 @@ export default function Sale() {
     }
     setPaymentError('');
 
-    // Re-validate the discount cap right before finalizing — a cashier's
-    // permissions can change mid-shift since this stage was first entered.
-    const capRes = await window.api.sales.getCashierDiscountCap({ userId: user.id });
-    const freshCap = capRes.capPercentage;
-    if (freshCap !== null && discountPercentageEquivalent > freshCap) {
-      setDiscountCap(freshCap);
-      setDiscountError(`Discount exceeds your limit of ${freshCap}%.`);
-      setStage('discount');
-      return;
-    }
+    // The discount cap is re-checked by the main process on every save; above it, the
+    // Admin approval box opens (rule 12). Refresh the shown limit for the message.
+    window.api.sales.getCashierDiscountCap({ userId: user.id }).then((r) => setDiscountCap(r.capPercentage)).catch(() => {});
 
     if (cartLines.length === 0) {
       setFinalizeError('Cart is empty.');
       setStage('item-search');
       return;
     }
-    if (hasStockIssue) {
-      setFinalizeError('Fix stock issues before completing the sale.');
-      setStage('cart-edit');
-      return;
-    }
+    // Not enough stock is no longer a dead end (rule 12): the main process asks for the
+    // Admin's approval (cashier) or a confirm (Admin) and the stock goes below zero.
 
     // Rule 2: going over a customer's credit limit is a warning only — they can save anyway.
-    if (customer && balanceDue > 0) {
+    if (customer && balanceDue > 0 && !opts.approvalToken && !opts.allowNegativeStock) {
       const credit = await window.api.customers.creditCheck({ customerId: customer.id, addAmount: balanceDue, excludeSaleId: editingSale?.id || null });
       if (credit?.overLimit) {
         const ok = await askConfirm({ title: 'Over the credit limit', message: credit.message, confirmLabel: 'Save anyway', cancelLabel: 'Go back' });
@@ -1072,6 +1060,8 @@ export default function Sale() {
       discountAmount,
       paidAmount,
       paymentMethod,
+      approvalToken: opts.approvalToken || null,
+      allowNegativeStock: !!opts.allowNegativeStock,
     };
 
     const res = await whileSaving(() =>
@@ -1080,6 +1070,16 @@ export default function Sale() {
     setCompleting(false);
 
     if (!res.success) {
+      // Rule 12: the Admin approves on this screen, then the same bill is saved again.
+      if (res.needsApproval) {
+        setApproval({ labels: res.approvalLabels || [], message: res.reason, retry: (token) => finalizeSale({ ...opts, approvalToken: token }) });
+        return;
+      }
+      if (res.needsStockConfirm) {
+        const ok = await askConfirm({ title: 'Not enough stock', message: res.reason, confirmLabel: 'Sell anyway', cancelLabel: 'Go back' });
+        if (ok) await finalizeSale({ ...opts, allowNegativeStock: true });
+        return;
+      }
       // The server re-checks every price; a price the Admin changed while this
       // bill was open comes back here — take the new price and let them retry.
       if (res.priceChanged && Array.isArray(res.changedLines)) {
@@ -1183,7 +1183,7 @@ export default function Sale() {
     if (showPrintPreview || dialogOpenRef.current) return;
 
     // The Today's bills and Held bills panels run their own keys while open (and so does the add-item dialog).
-    if (showRecent || showRecall || showReturn || quickAdd) return;
+    if (showRecent || showRecall || showReturn || quickAdd || approval) return;
 
     // F7: add a missing item at the counter (rule 11; F6 is Return).
     if (e.key === 'F7' && canQuickAdd && (stage === 'item-search' || stage === 'cart-edit') && !showCancelConfirm) {
@@ -1738,6 +1738,18 @@ export default function Sale() {
             <Returns params={{}} onNavigate={() => setShowReturn(false)} />
           </div>
         </BillOverlay>
+      )}
+      {approval && (
+        <AdminApprovalDialog
+          labels={approval.labels}
+          message={approval.message}
+          onClose={() => setApproval(null)}
+          onApproved={(token) => {
+            const retry = approval.retry;
+            setApproval(null);
+            retry(token);
+          }}
+        />
       )}
       {quickAdd && (
         <QuickAddItemDialog

@@ -13,6 +13,7 @@ import BillPartyCard from './BillPartyCard';
 import BillItemSearch from './BillItemSearch';
 import MultiTypeQtyPanel, { entriesFromValues } from './MultiTypeQtyPanel';
 import BillLines from './BillLines';
+import AdminApprovalDialog from './AdminApprovalDialog';
 import { belowCostMessage } from '../../utils/belowCost';
 import BillSummary, { PartyTypeBadge } from './BillSummary';
 import { buildLine, computeTotals, lineTotal, lineUnits, purchasePriceFields, resolveLetterheadId, round2, tradeUnitCost } from './billingUtils';
@@ -69,6 +70,7 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
   const partyRef = useRef(party);
   partyRef.current = party;
   const savingRef = useRef(false);
+  const [approval, setApproval] = useState(null); // rule 12: Admin approval box
 
   // ---------------- loading the party ----------------
   const loadParty = useCallback(
@@ -284,7 +286,7 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
       if (isPurchase && (l.unitPrice === '' || Number(l.unitPrice) < 0 || Number.isNaN(Number(l.unitPrice)))) return `Enter a buying price for ${l.productName}.`;
       if (!isPurchase && (l.unitPrice === '' || Number(l.unitPrice) < 0 || Number.isNaN(Number(l.unitPrice)))) return `Enter a selling price for ${l.productName}.`;
     }
-    if (Object.keys(stockIssues).length) return 'Some items are over what you have in stock. Lower the quantity or the free units.';
+    // Over the stock is approved by the Admin (or confirmed by the Admin) when saving — rule 12.
     if (!isPurchase && !party && totals.balanceDue > 0) return 'Choose a customer to leave a balance, or take the full payment.';
     return null;
   }
@@ -293,10 +295,7 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
     if (savingRef.current || done) return;
     setError('');
     setDiscountError('');
-    if (discountExceedsCap) {
-      setDiscountError(`Discount exceeds your limit of ${effectiveCap}%.`);
-      return;
-    }
+    // Above the discount limit the Admin approves it when saving (rule 12).
     const problem = validate();
     if (problem) {
       setError(problem);
@@ -353,23 +352,12 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
     else onClose?.();
   }
 
-  async function saveSale() {
+  async function saveSale(opts = {}) {
     setSaving(true);
-    // A cashier's discount limit can change mid-shift — check it again right before saving.
-    try {
-      const capRes = await window.api.sales.getCashierDiscountCap({ userId: user.id });
-      const fresh = capRes?.capPercentage;
-      if (fresh !== null && fresh !== undefined && totals.discountPercent > Number(fresh) + 0.0001) {
-        setDiscountCap(fresh);
-        setDiscountError(`Discount exceeds your limit of ${fresh}%.`);
-        return;
-      }
-    } catch {
-      // Falls back to the limit already loaded.
-    }
+    // The discount limit is re-checked by the main process; above it the Admin approves (rule 12).
 
     // Rule 6: the Admin's price override below the buying price is allowed after a warning.
-    if (isAdmin) {
+    if (isAdmin && !opts.allowNegativeStock) {
       const low = lines
         .filter((l) => Number(l.costPrice) > 0 && Number(l.unitPrice) < Number(l.costPrice) - 0.005)
         .map((l) => ({ unitName: l.productName, level: 'Price', price: Number(l.unitPrice), cost: Number(l.costPrice) }));
@@ -380,7 +368,7 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
     }
 
     // Rule 2: going over a customer's credit limit is a warning only — they can save anyway.
-    if (party && totals.balanceDue > 0) {
+    if (party && totals.balanceDue > 0 && !opts.approvalToken && !opts.allowNegativeStock) {
       const credit = await window.api.customers.creditCheck({ customerId: party.id, addAmount: totals.balanceDue }).catch(() => null);
       if (credit?.overLimit) {
         const ok = await confirm({ title: 'Over the credit limit', message: credit.message, confirmLabel: 'Save anyway', cancelLabel: 'Go back' });
@@ -406,10 +394,22 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
       discountAmount: totals.discountAmount,
       paidAmount: totals.paid,
       paymentMethod: method,
+      approvalToken: opts.approvalToken || null,
+      allowNegativeStock: !!opts.allowNegativeStock,
     };
 
     const res = await whileSaving(() => window.api.sales.create(payload));
     if (!res.success) {
+      // Rule 12: Admin approval (cashier) or a stock confirm (Admin), then the same bill again.
+      if (res.needsApproval) {
+        setApproval({ labels: res.approvalLabels || [], message: res.reason, retry: (token) => saveSale({ ...opts, approvalToken: token }) });
+        return;
+      }
+      if (res.needsStockConfirm) {
+        const ok = await confirm({ title: 'Not enough stock', message: res.reason, confirmLabel: 'Sell anyway', cancelLabel: 'Go back' });
+        if (ok) await saveSale({ ...opts, allowNegativeStock: true });
+        return;
+      }
       // The server re-checks every price; take any price that changed while the bill was open.
       if (res.priceChanged && Array.isArray(res.changedLines)) {
         setLines((prev) =>
@@ -647,7 +647,19 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
           </>
         }
       >
-        {multi && (
+        {approval && (
+        <AdminApprovalDialog
+          labels={approval.labels}
+          message={approval.message}
+          onClose={() => setApproval(null)}
+          onApproved={(token) => {
+            const retry = approval.retry;
+            setApproval(null);
+            retry(token);
+          }}
+        />
+      )}
+      {multi && (
           <MultiTypeQtyPanel
             productName={multi.detail.product.name}
             unitLabel={multi.unit.unitName}

@@ -3,6 +3,7 @@ const { getDb } = require('../db/connection');
 const ProductModel = require('../db/models/Product');
 const { getBalancesForCustomers } = require('../ledger/balanceEngine');
 const { countNeedsReview } = require('../products/quickAdd');
+const { listRecount } = require('./approvals.ipc');
 
 // Aggregate numbers for the admin Overview page. Kept as one round trip so the
 // dashboard renders with a single call instead of one IPC per stat tile.
@@ -80,6 +81,7 @@ function getSummary() {
     monthExpenses,
     recentSales,
     needsReviewCount: countNeedsReview(db),
+    recountCount: listRecount().count,
   };
 }
 

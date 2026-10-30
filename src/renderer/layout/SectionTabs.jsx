@@ -9,22 +9,30 @@ import { SegmentedControl } from '../components/ui';
 // Count badges for tabs that carry a badgeKey (e.g. Products › Needs review).
 function useTabBadges(tabs) {
   const wantsReview = tabs.some((t) => t.badgeKey === 'needsReview');
+  const wantsRecount = tabs.some((t) => t.badgeKey === 'recount');
   const [badges, setBadges] = useState({});
   useEffect(() => {
-    if (!wantsReview) return undefined;
+    if (!wantsReview && !wantsRecount) return undefined;
     let alive = true;
-    const load = () =>
-      window.api.products
-        .listNeedsReview()
-        .then((res) => alive && setBadges({ needsReview: res?.rows?.length || 0 }))
-        .catch(() => {});
+    const load = () => {
+      if (wantsReview)
+        window.api.products
+          .listNeedsReview()
+          .then((res) => alive && setBadges((b) => ({ ...b, needsReview: res?.rows?.length || 0 })))
+          .catch(() => {});
+      if (wantsRecount)
+        window.api.stock
+          .listRecount()
+          .then((res) => alive && setBadges((b) => ({ ...b, recount: res?.count || 0 })))
+          .catch(() => {});
+    };
     load();
     window.addEventListener(STOCK_CHANGED_EVENT, load);
     return () => {
       alive = false;
       window.removeEventListener(STOCK_CHANGED_EVENT, load);
     };
-  }, [wantsReview]);
+  }, [wantsReview, wantsRecount]);
   return badges;
 }
 

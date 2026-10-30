@@ -319,6 +319,30 @@ RULE 11 - Quick-add a missing item at the POS + Admin "Needs review"
            saved with stock -1; Admin Products > Needs review (1): Approve disabled until buying price set via Edit;
            Merge into an existing product moves the sale; P&L and Stock report show "buying price missing".
 
+RULE 12 - Admin approval on the cashier screen + approvals log + Stock to recount
+  Migration 038_approvals_and_recount.sql: approvals (action, details, sale_id, invoice_no, cashier_id, admin_id,
+           origin_pc, created_at, uuid; insert-only sync) + stock_recount (variant, sale, reason, note, created_by,
+           resolved_at/by; upsert sync). syncSchema entries + factory reset clears both.
+  Server: users.ipc checkAdminCredentials() (bcrypt, same 5-tries/5-min lockout counter as the login screen, no
+           session created/ended) ; security/approvals.js one-time tokens (3 min, bound to the asking window's user,
+           peek then consume only after a successful save) ; ipc/approvals.ipc.js approvals:request (signed-in),
+           approvals:list (Admin), stock:list-recount / stock:resolve-recount (Admin; list = open entries + every
+           Type below zero). sales:create/update/void: discount over cap, not enough stock, and changing/voiding a
+           bill past the cashier's window return { needsApproval, approvalReasons, approvalLabels, reason } unless an
+           approval token is sent; approved saves write an approvals row; sold-without-stock lines go on stock_recount.
+           The Admin selling without stock gets { needsStockConfirm } and resends allowNegativeStock (no approval box).
+           getForEdit loads an older own bill with needsApproval: true (approval asked at save).
+  Renderer: components/billing/AdminApprovalDialog.jsx (Admin username + password, reasons listed). Sale.jsx and
+           QuickBillForm.jsx open it on needsApproval and retry the same bill with the token; Admin gets a "Not
+           enough stock - Sell anyway" confirm. Discount over cap and stock shortfalls are now warnings while
+           building the bill (no longer dead ends). RecentBillsPanel: voiding an older bill opens the approval box.
+           Admin pages: Stock > "To recount" (badge, Mark counted, below-zero list) and Cashiers > "Approvals" log;
+           Home/bell "Stock to recount". Dashboard summary recountCount.
+  Checks: R12-01..R12-12 (PASS).
+  Stage 3 e2e: cashier gives 20% (cap 10%) -> approval box -> wrong password message -> Admin creds -> saved;
+           Cashiers > Approvals shows it. Cashier sells 5 of an item with 2 -> approval -> stock -3 -> Stock > To recount.
+           5 wrong Admin passwords in the box -> "Too many wrong tries". Cashier stays signed in throughout.
+
 STAGE 1 DECISIONS
   D1 (rule 1) Editing a saved bill: a cashier may keep the bill's OWN stored price for a pack size (same
      customer only); any other price must match the price engine. Changing the customer re-prices.
@@ -339,3 +363,7 @@ STAGE 1 DECISIONS
      purchase lines are moved on this PC only (purchase_items are insert-only in sync - money is unaffected).
   D8 (rule 11) "Buying price missing" = item still needs review OR its pack size has buying price 0. Such items are
      left out of stock value and their sales are reported separately in P&L instead of counting a zero cost silently.
+  D9 (rule 12) An approval covers one save (everything that save needed) and is spent only when the save succeeds;
+     it is bound to the window that asked and expires after 3 minutes. The Admin never needs the box: selling without
+     stock as Admin is a plain "Sell anyway?" confirm (still put on Stock to recount, not in the approvals log).
+     A cashier can never change another cashier's bill, even with approval (own bills only).

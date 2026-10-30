@@ -149,6 +149,25 @@ const SYNC_TABLES = {
     fks: { created_by: { table: 'users', nullable: true } },
     polymorphicFk: { column: 'party_id', typeColumn: 'party_type', targets: { customer: 'customers', supplier: 'suppliers' } },
   },
+  // Rule 12 (038): the approvals log travels like other history (insert-only);
+  // the Stock to recount list is upserted (marking an entry counted is an update).
+  approvals: {
+    kind: 'insert_only',
+    fks: {
+      sale_id: { table: 'sales', nullable: true },
+      cashier_id: { table: 'users', nullable: true },
+      admin_id: { table: 'users', nullable: true },
+    },
+  },
+  stock_recount: {
+    kind: 'upsert',
+    fks: {
+      product_variant_id: { table: 'product_variants' },
+      sale_id: { table: 'sales', nullable: true },
+      created_by: { table: 'users', nullable: true },
+      resolved_by: { table: 'users', nullable: true },
+    },
+  },
   stock_movements: {
     kind: 'stock_movement',
     fks: { product_variant_id: { table: 'product_variants' }, created_by: { table: 'users', nullable: true } },

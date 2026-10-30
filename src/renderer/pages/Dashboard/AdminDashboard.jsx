@@ -20,6 +20,7 @@ import PurchaseHistory from '../Purchases/PurchaseHistory';
 import ProductProfile from '../Products/ProductProfile';
 import StockList from '../Stock/StockList';
 import StockHistory from '../Stock/StockHistory';
+import StockRecount from '../Stock/StockRecount';
 import CustomerProfile from '../Customers/CustomerProfile';
 import SupplierProfile from '../Suppliers/SupplierProfile';
 import Sale, { isPosSaleInProgress } from '../POS/Sale';
@@ -43,6 +44,7 @@ import ExpenseForm from '../Expenses/ExpenseForm';
 import CashierList from '../Users/CashierList';
 import CashierForm from '../Users/CashierForm';
 import CashierSessions from '../Users/CashierSessions';
+import ApprovalsLog from '../Users/ApprovalsLog';
 import SessionDetail from '../Users/SessionDetail';
 import SalesReport from '../Reports/SalesReport';
 import ProfitLoss from '../Reports/ProfitLoss';
@@ -147,6 +149,8 @@ export default function AdminDashboard() {
         return <ProductProfile key={nav.params.id} productId={nav.params.id} onNavigate={navigate} />;
       case '/stock':
         return <StockList onNavigate={navigate} />;
+      case '/stock/recount':
+        return <StockRecount onNavigate={navigate} />;
       case '/stock/history':
         return <StockHistory productId={nav.params.productId} />;
       case '/products/new':
@@ -244,6 +248,8 @@ export default function AdminDashboard() {
         return <CashierForm onDone={() => navigate('/cashiers')} onCancel={() => navigate('/cashiers')} />;
       case '/cashiers/edit':
         return <CashierForm cashierId={nav.params.id} onDone={() => navigate('/cashiers')} onCancel={() => navigate('/cashiers')} />;
+      case '/cashiers/approvals':
+        return <ApprovalsLog />;
       case '/cashiers/sessions':
         return <CashierSessions onNavigate={navigate} />;
       case '/cashiers/sessions/detail':

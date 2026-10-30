@@ -32,6 +32,7 @@ const { startSyncServer, stopSyncServer } = require('./sync/syncServer');
 const { startPeriodicSync, stopSyncTimers, DEFAULT_SYNC_PORT } = require('./sync/syncEngine');
 const { installIpcGuard } = require('./security/ipcGuard');
 const { registerAppIpc } = require('./ipc/app.ipc');
+const { registerApprovalsIpc } = require('./ipc/approvals.ipc');
 const { modeFromArgv, openModeWindow, installWebContentsHardening } = require('./windows');
 
 // One process serves both apps (Admin and Cashier windows) so only one copy
@@ -89,6 +90,7 @@ function boot() {
       registerGlobalIpc();
       registerDevPanelIpc();
       registerAppIpc();
+      registerApprovalsIpc();
       // Demo login for development only — never created in an installed build.
       if (!app.isPackaged) seedDummyCashier();
       // Catches up any recurring expenses (daily/weekly/monthly/annually)

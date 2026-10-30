@@ -14,6 +14,8 @@ const { getDb } = require('../db/connection');
 // history, 019_activity_log.sql) is included too — it's per-user business
 // data, not diagnostic tooling.
 const TABLES_TO_CLEAR = [
+  'approvals',
+  'stock_recount',
   'sale_return_items',
   'sale_returns',
   'sales',

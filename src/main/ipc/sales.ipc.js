@@ -5,6 +5,7 @@ const { resolveUnitPrice } = require('../pricing/priceEngine');
 const { getSaleDetail, buildReceiptData } = require('../printing/receiptData');
 const { logActivity } = require('../activity/activityLog');
 const { wholeQty, WHOLE_QTY_MSG } = require('../validation/quantity');
+const { peekApproval, consumeApproval } = require('../security/approvals');
 
 // ---------- product search / barcode (feed the cart) ----------
 
@@ -210,17 +211,61 @@ function rememberInvoiceNo(db, invoiceNo) {
 
 class SaleError extends Error {}
 
+// Rule 12: something on this save needs the Admin's approval (asked for on the cashier screen).
+const APPROVAL_LABELS = {
+  discount_over_cap: 'Discount above your limit',
+  sell_without_stock: 'Selling more than is in stock',
+  change_old_bill: 'Changing an older bill',
+  void_old_bill: 'Voiding an older bill',
+};
+class NeedApproval extends Error {
+  constructor(reasons, message, extra = {}) {
+    super(message);
+    this.reasons = reasons;
+    this.extra = extra;
+  }
+}
+// The Admin selling more than is in stock just confirms it on their own screen.
+class NeedStockConfirm extends Error {
+  constructor(message, shortages) {
+    super(message);
+    this.shortages = shortages;
+  }
+}
+
+function approvalRefusal(err) {
+  return {
+    success: false,
+    needsApproval: true,
+    approvalReasons: err.reasons,
+    approvalLabels: err.reasons.map((r) => APPROVAL_LABELS[r] || r),
+    reason: err.message,
+    ...err.extra,
+  };
+}
+
+// One log row per approved save: what, bill, cashier, admin, when (rule 12).
+function logApproval(db, { reasons, details, saleId, invoiceNo, cashierId, adminId, originPc }) {
+  db.prepare(
+    `INSERT INTO approvals (action, details, sale_id, invoice_no, cashier_id, admin_id, origin_pc)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(reasons.join(','), details.filter(Boolean).join('; ') || null, saleId || null, invoiceNo || null, cashierId || null, adminId || null, originPc || null);
+}
+
 const localToday = (db) => db.prepare("SELECT date('now','localtime') AS d").get().d;
 
-// Admin may change any bill; a cashier only their own bills from today (local day).
-function assertCanChange(db, sale, actorId) {
+// Admin may change any bill; a cashier only their own bills. Returns true when
+// the bill is past the cashier's time window, so the change needs the Admin's
+// approval (rule 12); false when it may go ahead.
+function billNeedsApproval(db, sale, actorId) {
   const actor = db.prepare('SELECT role FROM users WHERE id = ?').get(actorId);
   if (!actor) throw new SaleError('Unknown user.');
-  if (actor.role === 'admin') return;
+  if (actor.role === 'admin') return false;
   if (sale.cashier_id !== actorId) throw new SaleError('You can only change your own bills.');
   const day = db.prepare("SELECT date(?, 'localtime') AS d").get(sale.created_at).d;
-  if (day !== localToday(db)) throw new SaleError('You can only change bills made today.');
+  return day !== localToday(db);
 }
+const OLD_BILL_MESSAGE = 'This bill is from an earlier day. The Admin must approve changing it.';
 
 // Rule 5: a voided bill is kept for history but can never be edited, voided again or returned.
 function assertNotVoided(sale) {
@@ -376,9 +421,19 @@ function saveSale(payload, editSaleId) {
   if (!Number.isFinite(Number(discountAmount || 0)) || discount < 0) return { success: false, reason: 'Discount cannot be negative.' };
   if (discount > subtotal + 0.005) return { success: false, reason: 'Discount cannot be more than the bill total.' };
   if (!Number.isFinite(Number(paidAmount || 0)) || paid < 0) return { success: false, reason: 'Amount paid cannot be negative.' };
+  // Rule 12: a valid Admin approval (from the approval box on this window) lets a
+  // cashier go past the discount cap, sell without stock, or change an older bill.
+  const approvedBy = actorIsAdmin ? null : peekApproval(payload.approvalToken, cashierId);
+  const approved = []; // what the approval was used for
+  const approvalDetails = [];
   const discountCap = getCashierDiscountCap(cashierId); // null = Admin, no cap
   if (discountCap !== null && subtotal > 0 && discount > (subtotal * discountCap) / 100 + 0.01) {
-    return { success: false, reason: `Discount is more than your limit of ${discountCap}%.` };
+    const pct = Math.round((discount / subtotal) * 10000) / 100;
+    if (!approvedBy) {
+      return approvalRefusal(new NeedApproval(['discount_over_cap'], `Discount is more than your limit of ${discountCap}%. The Admin must approve it.`));
+    }
+    approved.push('discount_over_cap');
+    approvalDetails.push(`Discount ${pct}% (limit ${discountCap}%)`);
   }
   const balanceDue = Math.max(0, totalAmount - paid);
 
@@ -396,7 +451,11 @@ function saveSale(payload, editSaleId) {
       const existing = db.prepare('SELECT * FROM sales WHERE id = ?').get(editSaleId);
       if (!existing) throw new SaleError('That bill no longer exists.');
       assertNotVoided(existing);
-      assertCanChange(db, existing, cashierId);
+      if (billNeedsApproval(db, existing, cashierId)) {
+        if (!approvedBy) throw new NeedApproval(['change_old_bill'], OLD_BILL_MESSAGE);
+        approved.push('change_old_bill');
+        approvalDetails.push(`Changed ${existing.invoice_no}`);
+      }
       assertNoReturns(db, editSaleId);
       reverseSaleStock(db, existing, { keepReference: true, note: `Reversed for edit of ${existing.invoice_no}` });
       db.prepare("DELETE FROM payments WHERE sale_id = ? AND party_type = 'customer'").run(editSaleId);
@@ -406,21 +465,35 @@ function saveSale(payload, editSaleId) {
 
     // Stock check runs after the reversal, so an edited bill can reuse what it had already taken.
     // Sold + free units both count, and several lines of the same variant are checked together.
+    // Rule 12: not enough stock is no longer a dead end — a cashier needs the Admin's approval,
+    // the Admin confirms; the stock goes below zero and the item goes on "Stock to recount".
+    const shortages = [];
+    const seenVariants = new Set();
     for (const item of items) {
       const variant = db.prepare('SELECT * FROM product_variants WHERE id = ?').get(item.productVariantId);
       const unit = db.prepare('SELECT * FROM product_units WHERE id = ?').get(item.productUnitId);
       if (!variant || !unit) throw new SaleError('One of the items in the cart no longer exists.');
+      if (seenVariants.has(variant.id)) continue;
+      seenVariants.add(variant.id);
       // Rule 11: an item added at the counter (waiting for review) can be sold with no stock.
-      const review = db.prepare('SELECT needs_review FROM products WHERE id = ?').get(variant.product_id);
-      if (review && review.needs_review) continue;
+      const product = db.prepare('SELECT name, needs_review FROM products WHERE id = ?').get(variant.product_id);
+      if (product && product.needs_review) continue;
       const needed = items
         .filter((i) => i.productVariantId === item.productVariantId)
         .reduce((sum, i) => sum + baseQtyOf(db, i), 0);
       if (needed > variant.stock_qty) {
-        const availableInUnit = (variant.stock_qty / unit.conversion_factor).toFixed(2).replace(/\.?0+$/, '');
-        throw new SaleError(
-          `Not enough stock for "${variant.variant_name}" — only ${availableInUnit} ${unit.unit_name}(s) available (free items count too).`
-        );
+        const label = variant.variant_name && variant.variant_name !== 'Standard' ? `${product.name} (${variant.variant_name})` : product.name;
+        shortages.push({ variantId: variant.id, name: label, inStock: variant.stock_qty, needed });
+      }
+    }
+    if (shortages.length) {
+      const list = shortages.map((x) => `${x.name}: ${x.inStock} in stock, selling ${x.needed}`).join('; ');
+      if (actorIsAdmin) {
+        if (!payload.allowNegativeStock) throw new NeedStockConfirm(`Not enough stock — ${list}. Sell anyway? Stock will go below zero.`, shortages);
+      } else {
+        if (!approvedBy) throw new NeedApproval(['sell_without_stock'], `Not enough stock — ${list}. The Admin must approve selling it.`, { shortages });
+        approved.push('sell_without_stock');
+        approvalDetails.push(list);
       }
     }
 
@@ -497,12 +570,24 @@ function saveSale(payload, editSaleId) {
       ).run(customerId, saleId, paid, 'cash', cashierId); // rule 9: cash only
     }
 
+    // Rule 12: what was sold without stock goes on the Admin's "Stock to recount" list.
+    const recount = db.prepare(
+      `INSERT INTO stock_recount (product_variant_id, sale_id, reason, note, created_by) VALUES (?, ?, 'sold_without_stock', ?, ?)`
+    );
+    for (const x of shortages) recount.run(x.variantId, saleId, `Sold ${x.needed} with ${x.inStock} in stock (${invoiceNo})`, cashierId);
+
+    if (approvedBy && approved.length) {
+      logApproval(db, { reasons: approved, details: approvalDetails, saleId, invoiceNo, cashierId, adminId: approvedBy, originPc: stationCode });
+    }
+
     // sync_outbox rows come from the triggers in 022 / 030 — no manual queuing.
-    return { saleId, invoiceNo };
+    return { saleId, invoiceNo, approvalUsed: approved.length > 0 };
   });
 
   try {
     const result = run();
+    if (result.approvalUsed) consumeApproval(payload.approvalToken);
+    delete result.approvalUsed;
 
     const currencyRow = db.prepare("SELECT value FROM settings WHERE key = 'currency_symbol'").get();
     const currency = currencyRow?.value || 'Rs.';
@@ -517,6 +602,8 @@ function saveSale(payload, editSaleId) {
 
     return { success: true, ...result };
   } catch (err) {
+    if (err instanceof NeedApproval) return approvalRefusal(err);
+    if (err instanceof NeedStockConfirm) return { success: false, needsStockConfirm: true, shortages: err.shortages, reason: err.message };
     if (err instanceof SaleError) return { success: false, reason: err.message };
     return { success: false, reason: `Could not complete sale: ${err.message}` };
   }
@@ -532,14 +619,20 @@ function updateSale(payload) {
 // Rule 5: a void keeps the bill (is_voided, voided_at, voided_by) and its lines for history,
 // puts the stock back, and marks the bill's payments voided — from then on it counts as zero
 // everywhere. Its invoice number stays taken, so it is never handed out again.
-function voidSale({ saleId, userId } = {}) {
+function voidSale({ saleId, userId, approvalToken } = {}) {
   const db = getDb();
+  let approvalUsed = false;
   try {
     const sale = db.transaction(() => {
       const row = db.prepare('SELECT * FROM sales WHERE id = ?').get(saleId);
       if (!row) throw new SaleError('That bill no longer exists.');
       if (row.is_voided) throw new SaleError('This bill was already voided.');
-      assertCanChange(db, row, userId);
+      if (billNeedsApproval(db, row, userId)) {
+        const adminId = peekApproval(approvalToken, userId);
+        if (!adminId) throw new NeedApproval(['void_old_bill'], OLD_BILL_MESSAGE.replace('changing', 'voiding'));
+        logApproval(db, { reasons: ['void_old_bill'], details: [`Voided ${row.invoice_no} (${Number(row.total_amount).toFixed(2)})`], saleId, invoiceNo: row.invoice_no, cashierId: userId, adminId, originPc: row.origin_pc });
+        approvalUsed = true;
+      }
       assertNoReturns(db, saleId);
       reverseSaleStock(db, row, { keepReference: true, note: `Voided ${row.invoice_no}` });
       db.prepare("UPDATE payments SET is_voided = 1 WHERE sale_id = ? AND party_type = 'customer'").run(saleId);
@@ -547,6 +640,7 @@ function voidSale({ saleId, userId } = {}) {
       refreshLastSold(db, db.prepare('SELECT product_variant_id FROM sale_items WHERE sale_id = ?').all(saleId).map((r) => r.product_variant_id));
       return row;
     })();
+    if (approvalUsed) consumeApproval(approvalToken);
     logActivity(db, {
       userId,
       action: 'sale_voided',
@@ -556,6 +650,7 @@ function voidSale({ saleId, userId } = {}) {
     });
     return { success: true, invoiceNo: sale.invoice_no };
   } catch (err) {
+    if (err instanceof NeedApproval) return approvalRefusal(err);
     if (err instanceof SaleError) return { success: false, reason: err.message };
     return { success: false, reason: `Could not void bill: ${err.message}` };
   }
@@ -589,9 +684,10 @@ function getForEdit({ saleId, userId } = {}) {
   const db = getDb();
   const sale = db.prepare('SELECT * FROM sales WHERE id = ?').get(saleId);
   if (!sale) return { success: false, reason: 'That bill no longer exists.' };
+  let needsApproval = false;
   try {
     assertNotVoided(sale);
-    assertCanChange(db, sale, userId);
+    needsApproval = billNeedsApproval(db, sale, userId);
     assertNoReturns(db, saleId);
   } catch (err) {
     return { success: false, reason: err.message };
@@ -613,7 +709,8 @@ function getForEdit({ saleId, userId } = {}) {
   const customer = sale.customer_id
     ? db.prepare('SELECT id, name, customer_type, tier, phone FROM customers WHERE id = ?').get(sale.customer_id)
     : null;
-  return { success: true, sale, lines, customer, paymentMethod: payment ? payment.payment_method : 'cash' };
+  // needsApproval: the bill is past this cashier's window — saving the change will ask for the Admin (rule 12).
+  return { success: true, sale, lines, customer, paymentMethod: payment ? payment.payment_method : 'cash', needsApproval };
 }
 
 function registerSalesIpc() {

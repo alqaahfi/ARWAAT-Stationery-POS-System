@@ -153,6 +153,7 @@ function freshDb() {
   }
   connection.initDatabase();
   for (const id of Object.values(WC)) sessionTracker.forgetWebContents(id);
+  m('ipc/users.ipc').clearLockouts();
   const d = db();
   d.prepare("INSERT INTO station_config (id, shop_name, role, station_code, sync_secret) VALUES (1, 'Test Shop', 'admin', 'MAIN', 'secret')").run();
   const ins = d.prepare('INSERT INTO users (full_name, username, password_hash, role) VALUES (?, ?, ?, ?)');

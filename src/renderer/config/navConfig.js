@@ -88,6 +88,8 @@ const navConfig = [
     tabs: [
       { key: 'stock-all', label: g.stock, route: '/stock' },
       { key: 'stock-history', label: 'History', route: '/stock/history' },
+      // Rule 12: sold without enough stock / below zero.
+      { key: 'stock-recount', label: 'To recount', route: '/stock/recount', badgeKey: 'recount' },
     ],
   }),
   section({
@@ -170,6 +172,8 @@ const navConfig = [
     tabs: [
       { key: 'cashiers-all', label: g.cashiers, route: '/cashiers' },
       { key: 'cashiers-sessions', label: g.sessionActivity, route: '/cashiers/sessions' },
+      // Rule 12: the approvals log.
+      { key: 'cashiers-approvals', label: 'Approvals', route: '/cashiers/approvals' },
     ],
     pages: [
       { key: 'cashiers-new', label: g.addCashier, route: '/cashiers/new' },

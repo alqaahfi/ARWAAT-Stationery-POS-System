@@ -14,12 +14,14 @@ export const ALERT_TYPES = [
   { key: 'overdue', label: `${glossary.overduePayments} (90+ days)`, route: '/ledgers/aging', ...appIcons.overdue, tone: 'red' },
   // Rule 11: items added at the counter wait for the Admin (buying price, approve or merge).
   { key: 'review', label: 'Items added at the counter (needs review)', route: '/products/needs-review', ...appIcons.products, tone: 'orange' },
+  // Rule 12: sold without enough stock, or stock below zero.
+  { key: 'recount', label: 'Stock to recount', route: '/stock/recount', ...appIcons.runningLow, tone: 'red' },
 ];
 
 // Counts per alert key, refreshed every minute and after each sale.
 // `loaded` turns true after the first successful fetch.
 export default function useAlerts() {
-  const [counts, setCounts] = useState({ low: 0, dead: 0, overdue: 0, review: 0, loaded: false });
+  const [counts, setCounts] = useState({ low: 0, dead: 0, overdue: 0, review: 0, recount: 0, loaded: false });
   useEffect(() => {
     let alive = true;
     function refresh() {
@@ -28,14 +30,16 @@ export default function useAlerts() {
         window.api.products.getDeadStock(),
         window.api.ledgers.getAgingReport(),
         window.api.products.listNeedsReview().catch(() => null),
+        window.api.stock.listRecount().catch(() => null),
       ])
-        .then(([low, dead, aging, review]) => {
+        .then(([low, dead, aging, review, recount]) => {
           if (alive) {
             setCounts({
               low: low.length,
               dead: dead.length,
               overdue: aging.filter((r) => r.b90plus > 0).length,
               review: review?.rows?.length || 0,
+              recount: recount?.count || 0,
               loaded: true,
             });
           }

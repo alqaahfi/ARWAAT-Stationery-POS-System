@@ -153,6 +153,24 @@ function verifyPassword(userId, password) {
   return { success: true };
 }
 
+// Rule 12: the Admin approval box on the cashier screen. Checks the Admin's
+// username + password without signing anyone in or out (the cashier stays
+// signed in). Same 5-tries / 5-minutes lockout as the login screen, on the
+// same counter, so the box can't be used to guess the Admin password.
+function checkAdminCredentials(username, password) {
+  if (!username || !password) return { ok: false, reason: 'Type the Admin username and password.' };
+  const lockKey = `login:${String(username).toLowerCase()}`;
+  if (isLockedOut(lockKey)) return { ok: false, reason: TOO_MANY_TRIES };
+  const user = getDb().prepare('SELECT * FROM users WHERE username = ?').get(username);
+  if (!user || !user.is_active || !bcrypt.compareSync(password, user.password_hash)) {
+    recordWrongTry(lockKey);
+    return { ok: false, reason: isLockedOut(lockKey) ? TOO_MANY_TRIES : 'Wrong Admin username or password.' };
+  }
+  wrongTries.delete(lockKey);
+  if (user.role !== 'admin') return { ok: false, reason: 'Only the Admin can approve this.' };
+  return { ok: true, user: toPublicUser(user) };
+}
+
 function validateSession(token, mode) {
   const db = getDb();
   if (!token) return { valid: false };
@@ -537,4 +555,9 @@ function registerUsersIpc() {
   ipcMain.handle('sessions:get-detail', (event, { id } = {}) => getSessionDetail(id));
 }
 
-module.exports = { registerUsersIpc, seedDummyCashier, createFirstAdmin, insertCashier, hasAdminUser, SALT_ROUNDS };
+// Forget every wrong-password count (the rules-check harness starts each file clean).
+function clearLockouts() {
+  wrongTries.clear();
+}
+
+module.exports = { registerUsersIpc, seedDummyCashier, createFirstAdmin, insertCashier, hasAdminUser, checkAdminCredentials, clearLockouts, SALT_ROUNDS };

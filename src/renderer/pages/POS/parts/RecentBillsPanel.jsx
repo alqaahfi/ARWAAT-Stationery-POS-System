@@ -3,6 +3,7 @@ import { Lock, Receipt } from 'lucide-react';
 import theme from '../../../config/theme';
 import { formatCurrency, formatDateTime } from '../../../utils/format';
 import { Badge, Button, EmptyState, Kbd, Spinner } from '../../../components/ui';
+import AdminApprovalDialog from '../../../components/billing/AdminApprovalDialog';
 import { InlineMessage, Money, Scrim, c, keepFocus } from './common';
 
 // Today's bills for this cashier (Admin: everyone's). ↑↓ walks the list and the
@@ -16,6 +17,7 @@ export default function RecentBillsPanel({ userId, onClose, onEdit, onVoided }) 
   const [error, setError] = useState('');
   const [confirmVoid, setConfirmVoid] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [approval, setApproval] = useState(null); // rule 12: { labels, message } while the Admin approval box is open
   const listRef = useRef(null);
 
   async function load(keepIndex) {
@@ -48,12 +50,17 @@ export default function RecentBillsPanel({ userId, onClose, onEdit, onVoided }) 
     };
   }, [selected?.id]);
 
-  async function doVoid() {
+  async function doVoid(approvalToken) {
     if (!selected || busy) return;
     setBusy(true);
-    const res = await window.api.sales.void({ saleId: selected.id, userId });
+    const res = await window.api.sales.void({ saleId: selected.id, userId, approvalToken });
     setBusy(false);
     if (!res.success) {
+      // Rule 12: an older bill needs the Admin's approval — ask right here.
+      if (res.needsApproval) {
+        setApproval({ labels: res.approvalLabels || [], message: res.reason });
+        return;
+      }
       setConfirmVoid(false);
       setError(res.reason);
       return;
@@ -68,6 +75,7 @@ export default function RecentBillsPanel({ userId, onClose, onEdit, onVoided }) 
 
   const handlerRef = useRef(() => {});
   handlerRef.current = (e) => {
+    if (approval) return; // the approval box owns the keyboard
     if (e.key === 'Escape') {
       e.preventDefault();
       if (confirmVoid) setConfirmVoid(false);
@@ -99,6 +107,20 @@ export default function RecentBillsPanel({ userId, onClose, onEdit, onVoided }) 
 
   return (
     <Scrim labelledBy="pos-recent-title">
+      {approval && (
+        <AdminApprovalDialog
+          labels={approval.labels}
+          message={approval.message}
+          onClose={() => {
+            setApproval(null);
+            setConfirmVoid(false);
+          }}
+          onApproved={(token) => {
+            setApproval(null);
+            doVoid(token);
+          }}
+        />
+      )}
       <div style={styles.card}>
         <div style={styles.header}>
           <div id="pos-recent-title" style={{ ...theme.type.title2, color: c.label }}>

@@ -105,6 +105,14 @@ contextBridge.exposeInMainWorld('api', {
     add: (data) => invoke('stock:add', data),
     remove: (data) => invoke('stock:remove', data),
     getProductStats: (data) => invoke('stock:get-product-stats', data),
+    listRecount: () => invoke('stock:list-recount'),
+    resolveRecount: (data) => invoke('stock:resolve-recount', data),
+  },
+
+  // Rule 12: Admin approval box (signed-in) + approvals log (Admin).
+  approvals: {
+    request: (data) => invoke('approvals:request', data),
+    list: (data) => invoke('approvals:list', data),
   },
 
   suppliers: {
