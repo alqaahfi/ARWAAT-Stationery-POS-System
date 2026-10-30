@@ -189,7 +189,18 @@ function getNextInvoiceNo(db, stationCode) {
     const seq = parseInt(parts[parts.length - 1], 10);
     if (!Number.isNaN(seq) && seq > maxSeq) maxSeq = seq;
   }
+  // A voided bill deletes its row, so the highest number alone would be handed out again.
+  // The last number ever issued today is remembered separately and never goes back down.
+  const issued = db.prepare('SELECT value FROM settings WHERE key = ?').get(`last_invoice_seq:${stationCode}:${today}`);
+  if (issued && Number(issued.value) > maxSeq) maxSeq = Number(issued.value);
   return `${stationCode}-${today}-${String(maxSeq + 1).padStart(4, '0')}`;
+}
+
+function rememberInvoiceNo(db, invoiceNo) {
+  const parts = invoiceNo.split('-');
+  const seq = parseInt(parts[parts.length - 1], 10);
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+    .run(`last_invoice_seq:${parts[0]}:${parts[1]}`, String(seq));
 }
 
 // ---------- checkout / edit / void ----------
@@ -336,6 +347,7 @@ function saveSale(payload, editSaleId) {
       ).run({ ...fields, saleId: editSaleId });
     } else {
       invoiceNo = getNextInvoiceNo(db, stationCode);
+      rememberInvoiceNo(db, invoiceNo);
       saleId = db
         .prepare(
           `INSERT INTO sales
