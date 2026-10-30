@@ -36,6 +36,42 @@ export function BackupCard({ exporting, onExport, savedPath }) {
   );
 }
 
+// Rule 16: the automatic daily backup — when it last ran, where, and change the folder.
+export function AutoBackupCard({ status, busy, onChangeFolder, onBackupNow }) {
+  const last = status?.lastAt ? new Date(status.lastAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : 'Not yet';
+  return (
+    <Card>
+      <CardHead icon={CircleCheck} color="green" title="Automatic backup">
+        Every day (when the app first opens, and at midnight if it is still running) a copy is saved here. The last{' '}
+        {status?.keepDays || 30} days are kept.
+      </CardHead>
+      <div style={{ ...theme.type.body, color: c.label, overflowWrap: 'anywhere' }}>
+        <div>
+          <span style={{ color: c.labelSecondary }}>Folder: </span>
+          {status?.folder || '…'}
+        </div>
+        <div style={{ marginTop: '4px' }}>
+          <span style={{ color: c.labelSecondary }}>Last automatic backup: </span>
+          {last}
+        </div>
+      </div>
+      {status?.lastError && (
+        <Banner tone="error" style={{ marginTop: theme.spacing.sm }}>
+          The last automatic backup failed: {status.lastError}
+        </Banner>
+      )}
+      <div style={{ display: 'flex', gap: theme.spacing.sm, marginTop: theme.spacing.md, flexWrap: 'wrap' }}>
+        <Button variant="secondary" icon={FolderOpen} onClick={onChangeFolder} disabled={busy}>
+          Change folder
+        </Button>
+        <Button variant="secondary" onClick={onBackupNow} loading={busy}>
+          Back up now
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 export function RestoreCard({ restoring, onRestore, error }) {
   return (
     <Card>

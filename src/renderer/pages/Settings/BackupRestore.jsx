@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm, useToast } from '../../components/ui';
 import { RestrictedNotice } from '../Parties/PartyParts';
 import { settingsColumn } from './parts/SettingsParts';
-import { BackupCard, DangerZone, RestoreCard, RestoredCard } from './parts/BackupParts';
+import { AutoBackupCard, BackupCard, DangerZone, RestoreCard, RestoredCard } from './parts/BackupParts';
 
 export default function BackupRestore() {
   const { user } = useAuth();
@@ -15,6 +15,38 @@ export default function BackupRestore() {
   const [restoring, setRestoring] = useState(false);
   const [error, setError] = useState('');
   const [restoredAwaitingRestart, setRestoredAwaitingRestart] = useState(false);
+  // Rule 16: automatic daily backup status.
+  const [autoStatus, setAutoStatus] = useState(null);
+  const [autoBusy, setAutoBusy] = useState(false);
+  const loadAuto = useCallback(() => {
+    window.api.backup.getAutoStatus().then(setAutoStatus).catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (user.role === 'admin') loadAuto();
+  }, [user.role, loadAuto]);
+
+  async function changeAutoFolder() {
+    const res = await window.api.backup.pickAutoFolder();
+    if (res?.canceled) return;
+    if (!res?.success) {
+      toast.error(res?.reason || "That folder can't be used.");
+      return;
+    }
+    toast.success('Automatic backups will be saved there');
+    loadAuto();
+  }
+
+  async function backupNow() {
+    setAutoBusy(true);
+    try {
+      const res = await window.api.backup.runAutoNow();
+      if (res?.success) toast.success('Backup saved');
+      else toast.error(res?.reason || 'The backup failed.');
+    } finally {
+      setAutoBusy(false);
+      loadAuto();
+    }
+  }
 
   const [resetConfirmText, setResetConfirmText] = useState('');
   const [resetting, setResetting] = useState(false);
@@ -90,6 +122,7 @@ export default function BackupRestore() {
 
   return (
     <div style={settingsColumn}>
+      <AutoBackupCard status={autoStatus} busy={autoBusy} onChangeFolder={changeAutoFolder} onBackupNow={backupNow} />
       <BackupCard exporting={exporting} onExport={handleExport} savedPath={savedPath} />
       <RestoreCard restoring={restoring} onRestore={handleRestore} error={error} />
       <DangerZone

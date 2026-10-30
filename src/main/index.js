@@ -33,6 +33,7 @@ const { startPeriodicSync, stopSyncTimers, DEFAULT_SYNC_PORT } = require('./sync
 const { installIpcGuard } = require('./security/ipcGuard');
 const { registerAppIpc } = require('./ipc/app.ipc');
 const { registerApprovalsIpc } = require('./ipc/approvals.ipc');
+const { startAutoBackup, stopAutoBackup } = require('./backup/autoBackup');
 const { modeFromArgv, openModeWindow, installWebContentsHardening } = require('./windows');
 
 // One process serves both apps (Admin and Cashier windows) so only one copy
@@ -106,6 +107,8 @@ function boot() {
       startSyncServer(DEFAULT_SYNC_PORT);
       startDiscovery(DEFAULT_SYNC_PORT);
       startPeriodicSync();
+      // Rule 16: today's automatic backup (if not done yet), then every midnight.
+      startAutoBackup();
     console.log('Database initialized successfully at startup.');
   } catch (err) {
     console.error('Failed to initialize database:', err);
@@ -119,6 +122,7 @@ function boot() {
 // Closing one window leaves the other running; the app quits with the last one.
 app.on('window-all-closed', () => {
   stopSyncTimers();
+  stopAutoBackup();
   stopDiscovery();
   stopSyncServer();
   app.quit();

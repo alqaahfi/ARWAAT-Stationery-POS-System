@@ -376,6 +376,20 @@ RULE 15 - Wrong computer clock = warning banner (both windows)
   Stage 3 e2e (dates N): set the Windows clock back a day after a sale -> banner in both windows within a minute;
            selling still works; fix the clock -> banner goes.
 
+RULE 16 - Automatic daily backup
+  Server: main/backup/autoBackup.js - runAutoBackup (SQLite online backup to <folder>\arwaat-auto-YYYY-MM-DD.db via a
+           .part file, once per local day unless forced, prunes arwaat-auto-* older than 30 days, records last time/file
+           or the error in settings), startAutoBackup (5 s after boot + every local midnight; index.js), folder setting
+           auto_backup_folder (default Documents\ARWAAT Backups, must be absolute + writable), weekly USB reminder
+           (usb_reminder_done_at). IPC (Admin via backup: prefix): backup:get-auto-status, pick-auto-folder (native
+           dialog - Stage 2 must add the ARWAAT_TEST_MODE bypass), set-auto-folder, run-auto-now, usb-reminder-done.
+           Dashboard summary carries autoBackup.
+  Renderer: Settings > Backup "Automatic backup" card (folder, last automatic backup, failure, Change folder, Back up
+           now); Home BackupNotice (failed backup alert + weekly "Copy a backup to a USB drive" with the folder, Done).
+  Checks: R16-01..R16-05 (PASS).
+  Stage 3 e2e: start the app -> backup file appears in Documents\ARWAAT Backups; Home shows the USB reminder until Done;
+           point the folder at an unwritable place -> Home shows the failure. MANUAL: real USB copy.
+
 STAGE 1 DECISIONS
   D1 (rule 1) Editing a saved bill: a cashier may keep the bill's OWN stored price for a pack size (same
      customer only); any other price must match the price engine. Changing the customer re-prices.

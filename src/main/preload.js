@@ -183,6 +183,11 @@ contextBridge.exposeInMainWorld('api', {
     restore: () => invoke('backup:restore'),
     relaunchApp: () => invoke('backup:relaunch-app'),
     validateAndRestore: () => invoke('backup:validate-and-restore'),
+    getAutoStatus: () => invoke('backup:get-auto-status'),
+    pickAutoFolder: () => invoke('backup:pick-auto-folder'),
+    setAutoFolder: (data) => invoke('backup:set-auto-folder', data),
+    runAutoNow: () => invoke('backup:run-auto-now'),
+    usbReminderDone: () => invoke('backup:usb-reminder-done'),
   },
 
   system: {

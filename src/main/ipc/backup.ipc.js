@@ -3,6 +3,18 @@ const fs = require('fs');
 const Database = require('better-sqlite3');
 const { getDb, getDbPath, closeDatabase, initDatabase } = require('../db/connection');
 const { relaunchApp, getModeForWebContents } = require('../windows');
+const autoBackup = require('../backup/autoBackup');
+
+// Rule 16: choose the automatic backup folder (Settings -> Backup).
+async function pickAutoBackupFolder() {
+  const result = await dialog.showOpenDialog({
+    title: 'Folder for automatic backups',
+    defaultPath: autoBackup.getAutoBackupStatus().folder,
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || !result.filePaths || result.filePaths.length === 0) return { success: false, canceled: true };
+  return autoBackup.setAutoBackupFolder(result.filePaths[0]);
+}
 
 async function exportBackup() {
   const dbPath = getDbPath();
@@ -137,6 +149,12 @@ function registerBackupIpc() {
   // Relaunches into the same window (Admin / Cashier) that asked.
   ipcMain.handle('backup:relaunch-app', (event) => relaunchApp(getModeForWebContents(event.sender.id)));
   ipcMain.handle('backup:validate-and-restore', (event) => validateAndRestoreBackup(getModeForWebContents(event.sender.id)));
+  // Rule 16: automatic daily backup (all Admin-only through the backup: prefix).
+  ipcMain.handle('backup:get-auto-status', () => autoBackup.getAutoBackupStatus());
+  ipcMain.handle('backup:pick-auto-folder', () => pickAutoBackupFolder());
+  ipcMain.handle('backup:set-auto-folder', (event, { folder } = {}) => autoBackup.setAutoBackupFolder(folder));
+  ipcMain.handle('backup:run-auto-now', () => autoBackup.runAutoBackup({ force: true }));
+  ipcMain.handle('backup:usb-reminder-done', () => autoBackup.markUsbReminderDone());
 }
 
 module.exports = { registerBackupIpc };

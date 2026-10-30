@@ -13,6 +13,7 @@ import NeedsAttentionCard from './parts/NeedsAttentionCard';
 import RecentSalesCard from './parts/RecentSalesCard';
 import QuickActionsCard from './parts/QuickActionsCard';
 import SignedInCard from './parts/SignedInCard';
+import BackupNotice from './parts/BackupNotice';
 
 const c = theme.colors;
 const NARROW_QUERY = '(max-width: 899px)';
@@ -118,6 +119,14 @@ export default function Overview({ onNavigate }) {
       ) : (
         <>
           {summary && <GettingStartedCard summary={summary} onNavigate={onNavigate} />}
+          {/* Rule 16: failed automatic backup / weekly "copy to USB" reminder. */}
+          {summary && (
+            <BackupNotice
+              status={summary.autoBackup}
+              onOpenSettings={() => onNavigate('/settings/backup')}
+              onDone={() => window.api.backup.usbReminderDone().then(loadSummary).catch(() => {})}
+            />
+          )}
           <div style={{ ...styles.tiles, gridTemplateColumns: narrow ? 'repeat(2, minmax(0, 1fr))' : 'repeat(4, minmax(0, 1fr))' }}>
             {tiles.map((t) => (
               <StatTile key={t.route} {...t} loading={loading} onClick={() => onNavigate(t.route)} />
