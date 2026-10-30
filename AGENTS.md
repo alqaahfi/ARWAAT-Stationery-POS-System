@@ -22,10 +22,11 @@ Read this file first, then SYSTEM_STATUS.md (code wins when they disagree), then
 ## Status
 | Stage | What | Status | Next concrete step |
 |---|---|---|---|
-| 1 | 17 business rules + anomaly handling (server first, then UI), one commit per rule | DONE (R1-R17 + anomalies R18, 128/128 rules checks pass) | - |
-| 2 | Reliable harness (ARWAAT_TEST_MODE, state-based waits, TEST_SPEED=fast, CLEAN-MASTER rebuild) | DONE (ARWAAT_TEST_MODE=1 dialog bypass, state-based waits, CLEAN-MASTER rebuilt) | - |
-| 3 | Run everything A-Q + per-rule + anomaly checks, bombard, crash, concurrency, load, dates, security | IN PROGRESS (NOT complete, see FINAL-TEST.md) | Fix the Admin freeze on the load DB (FINAL-TEST.md 3.1), then re-run the e2e chain |
-| 4 | Screenshot every page/form/print at 1366x768, 1920x1080, 683x768; fix UI bugs | NOT STARTED | - |
+| 1 | 17 business rules + anomaly handling (server first, then UI), one commit per rule | DONE (R1-R17 + anomalies R18; `npm run test:rules` = 138/138 incl. the R19 update checks) | - |
+| 2 | Reliable harness (ARWAAT_TEST_MODE, state-based waits, TEST_SPEED=fast, CLEAN-MASTER rebuild) | DONE | - |
+| 3 | Full e2e A-Q, bombard, crash, concurrency, load, dates, security | SKIPPED by the owner (short on time/quota). Done instead: big-database freeze fixed + load targets measured (SYSTEM_STATUS 11.1), `07-stage1-ui` run | Optional later: run the chain in FINAL-TEST.md section 5 |
+| 4 | Screenshot every page/form/print at 3 sizes | SKIPPED by the owner | Optional later |
+| Updater | In-app updates from the private GitHub repo, safe start-up migrations + recovery screen, pre-update backup, version-gated sync, release scripts | DONE (SYSTEM_STATUS section 11) | Real publish/install cycle is a MANUAL check (see below) |
 
 Model note: Recommended: run Stage 1 with the strongest available model (money/stock/balance logic), Stages 2-4 with a faster one. If a bug survives 3 honest attempts in Stages 2-4, hand just that bug to the strongest model.
 
@@ -52,7 +53,7 @@ Anomalies to handle + test (Stage 3): see the brief list (draft recovery after c
 ## Rules for agents
 - Read SYSTEM_STATUS.md first. Inline theme.js styles only, no CSS files, no new dependencies (dev deps only if a test tool needs it).
 - Fix every bug in code (smallest correct fix), re-run the failing check, commit with a one-line message. Never weaken a check or a business rule; never add sleeps to hide an app timing bug.
-- Migrations: next free number (036+); register new/changed synced columns/tables in src/main/sync/syncSchema.js; factory reset must clear new tables.
+- Migrations: next free number (042+); register new/changed synced columns/tables in src/main/sync/syncSchema.js; factory reset must clear new tables.
 - Every money/stock/balance fix needs a check that proves it.
 - Do not stop to ask questions: choose the safest behaviour for a real shop, note the decision in TEST_PROGRESS.txt.
 - Update this file and TEST_PROGRESS.txt and commit before stopping for any reason.
@@ -61,11 +62,14 @@ Anomalies to handle + test (Stage 3): see the brief list (draft recovery after c
 ## Where files live
 - tests/e2e/ (scripts, lib/, tools/), test-results/ (results.json, screens/<window>/<size>/<page>-<state>.png, TEST_RESULTS.txt), test-backups/ (CLEAN-MASTER.db etc.), TEST_PROGRESS.txt, SYSTEM_STATUS.md.
 
-## HANDOFF NOTE (run stopped early, owner out of budget)
-- Rules 1-16 are committed and done. Rule 17 is WORK IN PROGRESS and UNVERIFIED (committed as "WIP"): server code in src/main/ipc/returns.ipc.js + reports.ipc.js, migration 040_no_bill_returns.sql, sync/syncSchema.js, preload.js, UI src/renderer/pages/Sales/parts/returns/NoBillReturnDialog.jsx, check tests/rules/checks/r17-returns.js (just written, never run).
-- NEXT: run `npm run test:rules` and fix r17; finish Returns step 1 search UI (by item/barcode, customer, date) and wire NoBillReturnDialog (Admin only, cash, refund = lowest price in last 30 days else current retail, no sale link, keep out of per-sale returnable logic); check migration 040 numbering is clean (036-039 used by earlier rules); commit.
-- THEN: remaining anomaly handling (qty > 100 or line > Rs 100,000 confirm; double Enter/click on Pay = one sale; scanner trim/lowercase/barcode-equals-name; price changed while bill open; product/customer deactivated mid-sale; sign-out with open cart holds it; printer off = sale saved + message; two cashiers selling last unit) - see BRIEF.md section 2 and TEST_PROGRESS.txt; none of these were done yet except what the rule commits already cover.
-- THEN Stages 2, 3, 4 (NOT STARTED). Stage 2 first step: ARWAAT_TEST_MODE=1 bypass for file dialogs in backup/restore/export/letterhead pickers.
+## Releasing (in-app updates) - the developer does this, not agents
+1. Set env `GH_TOKEN` (uploads the release) and `GH_UPDATE_TOKEN` (read-only token baked into the app); restart VS Code. Never print/commit/log them.
+2. Commit everything (the release script refuses a dirty tree). `npm run release` (patch) or `npm run release:minor`: bumps the version, commits "Release vX", pushes, builds, uploads a **draft** GitHub release (installer + blockmap + latest.yml).
+3. On GitHub -> Releases: add short notes, press **Publish** (installed apps only see published releases).
+4. First install of the updater build in the shop: by hand (data stays). Later updates: commit -> `npm run release` -> publish -> the Admin uses Settings -> Updates -> Update now.
+5. `npm run dist` builds the installer locally without publishing. Do NOT run it while e2e tests are running (it rebuilds native modules).
+- MANUAL check (needs two published versions): install N, publish N+1, Update now; the pre-update backup appears in `%APPDATA%\stationary-pos-appackups\pre-update\`, the app returns on N+1 and Home says "Updated to version N+1".
+- Never change package.json `name` (`stationary-pos-app` decides the userData folder), `appId` or `productName`.
 
 ## LATEST (see FINAL-TEST.md)
-- FINAL-TEST.md in the project root is the honest end-of-session report: 128/128 rules checks pass; e2e Stage 3 incomplete; Stage 4 not started; possible app freeze on the 50k-sale DB (kept at test-backups/antigravity-load-db/).
+- FINAL-TEST.md is the earlier end-of-session report (its open problems are addressed in SYSTEM_STATUS section 11 and TEST_PROGRESS.txt, finish-up run). The 50k-sale load DB is kept at test-backups/antigravity-load-db/ (git-ignored).

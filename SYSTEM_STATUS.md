@@ -25,9 +25,11 @@ src/
     security/ipcGuard.js        Central IPC guard + getCaller(event) / withCallerId() (§5 "Security model")
     preload.js                  contextBridge: window.api.<area>.<method>() → ipcRenderer.invoke('<area>:<action>');
                                 also window.api.app.mode ('admin'|'cashier') and the pos:session-ended event
-    db/connection.js            Opens userData/pos.db (WAL, foreign_keys ON), runs every migrations/*.sql not yet
-                                in the _migrations table, in filename order
-    db/migrations/001–035       Schema (see §3)
+    db/connection.js            Opens userData/pos.db (WAL, foreign_keys ON) and makes it safe BEFORE any window: integrity
+                                check (full after an update, quick otherwise) -> downgrade guard -> every migrations/*.sql
+                                not yet in _migrations, in filename order, each in its own transaction (section 11.3). Throws
+                                StartupProblem (integrity | migration | newer) -> index.js shows the recovery screen
+    db/migrations/001–041       Schema (see §3; 036–040 = business rules 5/11/12/14/17, 041 = big-database index)
     db/models/Product.js        getLowStock / getDeadStock / getProductStockStatus — the ONE definition of stock status
     ipc/*.ipc.js                One file per area; each exports register<Area>Ipc()
     pricing/priceEngine.js      resolveUnitPrice() — the only price logic (§6.2)
@@ -97,7 +99,7 @@ tests/                          exists but there is no test runner (npm test is 
 
 ---
 
-## 3. Data model (migrations `001`–`035`)
+## 3. Data model (migrations `001`–`041`)
 
 All timestamps written with `datetime('now')` are **UTC text**; user-entered calendar dates (`expenses.expense_date`, `recurring_expenses.*_date`) are local `YYYY-MM-DD`. Soft delete via `is_active` on products, variants, units, customers, suppliers, users (sales/purchases reference them).
 
@@ -306,7 +308,7 @@ One-time or repeating (daily/weekly/monthly/annually) with payee, description, a
 - **Hidden print windows** are all made by `windows.js` (`createHiddenRendererWindow` for ?print=1 views, `createPdfWindow` for printing a PDF file) and loaded with `loadRenderer(win, search)`.
 
 ### 6.12 Multi-PC sync (LAN, no cloud)
-- **Discovery** (`discovery.js`): UDP broadcast on port **41234** every 5 s `{machineId (= this PC's `station_id`, name kept for wire compatibility), stationCode, role, tcpPort}`; peers unseen for 30 s show offline but are kept (`sync_peer_state`).
+- **Discovery** (`discovery.js`): UDP broadcast on port **41234** every 5 s `{machineId (= this PC's `station_id`, name kept for wire compatibility), stationCode, role, tcpPort, appVersion, migration}`; peers unseen for 30 s show offline but are kept (`sync_peer_state`).
 - **Transport** (`syncServer.js`): every PC runs Express on port **4000** with `POST /sync/exchange`, requiring header `x-sync-secret` = `station_config.sync_secret` (compared with `crypto.timingSafeEqual`; 401 otherwise); also `POST /setup/register-cashier` (same secret check) used by a counter PC's Setup (§4). The secret is checked **before** the JSON body is parsed; body caps 25 MB (exchange) / 16 KB (register). **Wrong-secret throttle:** 10 wrong secrets from one IP within 10 minutes → that IP gets 429 for 15 minutes (both endpoints; not counted before this PC has a secret). Authenticated but **not encrypted**.
 - **What travels** (`syncSchema.js`): `categories, products, product_variants (minus stock_qty), product_units, customers, suppliers, users, user_permissions, letterheads, percentage_pricing_rules` (upsert; last write wins), `sale_returns, sale_return_items, purchases, purchase_items, ledger_adjustments` (insert-only, dedup by uuid), `sales, sale_items, payments` (**upsert + deletable since 030** so edits/voids reach other PCs; an edit syncs as a sales update + deleted old items/payment + inserted new ones), `stock_movements` (dedup by uuid, then applied as a **delta** to the local `stock_qty`). Deletes travel for `user_permissions`, `letterheads`, `percentage_pricing_rules` **and, since 030, `sales`, `sale_items`, `payments`** (bill edit/void). **Not synced:** `settings`, `expenses`, `recurring_expenses`, `sessions`, `activity_log`, `license_*`, dev tables, and category deletes.
 - **UUIDs/outbox/triggers** (022 + 026 + 030; 030 adds `trg_sales_au` (only once the row has a uuid), `trg_sales_ad`, `trg_sale_items_ad`, `trg_payments_ad`): every synced table has a `uuid` filled by an AFTER INSERT trigger; AFTER INSERT/UPDATE(/DELETE) triggers append to `sync_outbox`, so app code never queues anything. Master tables also get `origin_station`. `recordCodec` swaps local FK ids for uuids on the wire (incl. polymorphic `payments.party_id`, `ledger_adjustments.party_id`, `stock_movements.reference_id`); `applyIncoming` applies a batch in one transaction, deferring records whose references haven't arrived and retrying until no progress.
@@ -419,7 +421,8 @@ npm run dev            concurrently: vite (5173) + wait-on tcp:5173 → cross-en
 npm run dev:cashier    (while npm run dev runs) cross-env NODE_ENV=development electron . --mode=cashier → opens the
                        Cashier window in the running app (single-instance hand-over)
 npm run build:renderer vite build  → src/renderer/dist
-npm run dist           build:renderer + electron-builder --win (NSIS installer → release/)
+npm run dist           write update token (if GH_UPDATE_TOKEN set) + build:renderer + electron-builder --win --publish never (local installer -> release/)
+npm run release        patch release (section 11.5): bump, commit, push, build, upload DRAFT release   |   npm run release:minor  (minor bump)
 npm test               stub (no tests)
 ```
 - **Runtime deps:** react / react-dom / react-is 19, better-sqlite3 13, bcrypt 6, express 5 (sync server), node-thermal-printer 4, pdf-lib 1.17, recharts 3, lucide-react, @fontsource-variable/inter.
@@ -427,3 +430,32 @@ npm test               stub (no tests)
 - **Packaging** (`electron-builder.yml`): appId `com.arwaat.stationerysystems`, productName "ARWAAT Stationery Systems", files `src/main/**`, `src/renderer/dist/**`, `src/shared/**`, `package.json`; `asarUnpack` better-sqlite3 + bcrypt; `extraResources` `build-resources/admin.ico` / `cashier.ico` → `resources/icons/`; Windows NSIS (not one-click, choose dir), exe icon `build-resources/icon.ico`. The default shortcuts are off; `nsis.include: build-resources/installer.nsh` (`customInstall` / `customUnInstall`) creates and removes **"ARWAAT Admin"** (`--mode=admin`, `icons\admin.ico`) and **"ARWAAT Cashier"** (`--mode=cashier`, `icons\cashier.ico`) on the Desktop and in the Start Menu, each tagged with its window's AppUserModelID. **Electron fuses** (`electronFuses`): RunAsNode off, NODE_OPTIONS off, `--inspect` args off, embedded ASAR integrity validation on, only load app from ASAR on — this affects only the packaged exe; dev scripts that use `ELECTRON_RUN_AS_NODE` run the unfused Electron in `node_modules`.
 - **Data location:** `%APPDATA%/stationary-pos-app/pos.db` (Electron `userData`; package name `stationary-pos-app`), plus `letterheads/` and `receipts/` folders there. Dev loads `http://localhost:5173`; production loads `src/renderer/dist/index.html`.
 - Native modules must match Electron's Node ABI (`@electron/rebuild`); scripts that open the DB outside the app run via `ELECTRON_RUN_AS_NODE=1 electron <script>`.
+
+---
+
+## 11. In-app updates, release process and the finish-up fixes (2026-10-30)
+
+### 11.1 Big-database freeze (fixed)
+`ledgers:get-aging-report` (called by the Admin Home alerts hook at start and every 60 s) ran one query per customer; on the 10k-item / 2k-customer / 50k-sale load DB SQLite chose `idx_sales_voided_created (is_voided=?)` for each, scanning every sale 2,000 times (about 48 s of blocked main process). Now one grouped query (45 ms). The `idx_sales_voided_created` index moved from a `CREATE INDEX` inside every Sales Report call to migration `041_perf_indexes.sql`. Measured on that DB (in-process handlers): start + migrations 16 ms, Home summary 54 ms, aging 45 ms, one-month Sales report 18 ms, one-year 129 ms (P&L 328 ms), POS item search 10 ms.
+
+### 11.2 Stage 1 dialogs checked on screen (`TEST_SPEED=fast node tests/e2e/run-all.js 07-stage1-ui`)
+Real app bug fixed: in Today's bills (F2) the **Void bill** button called `doVoid(clickEvent)`, so a mouse click sent the click event as the approval token (keyboard Enter worked). The credit-limit dialog now also says "Over by: Rs X". The other failures were test problems (wrong key F8 vs F2, wrong button names, the backdated bill not selected, a stale held-bill count) and cascades from them.
+
+### 11.3 Start-up safety (src/main/db/connection.js, src/main/update/recovery.js)
+Order at boot, before any window, IPC or sync service: `PRAGMA integrity_check` (full when an update is pending, `quick_check` on normal starts) -> downgrade guard (applied migration files newer than anything this app knows -> "This data was made by a newer version of ARWAAT. Install the latest version.") -> pending migrations. Every migration runs in its own transaction and is recorded in `_migrations` only if it fully succeeded (table-rebuild files that switch `PRAGMA foreign_keys` off / carry their own BEGIN/COMMIT are run by `applyMigration` with those lines stripped and foreign keys off around the transaction; the resulting schema was compared with the old runner and is identical). When pending migrations exist on a non-empty database a consistent copy is written first (`VACUUM INTO userData/backups/pre-migration/`, newest 5; skipped when an update just made its pre-update backup). Any failure throws `StartupProblem` and `index.js` opens ONLY the recovery window (inline-styled data: page + `recoveryPreload.js`, nothing else registered): "The update couldn't finish. Your data is safe." + the plain error + **Restore the backup from before the update** (validates the recorded backup, replaces pos.db keeping this PC's sync id, relaunches so the steps are retried) + Close + "Contact ARWAAT: 0319 2224504". The record of the pending update lives in settings (`pending_update`) AND in `userData/pending-update.json` (which is what recovery reads, and it survives restoring the older backup). After a successful start `finishPendingUpdate()` clears the record, queues the one-time Home toast (`settings.updated_notice`, read by `updates:consume-updated-notice`) and reopens the windows that were open before the update.
+
+### 11.4 Updater (src/main/update/, ipc/updates.ipc.js, pages/Settings/Updates.jsx)
+- `electron-updater` GitHub provider for the private repo `arwaheed/arwaat-pos-system`, `autoDownload=false`, `autoInstallOnAppQuit=false`, packaged builds only (dev: "Updates only work in the installed app."). Quiet check 30 s after start and every 24 h; a newer version shows on Admin Home "Needs attention" ("Update available — version X") and in the bell; nothing downloads by itself. The token comes from `updateToken.generated.js` (git-ignored, written at build time from env `GH_UPDATE_TOKEN` by `scripts/write-update-token.js`); `updateToken.js` scrubs it from any text; it is never logged, audited, stored in settings or shown. Release notes: the release body from the GitHub API (plain text); size from latest.yml.
+- `updates:*` channels are Admin-only (`ADMIN_PREFIXES` in ipcGuard); the Cashier window has no update UI. Settings -> **Updates**: current version, last check, Check for updates, version/notes/size, **Update now** (download with progress, then install) and plain messages: offline, "Updates can't be reached. Contact ARWAAT: 0319 2224504." (token expired/forbidden/404), "You're up to date.", download failed (Try again).
+- **Install (`updater.installNow`)**: refuses with "Finish or hold the bill in the Cashier window first." while any window reports it is entering a bill (`app:set-busy` <- `renderer/utils/useEntryBusy.js`, used by the POS sale (any stage but idle/saved, or saving), quick sale/purchase form, quick-add item dialog, return flow after the find step, no-bill return dialog; flags clear when a window closes); full online backup to `userData/backups/pre-update/pre-update_<version-the-data-was-on>_<YYYY-MM-DD_HHmm>.db`, verified (read-only open, `integrity_check`, core tables) — a failure stops the update; newest 5 kept; a copy also goes into the automatic-backup folder when one is set; records the pending update; closes both windows, stops sync/discovery/backup timers, WAL-checkpoints and closes the DB, `quitAndInstall(true, true)` (silent, relaunches). If the installer cannot take over within 30 s the app relaunches normally.
+- Installer: `nsis.deleteAppDataOnUninstall: false` (data in `%APPDATA%\stationary-pos-app` is never removed). package.json `name`, `appId`, `productName` and the two shortcuts are unchanged.
+
+### 11.5 Release process (developer)
+Needs env `GH_TOKEN` (uploads the release) and `GH_UPDATE_TOKEN` (read-only; baked into the app). `npm run release` = patch bump (`release:minor` = minor): checks both tokens are set (prints only set/missing), refuses a dirty git tree, fails early if `GH_UPDATE_TOKEN` is missing, `npm version`, commits "Release vX", pushes, `vite build`, `electron-builder --win --publish always` -> a **draft** GitHub release (installer, blockmap, latest.yml). The owner opens GitHub -> Releases, adds notes and presses **Publish** (installed apps only see published releases). The first install of the updater build in the shop is done by hand (data stays); later: commit -> `npm run release` -> publish the draft. `npm run dist` builds locally without publishing.
+
+### 11.6 Multi-PC version safety (src/main/sync/versionGate.js)
+The discovery packet and every `/sync/exchange` request/response carry `appVersion` + the newest applied migration number. If the numbers differ (or a build announces none) the exchange is refused both ways before any record is sent or applied (the client skips the peer; the server answers 409 `version-mismatch`; a reply without a matching number is not applied); the outbox is untouched and syncing resumes by itself once they match. Shown on Connected Computers (banner + per-computer line) and on the sync chip ("Paused"): "Paused: <computer> is on version X, this computer is on version Y. Update both computers to the same version." Logged once per pause in `sync_log`.
+
+### 11.7 Checks
+`npm run test:rules` = 138 checks (128 rules + R19-01..10: migration rollback, downgrade guard, pre-update backup/verify/prune, pending record + recovery wording, restore keeping the sync id, Admin-only `updates:*`, busy refusal, messages/token scrub, version-gated exchange and sync client). Not testable without a published release: the real GitHub check/download/install and the silent installer relaunch (MANUAL: install version N by hand, publish N+1, Settings -> Updates -> Update now; confirm the pre-update file exists, the app returns on N+1, Home shows "Updated to version N+1").
+

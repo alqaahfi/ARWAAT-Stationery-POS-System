@@ -483,3 +483,22 @@ blocking main-process CPU, called by the Admin Home alerts hook (and every 60 s)
 Also moved the CREATE INDEX idx_sales_voided_created out of getSalesReport into migration 041.
 Measured on the load DB (in-process handlers): start/migrations 16 ms, dashboard summary 54 ms, aging 45 ms, 1-month sales report 18 ms,
 1-year 129 ms (P&L 328 ms), POS item search 10 ms, stock report 39 ms. All targets met.
+
+Part B (finish-up run): dialogs checked with ONE targeted `TEST_SPEED=fast node tests/e2e/run-all.js 07-stage1-ui` (final clean run: 11/11 PASS:
+UI-R00, R11-01, R11-02, R12-01 admin approval box (discount cap, oversell -> Stock to recount, void of a 15-min-old bill), R05-14 voided badge + *** VOIDED *** +
+DUPLICATE COPY, R02-01 credit-limit warning, R15-01, R16-01, R17-01 returns by item + no-bill return, R18-01 qty>100 confirm / price changed / held cart on sign-out, R99).
+Real app bug found + fixed: RecentBillsPanel "Void bill" button passed the click event as the approval token (mouse click failed; keyboard Enter worked).
+Credit-limit message now also says "Over by: Rs X". Test fixes: R12 used F8 instead of F2, wrong button names, did not select the backdated bill (it sorts below newer bills),
+R18 asserted "Held (1)" while a stale held bill existed (now relative). NOTE: never run `npm run dist` while e2e tests run (it rebuilds native modules and breaks the running app).
+
+Part C decisions (safest behaviour for a real shop):
+- A safety copy (VACUUM INTO userData/backups/pre-migration, newest 5) is also taken whenever pending migrations meet existing data, e.g. when the owner installs the new version by hand over the old one.
+  If that copy fails the app still starts (each migration is transactional); the failure is only logged.
+- Pre-update backup file name uses the version the data is on (the "from" version).
+- Recovery reads userData/pending-update.json (not only the settings row) because the DB may be unreadable, and because restoring the older backup removes the settings row.
+- Restore from the recovery screen keeps this PC's sync station id (the backup is this PC's own); the normal Settings restore still drops it.
+- "latest release not found" (404) with a working read-only token is shown as "You're up to date" (nothing published yet); 401/403 or a token that cannot read the repo shows the Contact ARWAAT message.
+- Updates are Admin-only, so counter computers are updated by running the installer by hand; version-paused sync tells the user so.
+- Silent install (quitAndInstall(true,true)) relaunches the Admin window; the Cashier window that was open is reopened by the app after the update (pending record keeps the window list).
+- Smoke-tested in the real app: damaged-database recovery screen -> Restore -> relaunch -> login; Settings -> Updates in dev ("Updates only work in the installed app.").
+- NOT testable without two published releases: real GitHub download + silent installer relaunch (MANUAL step in AGENTS.md).

@@ -123,6 +123,22 @@ function getUpdater() {
   return au;
 }
 
+// True when the read-only token can see the repository. A 404 for "latest release" with a
+// working token only means nothing has been published yet — that is "up to date", not an error.
+async function repoReadable() {
+  const token = getUpdateToken();
+  if (!token) return false;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}`, {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'ARWAAT-POS-Updater' },
+      signal: AbortSignal.timeout(10000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 async function fetchReleaseNotes() {
   const token = getUpdateToken();
   if (!token) return '';
@@ -184,9 +200,17 @@ async function checkForUpdates() {
         state.status = 'available';
       }
     } catch (err) {
-      state.error = describeError(err, 'check');
-      state.status = 'error';
-      state.available = null;
+      const described = describeError(err, 'check');
+      if (described.kind === 'unreachable' && /404|latest_version_not_found/i.test(described.detail) && (await repoReadable())) {
+        state.lastCheckAt = new Date().toISOString();
+        setSetting(LAST_CHECK_KEY, state.lastCheckAt);
+        state.status = 'uptodate';
+        state.available = null;
+      } else {
+        state.error = described;
+        state.status = 'error';
+        state.available = null;
+      }
     }
     return getState();
   })();
