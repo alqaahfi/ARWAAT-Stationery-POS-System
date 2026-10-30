@@ -22,7 +22,7 @@ Read this file first, then SYSTEM_STATUS.md (code wins when they disagree), then
 ## Status
 | Stage | What | Status | Next concrete step |
 |---|---|---|---|
-| 1 | 17 business rules + anomaly handling (server first, then UI), one commit per rule | IN PROGRESS - done: R1 9295f6a, R2 9240782, R3 9ddd33a, R4 2a1777a, R5 9261169, R6 e151378, R7 fe33dd2, R8 565067d, R9 547bb61, R10 795ac5b, R11 9c189b5, R12 a98e6bf, R13 f404401, R14 83bf1e8, R15 3d86a18, R16 7f83830 | Rule 17 (returns search by item/customer/date + no-bill return) |
+| 1 | 17 business rules + anomaly handling (server first, then UI), one commit per rule | IN PROGRESS (R17 WIP, see HANDOFF NOTE below) - done: R1 9295f6a, R2 9240782, R3 9ddd33a, R4 2a1777a, R5 9261169, R6 e151378, R7 fe33dd2, R8 565067d, R9 547bb61, R10 795ac5b, R11 9c189b5, R12 a98e6bf, R13 f404401, R14 83bf1e8, R15 3d86a18, R16 7f83830 | Rule 17 (returns search by item/customer/date + no-bill return) |
 | 2 | Reliable harness (ARWAAT_TEST_MODE, state-based waits, TEST_SPEED=fast, CLEAN-MASTER rebuild) | NOT STARTED | - |
 | 3 | Run everything A-Q + per-rule + anomaly checks, bombard, crash, concurrency, load, dates, security | NOT STARTED | - |
 | 4 | Screenshot every page/form/print at 1366x768, 1920x1080, 683x768; fix UI bugs | NOT STARTED | - |
@@ -60,3 +60,9 @@ Anomalies to handle + test (Stage 3): see the brief list (draft recovery after c
 
 ## Where files live
 - tests/e2e/ (scripts, lib/, tools/), test-results/ (results.json, screens/<window>/<size>/<page>-<state>.png, TEST_RESULTS.txt), test-backups/ (CLEAN-MASTER.db etc.), TEST_PROGRESS.txt, SYSTEM_STATUS.md.
+
+## HANDOFF NOTE (run stopped early, owner out of budget)
+- Rules 1-16 are committed and done. Rule 17 is WORK IN PROGRESS and UNVERIFIED (committed as "WIP"): server code in src/main/ipc/returns.ipc.js + reports.ipc.js, migration 040_no_bill_returns.sql, sync/syncSchema.js, preload.js, UI src/renderer/pages/Sales/parts/returns/NoBillReturnDialog.jsx, check tests/rules/checks/r17-returns.js (just written, never run).
+- NEXT: run `npm run test:rules` and fix r17; finish Returns step 1 search UI (by item/barcode, customer, date) and wire NoBillReturnDialog (Admin only, cash, refund = lowest price in last 30 days else current retail, no sale link, keep out of per-sale returnable logic); check migration 040 numbering is clean (036-039 used by earlier rules); commit.
+- THEN: remaining anomaly handling (qty > 100 or line > Rs 100,000 confirm; double Enter/click on Pay = one sale; scanner trim/lowercase/barcode-equals-name; price changed while bill open; product/customer deactivated mid-sale; sign-out with open cart holds it; printer off = sale saved + message; two cashiers selling last unit) - see BRIEF.md section 2 and TEST_PROGRESS.txt; none of these were done yet except what the rule commits already cover.
+- THEN Stages 2, 3, 4 (NOT STARTED). Stage 2 first step: ARWAAT_TEST_MODE=1 bypass for file dialogs in backup/restore/export/letterhead pickers.

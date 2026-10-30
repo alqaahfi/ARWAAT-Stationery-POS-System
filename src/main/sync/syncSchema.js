@@ -113,7 +113,7 @@ const SYNC_TABLES = {
   sale_returns: {
     kind: 'insert_only',
     fks: {
-      sale_id: { table: 'sales' },
+      sale_id: { table: 'sales', nullable: true }, // 040: a no-bill return has no sale
       customer_id: { table: 'customers', nullable: true },
       created_by: { table: 'users', nullable: true },
     },
@@ -122,7 +122,9 @@ const SYNC_TABLES = {
     kind: 'insert_only',
     fks: {
       return_id: { table: 'sale_returns' },
-      sale_item_id: { table: 'sale_items' },
+      sale_item_id: { table: 'sale_items', nullable: true }, // 040: no-bill lines name the Type + pack size instead
+      product_variant_id: { table: 'product_variants', nullable: true },
+      product_unit_id: { table: 'product_units', nullable: true },
     },
   },
   payments: {

@@ -73,7 +73,7 @@ function getSalesReport(filters, requestingUserId) {
     .prepare(
       `SELECT date(r.created_at, 'localtime') AS day, COUNT(*) AS count, COALESCE(SUM(r.total_amount), 0) AS total
        FROM sale_returns r
-       JOIN sales s ON s.id = r.sale_id
+       LEFT JOIN sales s ON s.id = r.sale_id
        WHERE date(r.created_at, 'localtime') BETWEEN date(?) AND date(?)${saleFilterSql}
        GROUP BY day`
     )
@@ -192,8 +192,8 @@ function getProfitLoss(filters) {
       `SELECT ${returnExpr} AS bucket, COALESCE(SUM(sri.quantity * pu.cost_price), 0) AS returnedCost
        FROM sale_return_items sri
        JOIN sale_returns r ON r.id = sri.return_id
-       JOIN sale_items si ON si.id = sri.sale_item_id
-       JOIN product_units pu ON pu.id = si.product_unit_id
+       LEFT JOIN sale_items si ON si.id = sri.sale_item_id
+       JOIN product_units pu ON pu.id = COALESCE(si.product_unit_id, sri.product_unit_id)
        WHERE r.restocked = 1 AND date(r.created_at, 'localtime') BETWEEN date(?) AND date(?)
        GROUP BY bucket`
     )
@@ -470,11 +470,12 @@ function getCashierPerformance(filters) {
   // day the return was made.
   const returnRows = db
     .prepare(
-      `SELECT s.cashier_id AS id, COALESCE(SUM(r.total_amount), 0) AS returns_total
+      // A no-bill return (rule 17) counts against whoever recorded it.
+      `SELECT COALESCE(s.cashier_id, r.created_by) AS id, COALESCE(SUM(r.total_amount), 0) AS returns_total
        FROM sale_returns r
-       JOIN sales s ON s.id = r.sale_id
+       LEFT JOIN sales s ON s.id = r.sale_id
        WHERE date(r.created_at, 'localtime') BETWEEN date(?) AND date(?)
-       GROUP BY s.cashier_id`
+       GROUP BY COALESCE(s.cashier_id, r.created_by)`
     )
     .all(from, to);
 

@@ -106,7 +106,7 @@ function listReturns(input = {}) {
 
   const fromSql = `
     FROM sale_returns r
-    JOIN sales s ON s.id = r.sale_id
+    LEFT JOIN sales s ON s.id = r.sale_id
     LEFT JOIN customers c ON c.id = r.customer_id
     ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
   `;
@@ -138,7 +138,7 @@ function getReturnDetail(input = {}) {
               r.customer_id, r.total_amount, r.cash_refund_amount, r.reason, r.note, r.restocked,
               u.full_name AS processed_by_name
        FROM sale_returns r
-       JOIN sales s ON s.id = r.sale_id
+       LEFT JOIN sales s ON s.id = r.sale_id
        LEFT JOIN users u ON u.id = r.created_by
        WHERE r.id = ?`
     )
@@ -154,10 +154,10 @@ function getReturnDetail(input = {}) {
     .prepare(
       `SELECT sri.id, p.name AS item_name, pv.variant_name, pu.unit_name, sri.quantity, sri.refund_amount
        FROM sale_return_items sri
-       JOIN sale_items si ON si.id = sri.sale_item_id
-       JOIN products p ON p.id = si.product_id
-       JOIN product_variants pv ON pv.id = si.product_variant_id
-       JOIN product_units pu ON pu.id = si.product_unit_id
+       LEFT JOIN sale_items si ON si.id = sri.sale_item_id
+       JOIN product_variants pv ON pv.id = COALESCE(si.product_variant_id, sri.product_variant_id)
+       JOIN products p ON p.id = pv.product_id
+       JOIN product_units pu ON pu.id = COALESCE(si.product_unit_id, sri.product_unit_id)
        WHERE sri.return_id = ?
        ORDER BY sri.id`
     )
@@ -328,11 +328,149 @@ function createReturn(input = {}) {
   }
 }
 
+// ---------------- Rule 17: find the bill without the bill ----------------
+// Searches non-voided bills by bill number, customer name/phone, item name /
+// search spelling / barcode, and date (YYYY-MM-DD or DD-MM-YYYY), plus an
+// optional date range. Newest first, same row shape as Sales History.
+function searchSalesForReturn(input = {}) {
+  const db = getDb();
+  if (!isAdmin(db, input.requestingUserId)) return DENIED;
+  const text = String(input.search || '').trim();
+  const where = ['s.is_voided = 0'];
+  const params = [];
+  if (input.dateFrom) {
+    where.push("date(s.created_at, 'localtime') >= ?");
+    params.push(input.dateFrom);
+  }
+  if (input.dateTo) {
+    where.push("date(s.created_at, 'localtime') <= ?");
+    params.push(input.dateTo);
+  }
+  if (text) {
+    const like = `%${text}%`;
+    const conds = [
+      's.invoice_no LIKE ?',
+      'c.name LIKE ?',
+      'c.phone LIKE ?',
+      'c.mobile LIKE ?',
+      `EXISTS (SELECT 1 FROM sale_items si JOIN products p ON p.id = si.product_id JOIN product_variants pv ON pv.id = si.product_variant_id
+               WHERE si.sale_id = s.id AND (p.name LIKE ? OR p.search_alias LIKE ? OR pv.barcode = ? OR pv.variant_name LIKE ?))`,
+    ];
+    params.push(like, like, like, like, like, like, text, like);
+    let day = null;
+    let m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+    if (m) day = `${m[1]}-${m[2]}-${m[3]}`;
+    m = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.exec(text);
+    if (m) day = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    if (day) {
+      conds.push("date(s.created_at, 'localtime') = ?");
+      params.push(day);
+    }
+    where.push(`(${conds.join(' OR ')})`);
+  }
+  const limit = Math.min(Math.max(Number(input.limit) || 30, 1), MAX_LIMIT);
+  const rows = db
+    .prepare(
+      `SELECT s.id, s.invoice_no, s.created_at, s.sale_type, s.customer_id, c.name AS customer_name, s.total_amount,
+              s.paid_amount, s.balance_due, s.payment_status, u.full_name AS cashier_name,
+              (SELECT COALESCE(SUM(r.total_amount), 0) FROM sale_returns r WHERE r.sale_id = s.id) AS returned_amount
+       FROM sales s
+       LEFT JOIN customers c ON c.id = s.customer_id
+       JOIN users u ON u.id = s.cashier_id
+       WHERE ${where.join(' AND ')}
+       ORDER BY s.created_at DESC, s.id DESC
+       LIMIT ?`
+    )
+    .all(...params, limit);
+  return { success: true, rows };
+}
+
+// ---------------- Rule 17: return without the bill (Admin only) ----------------
+// Refund per unit = the lowest price this pack size really sold for in the last
+// 30 days (unit price after the bill's own discount share, non-voided bills),
+// else today's retail price. Always cash, stock always goes back, no customer,
+// no sale link — so it never touches any bill's "returnable" quantities.
+function noBillUnitPrice(db, productUnitId) {
+  const unit = db.prepare('SELECT id, product_id, retail_price FROM product_units WHERE id = ?').get(productUnitId);
+  if (!unit) return null;
+  const row = db
+    .prepare(
+      `SELECT MIN(si.unit_price * CASE WHEN s.subtotal > 0 THEN s.total_amount / s.subtotal ELSE 1 END) AS low
+       FROM sale_items si JOIN sales s ON s.id = si.sale_id
+       WHERE si.product_unit_id = ? AND s.is_voided = 0 AND si.quantity > 0
+         AND s.created_at >= datetime('now', '-30 days')`
+    )
+    .get(productUnitId);
+  const sold = row && row.low !== null && row.low !== undefined;
+  return { price: round2(sold ? row.low : unit.retail_price), source: sold ? 'lowest_30_days' : 'retail' };
+}
+
+function loadNoBillLine(db, input) {
+  const variant = db.prepare('SELECT pv.id, pv.product_id, pv.variant_name, p.name FROM product_variants pv JOIN products p ON p.id = pv.product_id WHERE pv.id = ?').get(input.productVariantId);
+  if (!variant) return { error: 'Choose the item that is coming back.' };
+  const unit = db.prepare('SELECT id, product_id, unit_name, conversion_factor FROM product_units WHERE id = ? AND product_id = ?').get(input.productUnitId, variant.product_id);
+  if (!unit) return { error: 'Choose a pack size of that item.' };
+  return { variant, unit };
+}
+
+function getNoBillPrice(input = {}) {
+  const db = getDb();
+  if (!isAdmin(db, input.requestingUserId)) return DENIED;
+  const line = loadNoBillLine(db, input);
+  if (line.error) return { success: false, reason: line.error };
+  return { success: true, ...noBillUnitPrice(db, line.unit.id) };
+}
+
+function createNoBillReturn(input = {}) {
+  const db = getDb();
+  if (!isAdmin(db, input.requestingUserId)) return DENIED;
+  const reason = String(input.reason || '');
+  if (!REASONS.includes(reason)) return { success: false, reason: 'Choose why the items are coming back.' };
+  const qty = wholeQty(input.quantity);
+  if (qty === null) return { success: false, reason: WHOLE_QTY_MSG };
+  const line = loadNoBillLine(db, input);
+  if (line.error) return { success: false, reason: line.error };
+  const note = String(input.note || '').trim() || null;
+  const activation = db.prepare('SELECT station_code FROM station_config WHERE id = 1').get();
+  const stationCode = (activation && activation.station_code) || 'MAIN';
+
+  const run = db.transaction(() => {
+    const { price, source } = noBillUnitPrice(db, line.unit.id);
+    const total = round2(price * qty);
+    const returnNo = getNextReturnNo(db, stationCode);
+    const returnId = db
+      .prepare(
+        `INSERT INTO sale_returns (return_no, sale_id, customer_id, total_amount, cash_refund_amount, reason, note, restocked, created_by, origin_pc)
+         VALUES (?, NULL, NULL, ?, ?, ?, ?, 1, ?, ?)`
+      )
+      .run(returnNo, total, total, reason, note ? `No bill. ${note}` : 'No bill', input.requestingUserId, stationCode).lastInsertRowid;
+    db.prepare(
+      'INSERT INTO sale_return_items (return_id, sale_item_id, product_variant_id, product_unit_id, quantity, refund_amount) VALUES (?, NULL, ?, ?, ?, ?)'
+    ).run(returnId, line.variant.id, line.unit.id, qty, total);
+    const baseQty = qty * line.unit.conversion_factor;
+    db.prepare('UPDATE product_variants SET stock_qty = stock_qty + ? WHERE id = ?').run(baseQty, line.variant.id);
+    db.prepare(
+      `INSERT INTO stock_movements (product_variant_id, movement_type, quantity, reference_type, reference_id, note, created_by)
+       VALUES (?, 'return_in', ?, 'return', ?, ?, ?)`
+    ).run(line.variant.id, baseQty, returnId, `${returnNo} (no bill)`, input.requestingUserId);
+    return { id: returnId, return_no: returnNo, total_amount: total, cash_refund_amount: total, credited_amount: 0, unit_price: price, price_source: source, new_balance: null };
+  });
+  try {
+    return { success: true, ...run() };
+  } catch (err) {
+    return { success: false, reason: err.message || 'The return could not be recorded.' };
+  }
+}
+
 function registerReturnsIpc() {
   ipcMain.handle('returns:list', (event, input) => listReturns(withCallerId(event, input, 'requestingUserId')));
   ipcMain.handle('returns:get-detail', (event, input) => getReturnDetail(withCallerId(event, input, 'requestingUserId')));
   ipcMain.handle('returns:get-returnable', (event, input) => getReturnable(withCallerId(event, input, 'requestingUserId')));
   ipcMain.handle('returns:create', (event, input) => createReturn(withCallerId(event, input, 'requestingUserId')));
+  // Rule 17 (Admin only through the returns: prefix).
+  ipcMain.handle('returns:search-sales', (event, input) => searchSalesForReturn(withCallerId(event, input, 'requestingUserId')));
+  ipcMain.handle('returns:no-bill-price', (event, input) => getNoBillPrice(withCallerId(event, input, 'requestingUserId')));
+  ipcMain.handle('returns:create-no-bill', (event, input) => createNoBillReturn(withCallerId(event, input, 'requestingUserId')));
 }
 
 module.exports = { registerReturnsIpc };

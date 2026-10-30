@@ -6,7 +6,7 @@ const STOCK_CHANNELS = new Set([
   'products:create', 'products:update', 'products:set-active', 'products:bulk-set-active', 'products:bulk-import',
   'products:quick-add', 'products:approve-review', 'products:merge-review',
   'stock:adjust', 'stock:add', 'stock:remove', 'purchases:create',
-  'sales:create', 'sales:update', 'sales:void', 'returns:create',
+  'sales:create', 'sales:update', 'sales:void', 'returns:create', 'returns:create-no-bill',
 ]);
 // The main process refuses calls from a window whose session ended (expired,
 // revoked, signed out elsewhere); the page hears about it and returns to Login.
@@ -242,6 +242,9 @@ contextBridge.exposeInMainWorld('api', {
     getDetail: (data) => invoke('returns:get-detail', data),
     getReturnable: (data) => invoke('returns:get-returnable', data),
     create: (data) => invoke('returns:create', data),
+    searchSales: (data) => invoke('returns:search-sales', data),
+    noBillPrice: (data) => invoke('returns:no-bill-price', data),
+    createNoBill: (data) => invoke('returns:create-no-bill', data),
   },
 
   printing: {
