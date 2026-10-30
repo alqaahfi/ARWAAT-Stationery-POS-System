@@ -64,7 +64,7 @@ Anomalies to handle + test (Stage 3): see the brief list (draft recovery after c
 
 ## Releasing (in-app updates) - the developer does this, not agents
 1. Set env `GH_TOKEN` (uploads the release) and `GH_UPDATE_TOKEN` (read-only token baked into the app); restart VS Code. Never print/commit/log them.
-2. Commit everything (the release script refuses a dirty tree). `npm run release` (patch) or `npm run release:minor`: bumps the version, commits "Release vX", pushes, builds, uploads a **draft** GitHub release (installer + blockmap + latest.yml).
+2. Commit everything (the release script refuses a dirty tree; electron-builder sometimes makes two half-filled drafts - `scripts/consolidate-draft.js` merges them automatically at the end of the release, or run it alone). `npm run release` (patch) or `npm run release:minor`: bumps the version, commits "Release vX", pushes, builds, uploads a **draft** GitHub release (installer + blockmap + latest.yml).
 3. On GitHub -> Releases: add short notes, press **Publish** (installed apps only see published releases).
 4. First install of the updater build in the shop: by hand (data stays). Later updates: commit -> `npm run release` -> publish -> the Admin uses Settings -> Updates -> Update now.
 5. `npm run dist` builds the installer locally without publishing. Do NOT run it while e2e tests are running (it rebuilds native modules).

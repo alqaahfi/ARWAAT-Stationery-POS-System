@@ -51,4 +51,8 @@ run('git', ['push', '-u', 'origin', 'HEAD']);
 run('npm', ['run', 'build:renderer']);
 run('npx', ['electron-builder', '--win', '--publish', 'always']);
 
-console.log(`\nDraft release for v${version} uploaded. Open GitHub -> Releases, add short notes and press Publish.`);
+// electron-builder sometimes creates two half-filled drafts: make it one complete draft.
+require('./consolidate-draft')
+  .consolidate(version)
+  .then((url) => console.log(`\nDraft release for v${version} is ready: ${url}\nOpen GitHub -> Releases, add short notes and press Publish.`))
+  .catch((err) => fail(`The upload finished but the draft could not be checked: ${err.message}\nOpen GitHub -> Releases and make sure ONE draft for v${version} holds the installer, the .blockmap and latest.yml.`));
