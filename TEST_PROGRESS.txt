@@ -241,6 +241,17 @@ RULE 5 - Voids are kept, count as ZERO everywhere
            Home, Sales report, P&L, Cashier performance, customer ledger/statement all drop it; reprint shows
            *** VOIDED ***; Edit/Return/void again refused.
 
+RULE 6 - Below-cost price = warning
+  Changed: main/pricing/belowCost.js + renderer/utils/belowCost.js (same check: retail, wholesale, Price Level 1-5
+           below the pack size's buying price). ProductForm.jsx: "Price below buying price" confirm (Save anyway /
+           Fix prices) before saving. QuickBillForm.jsx: Admin price override below buying price -> confirm
+           (Sell anyway / Go back). products:create/update return belowCost[] for the record.
+  Cashiers: the server price check (rule 1) only lets a cashier sell at the engine price, i.e. a price the Admin
+           set on the product - so a cashier can never go below cost unless the Admin set that price.
+  Checks: R06-01..R06-05 (PASS).
+  Stage 3 e2e: product form with wholesale < buying -> warning dialog, Save anyway saves, Fix prices stays;
+           quick Sale as Admin, type a price under the buying price -> warning before saving.
+
 STAGE 1 DECISIONS
   D1 (rule 1) Editing a saved bill: a cashier may keep the bill's OWN stored price for a pack size (same
      customer only); any other price must match the price engine. Changing the customer re-prices.
@@ -253,3 +264,5 @@ STAGE 1 DECISIONS
      customer ledger timelines (zero effect), but stay visible (flagged) in Sales History and POS Today's bills.
   D5 (rule 5) A return against a voided bill cannot be created locally; if two PCs void and return the same bill
      at the same moment, sync keeps both (left visible, like other sync conflicts).
+  D6 (rule 6) Buying-price write-back from Add Stock / purchases is not warned (not in the rule's list: product
+     form + Admin price override). Percentage-over-cost pricing can never be below cost.

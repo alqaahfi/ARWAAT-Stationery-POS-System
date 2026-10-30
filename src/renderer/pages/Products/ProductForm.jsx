@@ -8,6 +8,7 @@ import { SpecialPricesSection } from './form/SpecialPricesSection';
 import { TypesSection } from './form/TypesSection';
 import { MoreOptionsSection } from './form/MoreOptionsSection';
 import { StickyActions } from './form/StickyActions';
+import { belowCostIssues, belowCostMessage } from '../../utils/belowCost';
 
 const emptyUnit = (isDefault) => ({
   unitName: '', conversionFactor: 1, retailPrice: 0, wholesalePrice: 0, costPrice: 0, isDefaultSaleUnit: isDefault,
@@ -434,6 +435,18 @@ export default function ProductForm({ productId, onDone, onCancel }) {
         standardBarcode: hasTypes ? null : topVariant.barcode.trim() || null,
         standardVariantId: hasTypes ? null : topVariant.id || null,
       };
+
+      // Rule 6: selling below the buying price is allowed, but only after a clear warning.
+      const lowPrices = belowCostIssues(payload.units);
+      if (lowPrices.length) {
+        const ok = await confirm({
+          title: 'Price below buying price',
+          message: belowCostMessage(lowPrices),
+          confirmLabel: 'Save anyway',
+          cancelLabel: 'Fix prices',
+        });
+        if (!ok) return;
+      }
 
       const res = isEdit ? await window.api.products.update({ id: productId, ...payload }) : await window.api.products.create(payload);
       if (!res.success) {

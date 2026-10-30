@@ -13,6 +13,7 @@ import BillPartyCard from './BillPartyCard';
 import BillItemSearch from './BillItemSearch';
 import MultiTypeQtyPanel, { entriesFromValues } from './MultiTypeQtyPanel';
 import BillLines from './BillLines';
+import { belowCostMessage } from '../../utils/belowCost';
 import BillSummary, { PartyTypeBadge } from './BillSummary';
 import { buildLine, computeTotals, lineTotal, lineUnits, purchasePriceFields, resolveLetterheadId, round2, tradeUnitCost } from './billingUtils';
 
@@ -365,6 +366,17 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
       }
     } catch {
       // Falls back to the limit already loaded.
+    }
+
+    // Rule 6: the Admin's price override below the buying price is allowed after a warning.
+    if (isAdmin) {
+      const low = lines
+        .filter((l) => Number(l.costPrice) > 0 && Number(l.unitPrice) < Number(l.costPrice) - 0.005)
+        .map((l) => ({ unitName: l.productName, level: 'Price', price: Number(l.unitPrice), cost: Number(l.costPrice) }));
+      if (low.length) {
+        const ok = await confirm({ title: 'Price below buying price', message: belowCostMessage(low), confirmLabel: 'Sell anyway', cancelLabel: 'Go back' });
+        if (!ok) return;
+      }
     }
 
     // Rule 2: going over a customer's credit limit is a warning only — they can save anyway.

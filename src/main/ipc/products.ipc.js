@@ -2,6 +2,7 @@ const { ipcMain, net } = require('electron');
 const { getDb } = require('../db/connection');
 const ProductModel = require('../db/models/Product');
 const { wholeQty, WHOLE_QTY_MSG } = require('../validation/quantity');
+const { belowCostIssues } = require('../pricing/belowCost');
 
 // ---------- shared validation / normalization ----------
 
@@ -292,7 +293,8 @@ function create(payload) {
 
   try {
     const id = run();
-    return { success: true, id };
+    // Rule 6: below-cost prices are allowed (the form warned first); reported back for the record.
+    return { success: true, id, belowCost: belowCostIssues(normalized.units) };
   } catch (err) {
     if (/UNIQUE/.test(err.message)) return { success: false, reason: 'A product with that item code or a variant barcode already exists.' };
     return { success: false, reason: 'Could not save product.' };
@@ -438,7 +440,7 @@ function update(payload) {
 
   try {
     run();
-    return { success: true };
+    return { success: true, belowCost: belowCostIssues(normalized.units) };
   } catch (err) {
     if (/UNIQUE/.test(err.message)) return { success: false, reason: 'A product with that item code or a variant barcode already exists.' };
     return { success: false, reason: 'Could not save product.' };
