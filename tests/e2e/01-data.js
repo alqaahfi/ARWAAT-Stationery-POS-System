@@ -10,7 +10,7 @@ const { check, expectEq } = H;
 
   await check('DATA', 'DAT-01', 'Create cashier1 / Cash@123 with sale, payment, products, history permissions and 10% discount cap', 'V', async () => {
     await D.addCashier(ui, { fullName: 'Cashier One', username: 'cashier1', password: 'Cash@123', perms: ['Make sales', 'See products and stock', 'Receive payments', 'See past sales'], discount: 10 });
-    await H.sleep(1200);
+    await ui.see('saved', 8000);
     const r = H.q("select username, role, is_active from users where username='cashier1'");
     if (r.length !== 1 || r[0].role !== 'cashier') throw new Error('cashier1 not saved: ' + JSON.stringify(r));
   }, ui);

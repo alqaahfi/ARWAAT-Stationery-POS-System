@@ -1,7 +1,8 @@
-const { ipcMain, app, dialog } = require('electron');
+const { ipcMain, app } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { getDb } = require('../db/connection');
+const { showOpenDialog } = require('../system/fileDialog');
 
 function letterheadsDir() {
   const dir = path.join(app.getPath('userData'), 'letterheads');
@@ -28,7 +29,7 @@ function getById(id) {
 // The picked PDF is copied into userData so the letterhead survives even if
 // the original file is later moved or deleted.
 async function pickPdf() {
-  const result = await dialog.showOpenDialog({
+  const result = await showOpenDialog({
     title: 'Choose Letterhead PDF (A4 page)',
     filters: [{ name: 'PDF Document', extensions: ['pdf'] }],
     properties: ['openFile'],

@@ -462,3 +462,16 @@ STAGE 1 COUNTER ANOMALIES (BRIEF.md section 2)
     - AuthContext.jsx: dispatches pos:before-logout synchronously before logout / session end.
   Checks: R18-01..R18-10 in tests/rules/checks/r18-anomalies.js (PASS; 128/128 total rules checks pass).
 
+STAGE 2 - RELIABLE TEST HARNESS (BRIEF.md section 3)
+  Changed:
+    - src/main/system/fileDialog.js: dev-only (!app.isPackaged && ARWAAT_TEST_MODE === '1') bypass for showSaveDialog
+      and showOpenDialog reading <userData>/.test-dialog-path (or ARWAAT_TEST_FILE).
+    - Wired fileDialog into backup.ipc.js (pickAutoBackupFolder, exportBackup, restoreBackup, validateAndRestoreBackup),
+      letterheads.ipc.js (pickPdf), printing.ipc.js (savePdf), reports.ipc.js (exportCsv), exportReportPdf.js.
+    - src/main/windows.js: skip auto-opening DevTools when ARWAAT_TEST_MODE === '1' so viewport dimensions and focus
+      are not affected by docked DevTools.
+    - tests/e2e/lib/h.js, data.js, pos.js, shop.js, 01-data.js, 03a-restore.js: default TEST_SPEED=fast, pass
+      ARWAAT_TEST_MODE=1, replace tools/file-dialog.ps1 with H.setDialogFile, add H.restoreCleanMaster, filter
+      is_voided = 0 in shop.js balance queries, replace fixed sleeps with state-based waits.
+    - Rebuilt test-backups/CLEAN-MASTER.db through the app UI (00-setup, 01-data, 03a-restore all PASS).
+

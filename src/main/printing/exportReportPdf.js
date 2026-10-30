@@ -1,6 +1,6 @@
-const { dialog } = require('electron');
 const fs = require('fs');
 const { createHiddenRendererWindow, loadRenderer } = require('../windows');
+const { showSaveDialog } = require('../system/fileDialog');
 
 // Reusable pattern: render the plain, print-only version of a report in a
 // hidden window (same SPA, entered via a `?print=1` query string the renderer
@@ -31,7 +31,7 @@ async function exportReportToPdf({ reportType, filters }) {
 
     const pdfBuffer = await win.webContents.printToPDF({ printBackground: true, pageSize: 'A4' });
 
-    const result = await dialog.showSaveDialog({
+    const result = await showSaveDialog({
       title: 'Export PDF',
       defaultPath: `${reportType}.pdf`,
       filters: [{ name: 'PDF Files', extensions: ['pdf'] }],

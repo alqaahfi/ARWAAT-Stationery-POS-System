@@ -1,10 +1,11 @@
-const { ipcMain, dialog, BrowserWindow } = require('electron');
+const { ipcMain, BrowserWindow } = require('electron');
 const fs = require('fs');
 const thermalReceipt = require('../printing/thermalReceipt');
 const { printInvoice, printPaymentReceipt: printPaymentReceiptA4, printPurchaseReceipt } = require('../printing/printA4Invoice');
 const { previewSale, previewPurchase } = require('../printing/previewDocument');
 const { recordSalePrint } = require('../printing/receiptData');
 const { getCaller } = require('../security/ipcGuard');
+const { showSaveDialog } = require('../system/fileDialog');
 
 // Retail sales print silently to the thermal receipt printer; wholesale
 // sales open the normal OS print dialog against an A4 invoice, so whoever's
@@ -34,7 +35,7 @@ async function savePdf(event, { pdfBase64, defaultName } = {}) {
   if (!pdfBase64) return { success: false, reason: 'Nothing to save.' };
 
   const win = BrowserWindow.fromWebContents(event.sender);
-  const result = await dialog.showSaveDialog(win, {
+  const result = await showSaveDialog(win, {
     title: 'Save as PDF',
     defaultPath: `${defaultName || 'receipt'}.pdf`,
     filters: [{ name: 'PDF Document', extensions: ['pdf'] }],

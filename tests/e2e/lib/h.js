@@ -24,9 +24,33 @@ const SPEEDS = {
   normal: { slowMo: 150, keyDelay: 25, pause: 500, steps: 6 },
   fast: { slowMo: 0, keyDelay: 0, pause: 0, steps: 1 },
 };
-const SPEED_NAME = SPEEDS[process.env.TEST_SPEED] ? process.env.TEST_SPEED : 'slow';
+const SPEED_NAME = SPEEDS[process.env.TEST_SPEED] ? process.env.TEST_SPEED : 'fast';
 const S = SPEEDS[SPEED_NAME];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function setDialogFile(filePath) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(path.join(DATA_DIR, '.test-dialog-path'), String(filePath || ''), 'utf8');
+}
+
+function restoreCleanMaster() {
+  const master = path.join(ROOT, 'test-backups', 'CLEAN-MASTER.db');
+  if (!fs.existsSync(master)) throw new Error('CLEAN-MASTER.db not found at ' + master);
+  killApp();
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const until = Date.now() + 8000;
+  while (Date.now() < until) {
+    try {
+      for (const ext of ['-wal', '-shm']) {
+        try { fs.rmSync(DB_PATH + ext, { force: true }); } catch {}
+      }
+      fs.copyFileSync(master, DB_PATH);
+      break;
+    } catch {
+      /* file still locked, retry */
+    }
+  }
+}
 
 // ---------- results ----------
 let current = { section: '', id: '', name: '', kind: 'V' };
@@ -55,9 +79,9 @@ async function ensureVite() {
   if (!DEV || (await portUp(5173))) return;
   const v = spawn(process.execPath, [path.join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js')], { cwd: ROOT, detached: true, stdio: 'ignore' });
   v.unref();
-  for (let i = 0; i < 60 && !(await portUp(5173)); i++) await sleep(500);
+  for (let i = 0; i < 120 && !(await portUp(5173)); i++) await sleep(250);
 }
-function devEnv() { const e = { ...process.env, NODE_ENV: 'development' }; delete e.ELECTRON_RUN_AS_NODE; return e; }
+function devEnv() { const e = { ...process.env, NODE_ENV: 'development', ARWAAT_TEST_MODE: '1' }; delete e.ELECTRON_RUN_AS_NODE; return e; }
 function launchExe(mode) {
   const args = [`--mode=${mode}`, `--remote-debugging-port=${PORT}`];
   const child = DEV
@@ -67,12 +91,13 @@ function launchExe(mode) {
 }
 let browser = null;
 async function connect() {
-  if (browser) return browser;
-  for (let i = 0; i < 60; i++) {
+  if (browser && browser.isConnected()) return browser;
+  browser = null;
+  for (let i = 0; i < 80; i++) {
     try { browser = await chromium.connectOverCDP(`http://127.0.0.1:${PORT}`, { slowMo: S.slowMo }); return browser; }
-    catch { await sleep(500); }
+    catch { await sleep(250); }
   }
-  throw new Error('Could not attach to the installed app');
+  throw new Error('Could not attach to the app');
 }
 function killApp() {
   spawnSync('taskkill', ['/F', '/IM', PROC_NAME], { stdio: 'ignore' });
@@ -92,13 +117,19 @@ async function findPage(mode) {
 // Opens (or finds) the window for a mode, exactly as the shortcut would.
 async function openApp(mode, { fresh = false } = {}) {
   await ensureVite();
-  if (fresh) { killApp(); await sleep(1500); }
-  if (!(await cdpUp())) { launchExe(mode); await sleep(1500); }
+  if (fresh) {
+    killApp();
+    for (let i = 0; i < 40 && (await cdpUp()); i++) await sleep(150);
+  }
+  if (!(await cdpUp())) {
+    launchExe(mode);
+    for (let i = 0; i < 80 && !(await cdpUp()); i++) await sleep(200);
+  }
   await connect();
   let page = await findPage(mode);
   if (!page) {
     launchExe(mode); // hands over to the running process (single-instance lock)
-    for (let i = 0; i < 60 && !page; i++) { await sleep(500); page = await findPage(mode); }
+    for (let i = 0; i < 80 && !page; i++) { await sleep(200); page = await findPage(mode); }
   }
   if (!page) throw new Error(`No ${mode} window appeared`);
   await page.waitForLoadState('domcontentloaded');
@@ -217,9 +248,12 @@ function q(sql, params = []) {
 
 // ---------- screen recording (real screen, so the video is what the owner saw) ----------
 function startRecording(name) {
+  if (SPEED_NAME === 'fast' && process.env.RECORD_VIDEO !== '1') {
+    return { file: '', stop: async () => {} };
+  }
   const file = path.join(VIDEOS, `${name.replace(/[^\w.-]+/g, '_')}.mp4`);
   const ff = spawn('ffmpeg', ['-y', '-f', 'gdigrab', '-framerate', '8', '-i', 'desktop', '-vf', 'scale=1280:-2', '-vcodec', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', file], { stdio: ['pipe', 'ignore', 'ignore'] });
   return { file, stop: () => new Promise((res) => { ff.on('close', res); try { ff.stdin.write('q'); } catch { res(); } setTimeout(res, 4000); }) };
 }
 
-module.exports = { PROC_NAME, DEV, ensureVite, wipeData, ROOT, EXE, PORT, DATA_DIR, DB_PATH, S, SPEED_NAME, sleep, log, record, loadResults, openApp, killApp, bringFront, UI, check, note, expectEq, q, startRecording, cdpUp, connect, launchExe, RESULTS_DIR, SHOTS, VIDEOS };
+module.exports = { PROC_NAME, DEV, ensureVite, wipeData, setDialogFile, restoreCleanMaster, ROOT, EXE, PORT, DATA_DIR, DB_PATH, S, SPEED_NAME, sleep, log, record, loadResults, openApp, killApp, bringFront, UI, check, note, expectEq, q, startRecording, cdpUp, connect, launchExe, RESULTS_DIR, SHOTS, VIDEOS };

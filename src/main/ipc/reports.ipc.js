@@ -1,4 +1,4 @@
-const { ipcMain, dialog } = require('electron');
+const { ipcMain } = require('electron');
 const fs = require('fs');
 const { getDb } = require('../db/connection');
 const { getCaller } = require('../security/ipcGuard');
@@ -7,6 +7,7 @@ const { getBalancesForCustomers, getBalancesForSuppliers } = require('../ledger/
 const { exportReportToPdf } = require('../printing/exportReportPdf');
 const { generateDueRecurringExpenses } = require('../expenses/recurringExpenses');
 const { RECURRENCE_LABELS } = require('../../shared/expenseRecurrence');
+const { showSaveDialog } = require('../system/fileDialog');
 
 // Every handler returns the same envelope so the renderer's shared
 // ReportSummaryCards / table / ExportButtons / PrintReport components can all
@@ -622,7 +623,7 @@ function toCsv(columns, rows) {
 }
 
 async function exportCsv({ rows, columns, suggestedName }) {
-  const result = await dialog.showSaveDialog({
+  const result = await showSaveDialog({
     title: 'Export CSV',
     defaultPath: suggestedName || 'report.csv',
     filters: [{ name: 'CSV Files', extensions: ['csv'] }],

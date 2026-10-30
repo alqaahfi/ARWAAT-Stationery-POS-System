@@ -1,13 +1,14 @@
-const { ipcMain, dialog } = require('electron');
+const { ipcMain } = require('electron');
 const fs = require('fs');
 const Database = require('better-sqlite3');
 const { getDb, getDbPath, closeDatabase, initDatabase } = require('../db/connection');
 const { relaunchApp, getModeForWebContents } = require('../windows');
 const autoBackup = require('../backup/autoBackup');
+const { showOpenDialog, showSaveDialog } = require('../system/fileDialog');
 
 // Rule 16: choose the automatic backup folder (Settings -> Backup).
 async function pickAutoBackupFolder() {
-  const result = await dialog.showOpenDialog({
+  const result = await showOpenDialog({
     title: 'Folder for automatic backups',
     defaultPath: autoBackup.getAutoBackupStatus().folder,
     properties: ['openDirectory', 'createDirectory'],
@@ -20,7 +21,7 @@ async function exportBackup() {
   const dbPath = getDbPath();
   const dateStr = new Date().toISOString().slice(0, 10);
 
-  const result = await dialog.showSaveDialog({
+  const result = await showSaveDialog({
     title: 'Export Backup',
     defaultPath: `pos-backup-${dateStr}.db`,
     filters: [{ name: 'SQLite Database', extensions: ['db'] }],
@@ -83,7 +84,7 @@ function swapDatabaseFile(srcPath) {
 }
 
 async function restoreBackup() {
-  const result = await dialog.showOpenDialog({
+  const result = await showOpenDialog({
     title: 'Restore from Backup',
     filters: [{ name: 'SQLite Database', extensions: ['db'] }],
     properties: ['openFile'],
@@ -124,7 +125,7 @@ function isValidBackupFile(filePath) {
 // away — the restored file already carries its own station_config row
 // and user accounts, so the app boots to the normal Login screen next time.
 async function validateAndRestoreBackup(mode) {
-  const result = await dialog.showOpenDialog({
+  const result = await showOpenDialog({
     title: 'Restore from Backup',
     filters: [{ name: 'SQLite Database', extensions: ['db'] }],
     properties: ['openFile'],

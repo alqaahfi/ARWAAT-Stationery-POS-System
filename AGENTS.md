@@ -23,8 +23,8 @@ Read this file first, then SYSTEM_STATUS.md (code wins when they disagree), then
 | Stage | What | Status | Next concrete step |
 |---|---|---|---|
 | 1 | 17 business rules + anomaly handling (server first, then UI), one commit per rule | DONE (R1-R17 + anomalies R18, 128/128 rules checks pass) | - |
-| 2 | Reliable harness (ARWAAT_TEST_MODE, state-based waits, TEST_SPEED=fast, CLEAN-MASTER rebuild) | IN PROGRESS | ARWAAT_TEST_MODE=1 file dialog bypass + state-based waits + CLEAN-MASTER rebuild |
-| 3 | Run everything A-Q + per-rule + anomaly checks, bombard, crash, concurrency, load, dates, security | NOT STARTED | - |
+| 2 | Reliable harness (ARWAAT_TEST_MODE, state-based waits, TEST_SPEED=fast, CLEAN-MASTER rebuild) | DONE (ARWAAT_TEST_MODE=1 dialog bypass, state-based waits, CLEAN-MASTER rebuilt) | - |
+| 3 | Run everything A-Q + per-rule + anomaly checks, bombard, crash, concurrency, load, dates, security | IN PROGRESS | Run full E2E suite + Stage 1 UI flows + bombard/load/date checks |
 | 4 | Screenshot every page/form/print at 1366x768, 1920x1080, 683x768; fix UI bugs | NOT STARTED | - |
 
 Model note: Recommended: run Stage 1 with the strongest available model (money/stock/balance logic), Stages 2-4 with a faster one. If a bug survives 3 honest attempts in Stages 2-4, hand just that bug to the strongest model.

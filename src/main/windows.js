@@ -110,7 +110,7 @@ function openModeWindow(rawMode) {
   win.on('page-title-updated', (e) => e.preventDefault());
 
   loadRenderer(win);
-  if (isDev) win.webContents.openDevTools();
+  if (isDev && process.env.ARWAAT_TEST_MODE !== '1') win.webContents.openDevTools();
 
   win.on('closed', () => {
     appWindows.delete(mode);
