@@ -32,6 +32,8 @@ export default function NeedsReview({ onNavigate }) {
 
   useEffect(() => {
     load();
+    window.addEventListener(STOCK_CHANGED_EVENT, load);
+    return () => window.removeEventListener(STOCK_CHANGED_EVENT, load);
   }, [load]);
 
   async function approve(row) {

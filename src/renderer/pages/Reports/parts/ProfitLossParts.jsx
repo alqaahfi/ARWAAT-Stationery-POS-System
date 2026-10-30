@@ -1,8 +1,8 @@
 import React, { memo, useMemo } from 'react';
 import theme from '../../../config/theme';
 import appIcons from '../../../config/appIcons';
-import { Card } from '../../../components/ui';
-import { formatCurrency, formatCurrencyExact } from '../../../utils/format';
+import { Banner, Card } from '../../../components/ui';
+import { formatCount, formatCurrency, formatCurrencyExact } from '../../../utils/format';
 import ReportSummaryCards from '../components/ReportSummaryCards';
 import ReportTable from '../components/ReportTable';
 import ReportBarChart from './ReportBarChart';
@@ -13,6 +13,7 @@ const UNIT_WORD = { day: 'day', week: 'week', month: 'month' };
 
 export const ProfitSummary = memo(function ProfitSummary({ data }) {
   const t = data.totals;
+  const cm = data.costMissing;
   const items = [
     {
       label: 'Net Sales',
@@ -20,7 +21,12 @@ export const ProfitSummary = memo(function ProfitSummary({ data }) {
       icon: appIcons.sell,
       footnote: data.returnsTotal > 0 ? `${formatCurrency(data.returnsTotal)} returned` : 'After any returns',
     },
-    { label: 'Cost of Goods', display: formatCurrency(t.cogs), icon: appIcons.products, footnote: 'What the items sold cost you' },
+    {
+      label: 'Cost of Goods',
+      display: formatCurrency(t.cogs),
+      icon: appIcons.products,
+      footnote: cm?.items > 0 ? `${formatCount(cm.items)} ${cm.items === 1 ? 'item has' : 'items have'} buying price missing` : 'What the items sold cost you',
+    },
     { label: 'Expenses', display: formatCurrency(t.expenses), icon: appIcons.expenses, footnote: 'Rent, bills and other spending' },
     {
       label: 'Profit',
@@ -30,7 +36,16 @@ export const ProfitSummary = memo(function ProfitSummary({ data }) {
       footnote: t.netProfit >= 0 ? 'You made money' : 'You lost money',
     },
   ];
-  return <ReportSummaryCards items={items} />;
+  return (
+    <>
+      <ReportSummaryCards items={items} />
+      {cm?.items > 0 && (
+        <Banner tone="warning" style={{ marginTop: theme.spacing.md }}>
+          Buying price missing for {formatCount(cm.items)} {cm.items === 1 ? 'item' : 'items'} ({cm.names.join(', ')}) — {formatCurrencyExact(cm.revenue)} in sales has no buying price yet. Set the buying price in Products › Needs review.
+        </Banner>
+      )}
+    </>
+  );
 });
 
 const SERIES = [

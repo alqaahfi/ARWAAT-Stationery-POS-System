@@ -15,11 +15,19 @@ const WORDING = {
     title: n === 1 ? '1 customer is overdue' : `${n} customers are overdue`,
     subtitle: 'Owing for more than 90 days',
   }),
+  review: (n) => ({
+    title: n === 1 ? '1 item needs review' : `${n} items need review`,
+    subtitle: 'Added at the counter — set buying price and approve',
+  }),
+  recount: (n) => ({
+    title: n === 1 ? '1 item needs a stock recount' : `${n} items need a stock recount`,
+    subtitle: 'Sold without enough stock or below zero',
+  }),
 };
 
 export default function NeedsAttentionCard({ onNavigate }) {
   const counts = useAlerts();
-  const rows = ALERT_TYPES.filter((a) => counts[a.key] > 0);
+  const rows = ALERT_TYPES.filter((a) => counts[a.key] > 0 && WORDING[a.key]);
 
   let body;
   if (!counts.loaded) {
