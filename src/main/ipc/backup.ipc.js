@@ -50,6 +50,8 @@ function swapDatabaseFile(srcPath) {
   const dbPath = getDbPath();
   try {
     closeDatabase();
+    // Keep the data being replaced, in case the wrong backup was picked.
+    try { fs.copyFileSync(dbPath, `${dbPath}.before-restore.bak`); } catch { /* nothing to keep */ }
     fs.copyFileSync(srcPath, dbPath);
     // Drop any leftover WAL/SHM sidecar files from the pre-restore database
     // so they don't get replayed against the newly-restored file.
@@ -76,6 +78,10 @@ async function restoreBackup() {
   });
   if (result.canceled || result.filePaths.length === 0) return { success: false, canceled: true };
 
+  // A wrong, empty or damaged file must never replace the shop's data.
+  if (!isValidBackupFile(result.filePaths[0])) {
+    return { success: false, reason: "That file doesn't look like a valid ARWAAT POS backup. Nothing was changed." };
+  }
   return swapDatabaseFile(result.filePaths[0]);
 }
 
@@ -92,7 +98,8 @@ function isValidBackupFile(filePath) {
       .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('station_config', 'license_activation', 'users')`)
       .all()
       .map((r) => r.name);
-    return tables.includes('users') && (tables.includes('station_config') || tables.includes('license_activation'));
+    if (!(tables.includes('users') && (tables.includes('station_config') || tables.includes('license_activation')))) return false;
+    return testDb.pragma('quick_check', { simple: true }) === 'ok';
   } catch {
     return false;
   } finally {
