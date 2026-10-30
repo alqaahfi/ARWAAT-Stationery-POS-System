@@ -1,5 +1,4 @@
 import React from 'react';
-import { Banknote, Building2, Ellipsis } from 'lucide-react';
 import theme from '../../config/theme';
 import { formatCurrency } from '../../utils/format';
 import { Badge, Banner, Button, Card, Checkbox, NumberInput, SegmentedControl } from '../ui';
@@ -9,11 +8,6 @@ const c = theme.colors;
 const DISCOUNT_MODES = [
   { value: 'percentage', label: '%' },
   { value: 'amount', label: 'Amount' },
-];
-const METHODS = [
-  { value: 'cash', label: 'Cash', icon: Banknote },
-  { value: 'bank', label: 'Bank', icon: Building2 },
-  { value: 'other', label: 'Other', icon: Ellipsis },
 ];
 const FORMATS = [
   { value: 'retail-thermal', label: 'Small receipt' },
@@ -99,7 +93,7 @@ export default function BillSummary({
       <div style={styles.total}>{formatCurrency(total)}</div>
 
       <div style={styles.divider} />
-      <div style={styles.label}>{isPurchase ? 'Amount you paid now' : 'Amount received'}</div>
+      <div style={styles.label}>{isPurchase ? 'Cash you paid now' : 'Amount received (cash)'}</div>
       <NumberInput
         aria-label={isPurchase ? 'Amount paid' : 'Amount received'}
         value={paidInput}
@@ -121,14 +115,7 @@ export default function BillSummary({
           <span style={{ color: c.labelSecondary }}>Paid in full.</span>
         )}
       </div>
-      <SegmentedControl
-        label="Payment method"
-        value={method}
-        onChange={onMethod}
-        fullWidth
-        style={{ marginTop: theme.spacing.sm }}
-        options={METHODS}
-      />
+      {/* Rule 9: cash only — no Cash / Bank / Other choice. */}
       {paid <= 0 && total > 0 && (
         <div style={{ ...theme.type.footnote, color: c.labelSecondary, marginTop: '4px' }}>
           Nothing paid now — the whole bill goes on {isPurchase ? "the supplier's" : "the customer's"} account.

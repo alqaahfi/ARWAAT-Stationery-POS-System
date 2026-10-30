@@ -311,7 +311,8 @@ function priceLines(db, items, { customerId, actorIsAdmin, original }) {
 
 function saveSale(payload, editSaleId) {
   const db = getDb();
-  const { saleType, customerId, cashierId, letterheadId, discountAmount, paidAmount, paymentMethod } = payload;
+  // Rule 9: cash only — any paymentMethod the screen sends is ignored; new payments are recorded as 'cash'.
+  const { saleType, customerId, cashierId, letterheadId, discountAmount, paidAmount } = payload;
   let { items } = payload;
 
   if (!cashierId) return { success: false, reason: 'Missing cashier.' };
@@ -488,7 +489,7 @@ function saveSale(payload, editSaleId) {
       db.prepare(
         `INSERT INTO payments (party_type, party_id, sale_id, amount, payment_method, received_by)
          VALUES ('customer', ?, ?, ?, ?, ?)`
-      ).run(customerId, saleId, paid, paymentMethod || 'cash', cashierId);
+      ).run(customerId, saleId, paid, 'cash', cashierId); // rule 9: cash only
     }
 
     // sync_outbox rows come from the triggers in 022 / 030 — no manual queuing.

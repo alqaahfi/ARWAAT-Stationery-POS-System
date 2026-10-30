@@ -3,16 +3,20 @@ const { getDb } = require('../db/connection');
 const { withCallerId } = require('../security/ipcGuard');
 const { getCustomerBalance, getSupplierBalance } = require('../ledger/balanceEngine');
 
+// Rule 9: the shop takes and pays cash only. New payments are always recorded
+// as 'cash' whatever the screen sends; old rows keep the method they were saved with.
+const CASH = 'cash';
+
 // The standalone Record Payment screen only ever records a customer payment
 // with no linked sale. Overpayment isn't blocked here — the renderer confirms
 // with the user first, then this handler just records whatever was confirmed.
-function createStandalone({ customerId, amount, paymentMethod, note, receivedBy }) {
+function createStandalone({ customerId, amount, note, receivedBy }) {
   const db = getDb();
 
   if (!customerId) return { success: false, reason: 'Select a customer.' };
   const amt = Number(amount);
-  if (!amt || amt <= 0) return { success: false, reason: 'Enter an amount greater than zero.' };
-  if (!['cash', 'bank', 'other'].includes(paymentMethod)) return { success: false, reason: 'Invalid payment method.' };
+  if (!Number.isFinite(amt) || amt <= 0) return { success: false, reason: 'Enter an amount greater than zero.' };
+  const paymentMethod = CASH;
 
   const result = db.prepare(
     `INSERT INTO payments (party_type, party_id, sale_id, amount, payment_method, note, received_by)
@@ -24,7 +28,7 @@ function createStandalone({ customerId, amount, paymentMethod, note, receivedBy 
 
 // Admin-only, enforced here rather than just hidden in the UI — the
 // Suppliers module has no cashier access at all, unlike Customers.
-function createSupplierPayment({ supplierId, amount, paymentMethod, note, receivedBy, requestingUserId }) {
+function createSupplierPayment({ supplierId, amount, note, receivedBy, requestingUserId }) {
   const db = getDb();
 
   const requester = requestingUserId ? db.prepare('SELECT role FROM users WHERE id = ?').get(requestingUserId) : null;
@@ -34,8 +38,8 @@ function createSupplierPayment({ supplierId, amount, paymentMethod, note, receiv
 
   if (!supplierId) return { success: false, reason: 'Select a supplier.' };
   const amt = Number(amount);
-  if (!amt || amt <= 0) return { success: false, reason: 'Enter an amount greater than zero.' };
-  if (!['cash', 'bank', 'other'].includes(paymentMethod)) return { success: false, reason: 'Invalid payment method.' };
+  if (!Number.isFinite(amt) || amt <= 0) return { success: false, reason: 'Enter an amount greater than zero.' };
+  const paymentMethod = CASH;
 
   // received_by is reused as-is even though this is an outgoing payment —
   // the direction is implied by party_type, so no schema change is needed.

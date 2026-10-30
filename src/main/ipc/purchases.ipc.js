@@ -16,7 +16,8 @@ function round2(n) {
 // Free-of-cost (foc) units arrive on the shelf but are never priced, exactly
 // like a sale's FOC. Anything paid at the time becomes a supplier payment.
 // Once submitted, a purchase is permanent — no edit/delete here.
-function create({ supplierId, referenceNo, items, createdBy, discountAmount, paidAmount, paymentMethod }) {
+// Rule 9: cash only — whatever paymentMethod is sent, a payment made with a purchase is recorded as 'cash'.
+function create({ supplierId, referenceNo, items, createdBy, discountAmount, paidAmount }) {
   const db = getDb();
 
   if (!supplierId) return { success: false, reason: 'Select a supplier.' };
@@ -33,9 +34,6 @@ function create({ supplierId, referenceNo, items, createdBy, discountAmount, pai
   }
   if (Number(discountAmount) < 0) return { success: false, reason: 'Discount cannot be negative.' };
   if (Number(paidAmount) < 0) return { success: false, reason: 'Amount paid cannot be negative.' };
-  if (Number(paidAmount) > 0 && !['cash', 'bank', 'other'].includes(paymentMethod)) {
-    return { success: false, reason: 'Invalid payment method.' };
-  }
 
   const run = db.transaction(() => {
     const lineTotals = items.map((item) => round2(Number(item.quantity) * Number(item.unitCost)));
@@ -81,7 +79,7 @@ function create({ supplierId, referenceNo, items, createdBy, discountAmount, pai
       db.prepare(
         `INSERT INTO payments (party_type, party_id, sale_id, amount, payment_method, note, received_by)
          VALUES ('supplier', ?, NULL, ?, ?, ?, ?)`
-      ).run(supplierId, paid, paymentMethod, referenceNo ? `Paid with purchase ${referenceNo}` : 'Paid with purchase', createdBy || null);
+      ).run(supplierId, paid, 'cash', referenceNo ? `Paid with purchase ${referenceNo}` : 'Paid with purchase', createdBy || null);
     }
 
     return { purchaseId, totalAmount, balanceDue: round2(totalAmount - paid) };

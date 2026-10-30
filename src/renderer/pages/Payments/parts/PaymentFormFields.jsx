@@ -1,8 +1,7 @@
 import React from 'react';
 import theme from '../../../config/theme';
-import { Banner, ChipGroup, Field, NumberInput, Textarea } from '../../../components/ui';
+import { Banner, Field, NumberInput, Textarea } from '../../../components/ui';
 import BalanceChip from '../../../components/BalanceChip';
-import { METHOD_OPTIONS } from '../../Ledgers/parts/ledgerUtils';
 
 const c = theme.colors;
 
@@ -51,12 +50,10 @@ export default function PaymentFormFields({
         </div>
       )}
 
-      {!hideMethod && <div style={{ marginBottom: theme.spacing.md }}>
-        <div aria-hidden="true" style={{ ...theme.type.subhead, fontWeight: theme.font.weightMedium, color: c.label, marginBottom: '6px' }}>
-          Method
-        </div>
-        <ChipGroup options={METHOD_OPTIONS} value={method} onChange={onMethodChange} aria-label="Method" />
-      </div>}
+      {/* Rule 9: cash only — every new payment is recorded as cash, so there is no method to choose. */}
+      {!hideMethod && (
+        <div style={{ marginBottom: theme.spacing.md, ...theme.type.footnote, color: c.labelSecondary }}>Paid in cash.</div>
+      )}
 
       <Field label="Note (optional)" style={{ marginBottom: 0 }}>
         <Textarea value={note} onChange={(e) => onNoteChange(e.target.value)} placeholder="e.g. Part payment for last month" />

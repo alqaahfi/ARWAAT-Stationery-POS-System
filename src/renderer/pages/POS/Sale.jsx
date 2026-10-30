@@ -1360,15 +1360,6 @@ export default function Sale() {
         } else {
           requestCancelSale();
         }
-      } else if (e.key === 'c' || e.key === 'C') {
-        e.preventDefault();
-        setPaymentMethod('cash');
-      } else if (e.key === 'b' || e.key === 'B') {
-        e.preventDefault();
-        setPaymentMethod('bank');
-      } else if (e.key === 'o' || e.key === 'O') {
-        e.preventDefault();
-        setPaymentMethod('other');
       } else if (e.key === 'Enter') {
         e.preventDefault();
         finalizeSale();
@@ -1561,8 +1552,6 @@ export default function Sale() {
             total={totalAmount}
             changeDue={changeDue}
             balanceDue={balanceDue}
-            method={paymentMethod}
-            onMethodChange={setPaymentMethod}
             showDuesOption={!!customer}
             showDues={showDues}
             onShowDuesChange={(checked) => {

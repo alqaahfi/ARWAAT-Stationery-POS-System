@@ -6,7 +6,6 @@ import { Badge, Card } from '../../../components/ui';
 import { InlineMessage, Money, c } from './common';
 
 const FORMAT_LABELS = { 'wholesale-a4': 'A4 invoice', 'retail-thermal': 'Small receipt' };
-const METHOD_LABELS = { cash: 'Cash', bank: 'Bank', other: 'Other' };
 
 export default function SummaryCard({
   customer,
@@ -70,9 +69,8 @@ export default function SummaryCard({
           <Line label="Receipt" value={FORMAT_LABELS[printFormat]} />
           {stage === 'payment' && (
             <>
-              <Line label="Payment method" value={METHOD_LABELS[paymentMethod]} />
               <Line label="Amount received" value={formatCurrency(amountReceived)} />
-              {changeDue > 0 && <Line label="Change to give back" value={formatCurrency(changeDue)} color={c.greenText} strong />}
+              {changeDue > 0 && <Line label="Change" value={formatCurrency(changeDue)} color={c.greenText} strong />}
               {balanceDue > 0 && <Line label="Balance due" value={formatCurrency(balanceDue)} color={c.orangeText} strong />}
             </>
           )}
