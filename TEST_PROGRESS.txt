@@ -294,6 +294,31 @@ RULE 10 - No rounding of totals
   Stage 3 e2e: sell 3 x 31.25 with Rs 0.50 discount -> cart/summary/receipt show Rs 93.25; Rs 93 cash for a
            walk-in is refused.
 
+RULE 11 - Quick-add a missing item at the POS + Admin "Needs review"
+  Migration 037_quick_add_items.sql: products.needs_review / created_via / merged_into_product_id, trg_sale_items_au
+           (merged sale lines sync), back-fill permission add_missing_items for cashiers with make_sale (Admin PC only).
+  syncSchema: products.merged_into_product_id FK (nullable, self). Permission catalog: add_missing_items
+           "Add missing items at the counter" (defaultForNewCashier: true; counter-PC join + demo cashier get it;
+           CashierForm pre-ticks it for a new cashier; Cashiers form copy + icon).
+  Server: main/products/quickAdd.js - quickAdd (barcode optional/trimmed/unique case-insensitive, name required,
+           retail > 0; one 'Piece' pack, retail = wholesale = price, cost 0 + needs_review), findSimilar, listNeedsReview,
+           approve (refused until every pack size has a buying price), merge (sale lines -> chosen Type + pack size with the
+           same pieces per pack, purchase lines moved, stock moved as two stock movements, barcode moved if the target
+           Type has none, item deactivated + merged_into_product_id). sales:create skips the stock check for needs_review
+           items (stock goes negative). Search results / getVariantForCart carry needsReview.
+  IPC guard: products:quick-add + products:find-similar -> permission add_missing_items; products:list-needs-review,
+           products:approve-review, products:merge-review -> Admin only. Dashboard summary needsReviewCount.
+  Reports: P&L costMissing {items, revenue, names} + summary cards "Items with buying price missing" / "Sales of those
+           items (profit not known)"; Stock report rows cost_missing + orange "Buying price missing" badge + summary count.
+  Renderer: POS - no match -> "Nothing matches "x". Press F7 to add it as a new item."; F7 opens QuickAddItemDialog
+           (barcode pre-filled when the text looks like a code, name otherwise; similar names shown as buttons to pick
+           the real item); the new item goes into the cart (no stock check). Products tab "Needs review (n)" (badge),
+           NeedsReview.jsx (Edit / Merge with product search + pack size / Approve), Home + bell "Items added at the counter".
+  Checks: R11-01..R11-11 (PASS).
+  Stage 3 e2e: cashier scans unknown 8901234 -> F7 -> barcode pre-filled, type name + price -> line in cart -> sale
+           saved with stock -1; Admin Products > Needs review (1): Approve disabled until buying price set via Edit;
+           Merge into an existing product moves the sale; P&L and Stock report show "buying price missing".
+
 STAGE 1 DECISIONS
   D1 (rule 1) Editing a saved bill: a cashier may keep the bill's OWN stored price for a pack size (same
      customer only); any other price must match the price engine. Changing the customer re-prices.
@@ -308,3 +333,9 @@ STAGE 1 DECISIONS
      at the same moment, sync keeps both (left visible, like other sync conflicts).
   D6 (rule 6) Buying-price write-back from Add Stock / purchases is not warned (not in the rule's list: product
      form + Admin price override). Percentage-over-cost pricing can never be below cost.
+  D7 (rule 11) Key for "Add new item" is F7 (F6 = Return). Quick-add is in the keyboard POS only (not the quick
+     Sale overlay). Merge needs a target pack size with the same pieces per pack as the item was sold in (Piece = 1);
+     the item's old stock-movement rows stay on the (switched-off) item and its stock moves across as two movements;
+     purchase lines are moved on this PC only (purchase_items are insert-only in sync - money is unaffected).
+  D8 (rule 11) "Buying price missing" = item still needs review OR its pack size has buying price 0. Such items are
+     left out of stock value and their sales are reported separately in P&L instead of counting a zero cost silently.

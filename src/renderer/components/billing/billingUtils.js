@@ -60,6 +60,8 @@ export function buildLine(detail, unit, price, extra = {}) {
     focQuantity: 0,
     unitPrice: price,
     costPrice: unit.costPrice,
+    // Rule 11: an item added at the counter (waiting for review) may be sold with no stock.
+    allowNegative: !!detail.product.needsReview,
     ...extra,
   };
 }

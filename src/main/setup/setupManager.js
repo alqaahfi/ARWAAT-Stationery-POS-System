@@ -17,7 +17,7 @@ const FIND_ADMIN_TIMEOUT_MS = 12000; // discovery broadcasts every 5s
 const REGISTER_TIMEOUT_MS = 10000;
 // A counter PC can make sales as soon as it joins; the Admin can trim this later
 // from the Cashiers module like any other cashier.
-const NEW_CASHIER_PERMISSIONS = ['make_sale', 'record_payment'];
+const NEW_CASHIER_PERMISSIONS = ['make_sale', 'record_payment', 'add_missing_items'];
 
 function getConfig() {
   return getDb().prepare('SELECT * FROM station_config WHERE id = 1').get() || null;

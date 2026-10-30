@@ -51,7 +51,15 @@ export default function CashierForm({ cashierId, onDone, onCancel }) {
   useEffect(() => {
     window.api.permissions
       .getDefinitions()
-      .then((defs) => setDefinitions(defs || []))
+      .then((defs) => {
+        setDefinitions(defs || []);
+        // A new cashier starts with the permissions that are on by default (e.g. Add missing items at the counter).
+        if (!cashierId) {
+          const defaults = {};
+          for (const d of defs || []) if (d.defaultForNewCashier) defaults[d.key] = true;
+          setPermissionValues((prev) => ({ ...defaults, ...prev }));
+        }
+      })
       .catch(() => toast.error('Couldn’t load the permission list.'))
       .finally(() => setDefinitionsLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps

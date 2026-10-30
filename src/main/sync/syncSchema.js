@@ -41,9 +41,11 @@ const SYNC_TABLES = {
   },
   products: {
     kind: 'upsert',
+    // needs_review, created_via (037) sync as plain columns.
     fks: {
       category_id: { table: 'categories', nullable: true },
       supplier_id: { table: 'suppliers', nullable: true },
+      merged_into_product_id: { table: 'products', nullable: true }, // 037: quick-added item merged into this one
     },
   },
   product_variants: {
@@ -100,7 +102,7 @@ const SYNC_TABLES = {
   },
   sale_items: {
     kind: 'upsert',
-    deletable: true, // bills can be edited/voided (030)
+    deletable: true, // bills can be edited (030); since 037 a merge UPDATEs lines (trg_sale_items_au)
     fks: {
       sale_id: { table: 'sales' },
       product_id: { table: 'products' },

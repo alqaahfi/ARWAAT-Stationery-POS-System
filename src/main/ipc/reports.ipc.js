@@ -199,6 +199,27 @@ function getProfitLoss(filters) {
     )
     .all(from, to);
 
+  // Rule 11: lines whose buying price is unknown (item added at the counter and
+  // not reviewed yet, or a pack size with no buying price) are flagged instead of
+  // silently counting them at zero cost.
+  const costMissingRows = db
+    .prepare(
+      `SELECT p.id, p.name, COALESCE(SUM(si.line_total), 0) AS revenue
+       FROM sale_items si
+       JOIN sales s ON s.id = si.sale_id
+       JOIN products p ON p.id = si.product_id
+       JOIN product_units pu ON pu.id = si.product_unit_id
+       WHERE date(s.created_at, 'localtime') BETWEEN date(?) AND date(?) AND s.is_voided = 0
+         AND (p.needs_review = 1 OR pu.cost_price IS NULL OR pu.cost_price <= 0)
+       GROUP BY p.id ORDER BY revenue DESC`
+    )
+    .all(from, to);
+  const costMissing = {
+    items: costMissingRows.length,
+    revenue: costMissingRows.reduce((sum, r) => sum + r.revenue, 0),
+    names: costMissingRows.slice(0, 10).map((r) => r.name),
+  };
+
   const expenseRows = db
     .prepare(
       `SELECT ${expenseExpr} AS bucket, COALESCE(SUM(e.amount), 0) AS expenses
@@ -235,9 +256,14 @@ function getProfitLoss(filters) {
     { label: 'Profit', value: netProfit, accentKey: netProfit >= 0 ? 'green' : 'amber', format: 'currency' },
   ];
   if (returnsTotal > 0) summary.push({ label: 'Returns', value: returnsTotal, accentKey: 'amber', format: 'currency' });
+  if (costMissing.items > 0) {
+    summary.push({ label: 'Items with buying price missing', value: costMissing.items, accentKey: 'amber', format: 'number' });
+    summary.push({ label: 'Sales of those items (profit not known)', value: costMissing.revenue, accentKey: 'amber', format: 'currency' });
+  }
 
   return {
     success: true,
+    costMissing,
     bucketUnit: bucket.unit,
     summary,
     totals: { revenue: totalRevenue, cogs: totalCogs, expenses: totalExpenses, netProfit },
@@ -262,7 +288,7 @@ function getStockReport(filters) {
 
   const products = db
     .prepare(
-      `SELECT p.id, p.name, c.name AS category_name, p.min_stock_alert, p.dead_stock_days,
+      `SELECT p.id, p.name, c.name AS category_name, p.min_stock_alert, p.dead_stock_days, p.needs_review,
               COALESCE(SUM(pv.stock_qty), 0) AS total_stock,
               MAX(pv.last_sold_at) AS last_sold_at
        FROM products p
@@ -291,7 +317,10 @@ function getStockReport(filters) {
     const baseUnit = baseUnitByProduct[p.id];
     const costPerBaseUnit = baseUnit ? baseUnit.cost_price / (baseUnit.conversion_factor || 1) : 0;
     const valuation = p.total_stock * costPerBaseUnit;
-    const status = lowStockIds.has(p.id) ? 'Low' : deadStockIds.has(p.id) ? 'Dead' : 'Normal';
+    // Rule 11: never value stock at a silent zero — say the buying price is missing.
+    const costMissing = !!p.needs_review || !(costPerBaseUnit > 0);
+    const baseStatus = lowStockIds.has(p.id) ? 'Low' : deadStockIds.has(p.id) ? 'Dead' : 'Normal';
+    const status = costMissing ? `${baseStatus} · Buying price missing` : baseStatus;
     return {
       id: p.id,
       name: p.name,
@@ -299,6 +328,7 @@ function getStockReport(filters) {
       total_stock: p.total_stock,
       valuation,
       status,
+      cost_missing: costMissing,
     };
   });
 
@@ -316,7 +346,11 @@ function getStockReport(filters) {
       { label: 'Total Distinct Products', value: rows.length, accentKey: 'green', format: 'number' },
       { label: 'Low Stock Count', value: lowStockIds.size, accentKey: 'amber', format: 'number' },
       { label: 'Dead Stock Count', value: deadStockIds.size, accentKey: 'purple', format: 'number' },
+      ...(rows.some((r) => r.cost_missing)
+        ? [{ label: 'Buying price missing (not in value)', value: rows.filter((r) => r.cost_missing).length, accentKey: 'amber', format: 'number' }]
+        : []),
     ],
+    costMissingCount: rows.filter((r) => r.cost_missing).length,
     chartData: Object.keys(byCategory).map((name) => ({ name, valuation: byCategory[name] })),
     columns: [
       { key: 'name', label: 'Product', format: 'text' },

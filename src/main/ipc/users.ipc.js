@@ -219,6 +219,7 @@ function seedDummyCashier() {
     const grant = db.prepare('INSERT INTO user_permissions (user_id, permission_key, value) VALUES (?, ?, ?)');
     grant.run(cashier.id, 'make_sale', null);
     grant.run(cashier.id, 'max_discount_percentage', '10');
+    grant.run(cashier.id, 'add_missing_items', null);
   }
 
   // record_payment ships granted-by-default for cashiers (revocable later from

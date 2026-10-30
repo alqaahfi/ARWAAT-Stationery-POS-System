@@ -24,6 +24,7 @@ import CancelSaleDialog from './parts/CancelSaleDialog';
 import SaleCompleteSheet from './parts/SaleCompleteSheet';
 import PrintPreviewModal from '../../components/receipt/PrintPreviewModal';
 import BillOverlay from '../../components/billing/BillOverlay';
+import QuickAddItemDialog from '../../components/billing/QuickAddItemDialog';
 import Returns from '../Sales/Returns';
 import { InlineMessage, PanelTitle, packSizeName } from './parts/common';
 import { whileSaving } from '../../utils/appEvents';
@@ -201,6 +202,9 @@ export default function Sale() {
   const [typeIndex, setTypeIndex] = useState(0);
   const [unitIndex, setUnitIndex] = useState(0);
   const [itemSearchMessage, setItemSearchMessage] = useState('');
+  // Rule 11: "Add missing items at the counter" dialog ({ barcode, name } to start with) or null.
+  const [quickAdd, setQuickAdd] = useState(null);
+  const canQuickAdd = hasPermission('add_missing_items');
 
   // ---------------- stage 3: qty ----------------
   const [pendingItem, setPendingItem] = useState(null);
@@ -330,8 +334,12 @@ export default function Sale() {
         setSearchResults([]);
         return;
       }
-      window.api.sales.searchProductsGrouped({ query: searchQuery.trim() }).then((res) => {
+      const q = searchQuery.trim();
+      window.api.sales.searchProductsGrouped({ query: q }).then((res) => {
         setSearchResults(res);
+        // Nothing matches: offer to add it as a new item (rule 11).
+        if (res.length === 0) setItemSearchMessage(canQuickAdd ? `Nothing matches "${q}". Press F7 to add it as a new item.` : `Nothing matches "${q}".`);
+        else setItemSearchMessage('');
         setSearchHighlight(0);
         setActiveSelector('unit');
         setTypeIndex(0);
@@ -394,7 +402,7 @@ export default function Sale() {
 
   const stockIssues = {};
   for (const line of cartLines) {
-    if (lineUnits(line) * line.conversionFactor > line.stockQty) stockIssues[line.key] = true;
+    if (!line.allowNegative && lineUnits(line) * line.conversionFactor > line.stockQty) stockIssues[line.key] = true;
   }
   const hasStockIssue = Object.keys(stockIssues).length > 0;
 
@@ -433,7 +441,7 @@ export default function Sale() {
   const qtyNumber = Number(qtyValue) || 0;
   const focNumber = Math.max(0, Number(focValue) || 0);
   const qtyStockError =
-    pendingItem && qtyNumber > 0 && (qtyNumber + focNumber) * pendingItem.conversionFactor > pendingItem.stockQty
+    pendingItem && !pendingItem.allowNegative && qtyNumber > 0 && (qtyNumber + focNumber) * pendingItem.conversionFactor > pendingItem.stockQty
       ? `Only ${formatCount(pendingItem.stockQty / pendingItem.conversionFactor)} in stock.`
       : '';
 
@@ -441,7 +449,7 @@ export default function Sale() {
   const editingQtyNumber = Number(editingQtyValue) || 0;
   const editingFocNumber = Math.max(0, Number(editingFocValue) || 0);
   const editingQtyStockError =
-    editingLine && editingQtyNumber > 0 && (editingQtyNumber + editingFocNumber) * editingLine.conversionFactor > editingLine.stockQty
+    editingLine && !editingLine.allowNegative && editingQtyNumber > 0 && (editingQtyNumber + editingFocNumber) * editingLine.conversionFactor > editingLine.stockQty
       ? `Only ${formatCount(editingLine.stockQty / editingLine.conversionFactor)} in stock.`
       : '';
 
@@ -531,6 +539,7 @@ export default function Sale() {
         focQuantity: dl.focQuantity || 0,
         unitPrice: priceRes.price,
         costPrice: unit.costPrice,
+        allowNegative: !!detail.product.needsReview,
       });
     }
     setCartLines(lines);
@@ -648,6 +657,7 @@ export default function Sale() {
         focQuantity: l.foc_quantity || 0,
         unitPrice: l.unit_price,
         costPrice: detail.units.find((u) => u.id === l.product_unit_id)?.costPrice ?? 0,
+        allowNegative: !!detail.product.needsReview,
       });
     }
 
@@ -746,6 +756,7 @@ export default function Sale() {
       conversionFactor: unit.conversionFactor,
       unitPrice: priceRes.price,
       costPrice: unit.costPrice,
+      allowNegative: !!group.needsReview,
     });
     setQtyValue('1');
     setFocValue('');
@@ -783,7 +794,7 @@ export default function Sale() {
           setSearchQuery('');
           setSearchResults([]);
           const pending = scanPendingRef.current[detail.variant.id] || 0;
-          if (inCartBase + pending + unit.conversionFactor > detail.variant.stockQty) {
+          if (!detail.product.needsReview && inCartBase + pending + unit.conversionFactor > detail.variant.stockQty) {
             toast.error(`Only ${formatCount(detail.variant.stockQty / unit.conversionFactor)} in stock for ${detail.product.name}.`);
             return;
           }
@@ -800,6 +811,7 @@ export default function Sale() {
             conversionFactor: unit.conversionFactor,
             unitPrice: priceRes.price,
             costPrice: unit.costPrice,
+            allowNegative: !!detail.product.needsReview,
             quantity: 1,
             focQuantity: 0,
           });
@@ -813,6 +825,56 @@ export default function Sale() {
     if (searchResults[searchHighlight]) {
       await selectSearchResult(searchResults[searchHighlight], typeIndex, unitIndex);
     }
+  }
+
+  // ---------------- rule 11: add a missing item ----------------
+
+  function openQuickAdd() {
+    const raw = (searchInputRef.current ? searchInputRef.current.value : searchQuery).trim();
+    // Something that looks like a code (no spaces, has a digit) starts as the barcode, else as the name.
+    const looksLikeCode = /^[0-9A-Za-z-]{3,}$/.test(raw) && /\d/.test(raw);
+    setQuickAdd(looksLikeCode ? { barcode: raw, name: '' } : { barcode: '', name: raw });
+  }
+
+  async function addVariantToCart(variantId) {
+    const detail = await window.api.sales.getVariantForCart({ variantId });
+    if (!detail || !detail.defaultUnitId) {
+      toast.error('That item could not be added.');
+      return;
+    }
+    const unit = detail.units.find((u) => u.id === detail.defaultUnitId);
+    const priceRes = await window.api.sales.resolvePrice({ productUnitId: unit.id, customerId: customer?.id || null });
+    addOrMergeCartLine({
+      variantId: detail.variant.id,
+      variantName: detail.variant.variantName,
+      productId: detail.product.id,
+      productName: detail.product.name,
+      baseUnitName: detail.product.baseUnitName,
+      stockQty: detail.variant.stockQty,
+      units: detail.units,
+      unitId: unit.id,
+      conversionFactor: unit.conversionFactor,
+      unitPrice: priceRes.price,
+      costPrice: unit.costPrice,
+      allowNegative: !!detail.product.needsReview,
+      quantity: 1,
+      focQuantity: 0,
+    });
+    setSearchQuery('');
+    setSearchResults([]);
+    setItemSearchMessage('');
+    setStage('item-search');
+  }
+
+  async function onQuickAdded(res) {
+    setQuickAdd(null);
+    await addVariantToCart(res.variantId);
+    toast.success('Item added. The Admin will review it.');
+  }
+
+  async function onQuickAddPickExisting(variantId) {
+    setQuickAdd(null);
+    await addVariantToCart(variantId);
   }
 
   // ---------------- stage 3: qty ----------------
@@ -838,7 +900,7 @@ export default function Sale() {
       setMultiError('Type a quantity for at least one Type.');
       return;
     }
-    const over = entries.find((e) => e.quantity * pendingItem.conversionFactor > e.type.stockQty);
+    const over = !pendingItem.allowNegative && entries.find((e) => e.quantity * pendingItem.conversionFactor > e.type.stockQty);
     if (over) {
       setMultiError(`Only ${formatCount(over.type.stockQty / pendingItem.conversionFactor)} of ${over.type.variantName} in stock.`);
       return;
@@ -1120,8 +1182,15 @@ export default function Sale() {
     // The print preview window owns the keyboard while it is open, and so does a confirm dialog.
     if (showPrintPreview || dialogOpenRef.current) return;
 
-    // The Today's bills and Held bills panels run their own keys while open.
-    if (showRecent || showRecall || showReturn) return;
+    // The Today's bills and Held bills panels run their own keys while open (and so does the add-item dialog).
+    if (showRecent || showRecall || showReturn || quickAdd) return;
+
+    // F7: add a missing item at the counter (rule 11; F6 is Return).
+    if (e.key === 'F7' && canQuickAdd && (stage === 'item-search' || stage === 'cart-edit') && !showCancelConfirm) {
+      e.preventDefault();
+      openQuickAdd();
+      return;
+    }
 
     if (e.key === 'F2' || e.key === 'F3' || e.key === 'F4' || (e.key === 'F6' && isAdmin)) {
       if (showCancelConfirm || stage === 'confirm') return;
@@ -1669,6 +1738,14 @@ export default function Sale() {
             <Returns params={{}} onNavigate={() => setShowReturn(false)} />
           </div>
         </BillOverlay>
+      )}
+      {quickAdd && (
+        <QuickAddItemDialog
+          initial={quickAdd}
+          onClose={() => setQuickAdd(null)}
+          onAdded={onQuickAdded}
+          onPickExisting={onQuickAddPickExisting}
+        />
       )}
       {showRecall && <HeldBillsPanel held={heldBills} onRecall={recallHeld} onDiscard={discardHeld} onClose={() => setShowRecall(false)} />}
 

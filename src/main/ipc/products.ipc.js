@@ -3,6 +3,8 @@ const { getDb } = require('../db/connection');
 const ProductModel = require('../db/models/Product');
 const { wholeQty, WHOLE_QTY_MSG } = require('../validation/quantity');
 const { belowCostIssues } = require('../pricing/belowCost');
+const quickAddItems = require('../products/quickAdd');
+const { getCaller } = require('../security/ipcGuard');
 
 // ---------- shared validation / normalization ----------
 
@@ -625,6 +627,12 @@ function registerProductsIpc() {
   ipcMain.handle('products:get-low-stock', () => getLowStock());
   ipcMain.handle('products:get-dead-stock', () => getDeadStock());
   ipcMain.handle('products:bulk-import', (event, { products } = {}) => bulkImport(products || []));
+  // Rule 11: add a missing item at the counter (permission add_missing_items) + the Admin's Needs review list.
+  ipcMain.handle('products:quick-add', (event, payload) => quickAddItems.quickAdd({ ...(payload || {}), createdBy: getCaller(event)?.userId }));
+  ipcMain.handle('products:find-similar', (event, payload) => quickAddItems.findSimilar(payload || {}));
+  ipcMain.handle('products:list-needs-review', () => quickAddItems.listNeedsReview());
+  ipcMain.handle('products:approve-review', (event, payload) => quickAddItems.approve(payload || {}));
+  ipcMain.handle('products:merge-review', (event, payload) => quickAddItems.merge({ ...(payload || {}), userId: getCaller(event)?.userId }));
 }
 
 module.exports = { registerProductsIpc };

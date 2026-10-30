@@ -10,7 +10,8 @@ const { wholeQty, WHOLE_QTY_MSG } = require('../validation/quantity');
 
 const SEARCH_COLUMNS = `
   pv.id AS variantId, pv.variant_name AS variantName, pv.stock_qty AS stockQty, pv.barcode,
-  p.id AS productId, p.name AS productName, p.sku, p.base_unit_name AS baseUnitName, p.min_stock_alert AS minStockAlert
+  p.id AS productId, p.name AS productName, p.sku, p.base_unit_name AS baseUnitName, p.min_stock_alert AS minStockAlert,
+  p.needs_review AS needsReview
 `;
 
 function searchProducts(query) {
@@ -89,6 +90,7 @@ function searchProductsGrouped(query) {
         sku: r.sku,
         baseUnitName: r.baseUnitName,
         minStockAlert: r.minStockAlert,
+        needsReview: !!r.needsReview, // rule 11: added at the counter — may be sold with no stock
         types: [],
         units: unitsByProduct[r.productId] || [],
       });
@@ -137,7 +139,7 @@ function getVariantForCart(variantId) {
 
   return {
     variant: { id: variant.id, variantName: variant.variant_name, stockQty: variant.stock_qty, barcode: variant.barcode },
-    product: { id: product.id, name: product.name, baseUnitName: product.base_unit_name, pricingType: product.pricing_type },
+    product: { id: product.id, name: product.name, baseUnitName: product.base_unit_name, pricingType: product.pricing_type, needsReview: !!product.needs_review },
     units: units.map((u) => ({
       id: u.id,
       unitName: u.unit_name,
@@ -408,6 +410,9 @@ function saveSale(payload, editSaleId) {
       const variant = db.prepare('SELECT * FROM product_variants WHERE id = ?').get(item.productVariantId);
       const unit = db.prepare('SELECT * FROM product_units WHERE id = ?').get(item.productUnitId);
       if (!variant || !unit) throw new SaleError('One of the items in the cart no longer exists.');
+      // Rule 11: an item added at the counter (waiting for review) can be sold with no stock.
+      const review = db.prepare('SELECT needs_review FROM products WHERE id = ?').get(variant.product_id);
+      if (review && review.needs_review) continue;
       const needed = items
         .filter((i) => i.productVariantId === item.productVariantId)
         .reduce((sum, i) => sum + baseQtyOf(db, i), 0);

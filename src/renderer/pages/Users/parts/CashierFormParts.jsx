@@ -1,5 +1,5 @@
 import React, { useId } from 'react';
-import { BadgePercent, ChartColumn, HandCoins, KeyRound, Package, Receipt, ShoppingCart, ShieldCheck, UserCheck, UserX, Wallet } from 'lucide-react';
+import { BadgePercent, ChartColumn, HandCoins, PackagePlus, KeyRound, Package, Receipt, ShoppingCart, ShieldCheck, UserCheck, UserX, Wallet } from 'lucide-react';
 import theme from '../../../config/theme';
 import glossary from '../../../config/glossary';
 import { Avatar, Badge, Button, Card, Field, ListRow, NumberInput, PasswordInput, Skeleton, TextInput, Toggle } from '../../../components/ui';
@@ -14,6 +14,7 @@ const PERMISSION_COPY = {
   make_sale: { icon: ShoppingCart, color: 'green', title: 'Make sales', subtitle: 'Let this cashier ring up sales on the New Sale screen.' },
   view_products: { icon: Package, color: 'orange', title: 'See products and stock', subtitle: 'Let them look through the product list and what is running low.' },
   record_payment: { icon: HandCoins, color: 'green', title: 'Receive payments', subtitle: 'Let them take money from customers paying off what they owe.' },
+  add_missing_items: { icon: PackagePlus, color: 'blue', title: 'Add missing items at the counter', subtitle: 'If an item is not in the list, let them add it while selling (name, barcode, price). You review it later.' },
   max_discount_percentage: {
     icon: BadgePercent,
     color: 'orange',

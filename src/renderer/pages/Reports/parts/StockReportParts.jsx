@@ -31,10 +31,20 @@ export const StockByCategory = memo(function StockByCategory({ chartData }) {
 });
 
 function StatusBadge({ row }) {
-  if (Number(row.total_stock) <= 0) return <Badge tone="red">Out of stock</Badge>;
-  if (row.status === 'Low') return <Badge tone="orange">{glossary.runningLow}</Badge>;
-  if (row.status === 'Dead') return <Badge tone="neutral">{glossary.notSelling}</Badge>;
-  return <Badge tone="green">In stock</Badge>;
+  const status = String(row.status || '');
+  let main;
+  if (Number(row.total_stock) <= 0) main = <Badge tone="red">Out of stock</Badge>;
+  else if (status.startsWith('Low')) main = <Badge tone="orange">{glossary.runningLow}</Badge>;
+  else if (status.startsWith('Dead')) main = <Badge tone="neutral">{glossary.notSelling}</Badge>;
+  else main = <Badge tone="green">In stock</Badge>;
+  if (!row.cost_missing) return main;
+  // Rule 11: the value of this item is not counted because its buying price is unknown.
+  return (
+    <span style={{ display: 'inline-flex', gap: '4px', flexWrap: 'wrap' }}>
+      {main}
+      <Badge tone="orange">Buying price missing</Badge>
+    </span>
+  );
 }
 
 export const StockTable = memo(function StockTable({ columns, rows }) {

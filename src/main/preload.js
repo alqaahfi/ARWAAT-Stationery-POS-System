@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 // (via a plain DOM event) so the header's Running Low badge refreshes at once.
 const STOCK_CHANNELS = new Set([
   'products:create', 'products:update', 'products:set-active', 'products:bulk-set-active', 'products:bulk-import',
+  'products:quick-add', 'products:approve-review', 'products:merge-review',
   'stock:adjust', 'stock:add', 'stock:remove', 'purchases:create',
   'sales:create', 'sales:update', 'sales:void', 'returns:create',
 ]);
@@ -90,6 +91,11 @@ contextBridge.exposeInMainWorld('api', {
     getLowStock: () => invoke('products:get-low-stock'),
     getDeadStock: () => invoke('products:get-dead-stock'),
     bulkImport: (data) => invoke('products:bulk-import', data),
+    quickAdd: (data) => invoke('products:quick-add', data),
+    findSimilar: (data) => invoke('products:find-similar', data),
+    listNeedsReview: () => invoke('products:list-needs-review'),
+    approveReview: (data) => invoke('products:approve-review', data),
+    mergeReview: (data) => invoke('products:merge-review', data),
   },
 
   stock: {

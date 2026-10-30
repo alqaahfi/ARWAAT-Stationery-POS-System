@@ -13,6 +13,7 @@ import CategoryList from '../Products/CategoryList';
 import ProductList from '../Products/ProductList';
 import ProductForm from '../Products/ProductForm';
 import LowStock from '../Products/LowStock';
+import NeedsReview from '../Products/NeedsReview';
 import DeadStock from '../Products/DeadStock';
 import BulkImport from '../Products/BulkImport';
 import PurchaseHistory from '../Purchases/PurchaseHistory';
@@ -163,6 +164,8 @@ export default function AdminDashboard() {
         return <CategoryList />;
       case '/products/low-stock':
         return <LowStock onNavigate={navigate} />;
+      case '/products/needs-review':
+        return <NeedsReview onNavigate={navigate} />;
       case '/products/dead-stock':
         return <DeadStock onNavigate={navigate} />;
       case '/products/bulk-import':

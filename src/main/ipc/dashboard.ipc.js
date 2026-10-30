@@ -2,6 +2,7 @@ const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
 const ProductModel = require('../db/models/Product');
 const { getBalancesForCustomers } = require('../ledger/balanceEngine');
+const { countNeedsReview } = require('../products/quickAdd');
 
 // Aggregate numbers for the admin Overview page. Kept as one round trip so the
 // dashboard renders with a single call instead of one IPC per stat tile.
@@ -78,6 +79,7 @@ function getSummary() {
     outstandingReceivables,
     monthExpenses,
     recentSales,
+    needsReviewCount: countNeedsReview(db),
   };
 }
 

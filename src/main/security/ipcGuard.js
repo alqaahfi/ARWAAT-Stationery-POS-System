@@ -93,6 +93,9 @@ const ADMIN_CHANNELS = new Set([
   'products:check-barcode-unique',
   'products:transliterate-urdu',
   'products:get-dead-stock',
+  'products:list-needs-review',
+  'products:approve-review',
+  'products:merge-review',
   'categories:create',
   'categories:update',
   'categories:delete',
@@ -145,6 +148,9 @@ const PERMISSION_CHANNELS = {
   'products:get-low-stock': 'view_products',
   'stock:get-product-stats': 'view_products',
   'stock:get-movements': 'view_products',
+  // Rule 11: Add missing items at the counter.
+  'products:quick-add': 'add_missing_items',
+  'products:find-similar': 'add_missing_items',
 };
 
 // reports:get-report / reports:export-pdf dispatch on reportType. Sales is the

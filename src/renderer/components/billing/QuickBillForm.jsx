@@ -258,7 +258,7 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
     const perVariant = {};
     for (const l of lines) perVariant[l.variantId] = (perVariant[l.variantId] || 0) + lineUnits(l) * l.conversionFactor;
     const issues = {};
-    for (const l of lines) if (perVariant[l.variantId] > l.stockQty) issues[l.key] = true;
+    for (const l of lines) if (!l.allowNegative && perVariant[l.variantId] > l.stockQty) issues[l.key] = true;
     return issues;
   }, [isPurchase, lines]);
 

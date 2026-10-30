@@ -45,6 +45,13 @@ const PERMISSION_DEFINITIONS = [
     type: 'boolean',
   },
   {
+    key: 'add_missing_items',
+    label: 'Add missing items at the counter',
+    description: 'When a scanned or searched item is not in the shop list, add it on the spot (name, barcode, price). The Admin reviews it later.',
+    type: 'boolean',
+    defaultForNewCashier: true,
+  },
+  {
     key: 'manage_expenses',
     label: 'Manage Expenses',
     description: 'Add and view shop expenses.',
