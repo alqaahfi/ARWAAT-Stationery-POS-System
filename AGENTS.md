@@ -22,7 +22,7 @@ Read this file first, then SYSTEM_STATUS.md (code wins when they disagree), then
 ## Status
 | Stage | What | Status | Next concrete step |
 |---|---|---|---|
-| 1 | 17 business rules + anomaly handling (server first, then UI), one commit per rule | IN PROGRESS - done: R1 9295f6a, R2 9240782, R3 9ddd33a, R4 2a1777a, R5 9261169, R6 e151378, R7 fe33dd2, R8 565067d | Rule 9 (cash only: POS, Receive Payment, Pay Supplier, purchases; server records 'cash') |
+| 1 | 17 business rules + anomaly handling (server first, then UI), one commit per rule | IN PROGRESS - done: R1 9295f6a, R2 9240782, R3 9ddd33a, R4 2a1777a, R5 9261169, R6 e151378, R7 fe33dd2, R8 565067d, R9 547bb61 | Rule 10 (no rounding of totals) |
 | 2 | Reliable harness (ARWAAT_TEST_MODE, state-based waits, TEST_SPEED=fast, CLEAN-MASTER rebuild) | NOT STARTED | - |
 | 3 | Run everything A-Q + per-rule + anomaly checks, bombard, crash, concurrency, load, dates, security | NOT STARTED | - |
 | 4 | Screenshot every page/form/print at 1366x768, 1920x1080, 683x768; fix UI bugs | NOT STARTED | - |
