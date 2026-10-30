@@ -279,6 +279,7 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
       if (!(Number(l.quantity) > 0)) return `Enter a quantity for ${l.productName}.`;
       if (Number(l.focQuantity) < 0 || Number.isNaN(Number(l.focQuantity))) return `Free quantity for ${l.productName} isn't valid.`;
       if (isPurchase && (l.unitPrice === '' || Number(l.unitPrice) < 0 || Number.isNaN(Number(l.unitPrice)))) return `Enter a buying price for ${l.productName}.`;
+      if (!isPurchase && (l.unitPrice === '' || Number(l.unitPrice) < 0 || Number.isNaN(Number(l.unitPrice)))) return `Enter a selling price for ${l.productName}.`;
     }
     if (Object.keys(stockIssues).length) return 'Some items are over what you have in stock. Lower the quantity or the free units.';
     if (!isPurchase && !party && totals.balanceDue > 0) return 'Choose a customer to leave a balance, or take the full payment.';
@@ -386,6 +387,15 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
 
     const res = await whileSaving(() => window.api.sales.create(payload));
     if (!res.success) {
+      // The server re-checks every price; take any price that changed while the bill was open.
+      if (res.priceChanged && Array.isArray(res.changedLines)) {
+        setLines((prev) =>
+          prev.map((l) => {
+            const hit = res.changedLines.find((c) => c.productVariantId === l.variantId && c.productUnitId === l.unitId);
+            return hit ? { ...l, unitPrice: hit.price } : l;
+          })
+        );
+      }
       setError(res.reason || 'Could not complete sale.');
       return; // the bill stays as it is, so it can be fixed and retried
     }
@@ -521,6 +531,7 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
             lines={lines}
             kind={kind}
             canSeeCost={isAdmin}
+            canEditPrice={isAdmin}
             stockIssues={stockIssues}
             onUnit={updateUnit}
             onField={updateField}

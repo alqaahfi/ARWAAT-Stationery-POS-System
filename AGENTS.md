@@ -15,6 +15,8 @@ Read this file first, then SYSTEM_STATUS.md (code wins when they disagree), then
   - harness starts Vite (5173) + `node_modules/electron/dist/electron.exe . --mode=<m> --remote-debugging-port=9333`; ELECTRON_RUN_AS_NODE must be deleted from the spawn env (done in tests/e2e/lib/h.js).
   - `node tests/e2e/report.js` builds test-results/TEST_RESULTS.txt from test-results/results.json + meta.json.
   - App-only screenshots: `node tests/e2e/tools/app-shot.js <label>`.
+- Stage 1 rules checks (no GUI): `npm run test:rules` (or `ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/electron.exe tests/rules/run.js [r01 r05 ...]`). Prints PASS/FAIL per check ID; all must pass.
+- Renderer build check: `npx vite build --outDir <temp dir> --emptyOutDir`.
 - Build (the developer does this, not agents): `npm run dist`.
 
 ## Status

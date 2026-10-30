@@ -150,3 +150,29 @@ FILES TO KNOW
   tests/e2e/                 all test code and helpers          test-results/   screenshots, videos, results.json
   test-backups/              CLEAN-MASTER.db, old database zip, deleted-files.txt
   Memory notes for the next session: C:\Users\p c\.claude\projects\d--ARWAAT-Stationery-POS-System\memory\
+
+==========================================================================
+STAGE 1 - BUSINESS RULES (started 2026-10-30)
+==========================================================================
+Automated checks: tests/rules/ (plain Node scripts on a throw-away database; real main-process code:
+migrations, IPC handlers behind the real IPC guard, balanceEngine, reports).
+  Run:   npm run test:rules        (= ELECTRON_RUN_AS_NODE=1 electron tests/rules/run.js [r01 r05 ...])
+  Files: tests/rules/run.js (runner, PASS/FAIL per check ID), tests/rules/lib/harness.js (fake electron
+         module, temp DB, fake signed-in windows admin/cashier/cashier2, fixtures), tests/rules/checks/rNN-*.js
+  Renderer build check: npx vite build --outDir <temp dir> --emptyOutDir
+
+RULE 1 - Server checks every sale price
+  Changed: src/main/ipc/sales.ipc.js (priceLines(): every line re-resolved with priceEngine for the customer
+           + pack size; > 0.01 difference refused with { priceChanged, changedLines } unless the caller is the
+           Admin; line totals/subtotal recomputed from the stored server price; a pack size that does not belong
+           to the item is refused). Renderer: Sale.jsx / QuickBillForm.jsx take the new price from changedLines
+           and show the message (bill kept, retry). BillLines.jsx: Admin can type a selling price (override).
+  Checks: R01-01..R01-11 (all PASS).
+  Stage 3 e2e: Admin changes a price while a cashier bill is open -> cashier presses Pay -> message
+           "The price of X is now ..." + cart shows the new price; second Pay saves at the new price.
+
+STAGE 1 DECISIONS
+  D1 (rule 1) Editing a saved bill: a cashier may keep the bill's OWN stored price for a pack size (same
+     customer only); any other price must match the price engine. Changing the customer re-prices.
+  D2 (rule 1) Admin manual price override is in the quick Sale form (BillLines price box, Admin only).
+     The keyboard POS has no price box (unchanged); Admin uses the quick Sale form to override.

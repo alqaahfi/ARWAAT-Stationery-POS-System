@@ -251,25 +251,57 @@ function baseQtyOf(db, item) {
   return (Number(item.quantity) + (Number(item.focQuantity) || 0)) * (unit ? unit.conversion_factor : 1);
 }
 
+const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+const PRICE_TOLERANCE = 0.01;
+
+// Rule 1: the server decides every line's price. Each line is re-resolved with
+// the price engine for this customer and pack size; a price sent by the screen
+// that differs by more than 0.01 is refused, unless the caller is the Admin
+// (manual price override is Admin-only). While editing a saved bill for the
+// same customer, the bill's own stored price for that pack size is also
+// accepted (the bill keeps the price it was sold at). The server's price is
+// what gets stored, and line totals are recomputed from it.
+function priceLines(db, items, { customerId, actorIsAdmin, original }) {
+  const priced = [];
+  const changed = [];
+  for (const item of items) {
+    const variant = db.prepare('SELECT id, product_id, variant_name FROM product_variants WHERE id = ?').get(item.productVariantId);
+    const unit = db.prepare('SELECT id, product_id, unit_name FROM product_units WHERE id = ?').get(item.productUnitId);
+    if (!variant || !unit || unit.product_id !== variant.product_id) {
+      return { error: 'One of the items in the cart no longer exists.' };
+    }
+    const enginePrice = resolveUnitPrice({ db, productUnitId: unit.id, customerId: customerId || null });
+    if (enginePrice === null || enginePrice === undefined) return { error: 'One of the items in the cart no longer exists.' };
+    const sent = Number(item.unitPrice);
+    let price = enginePrice;
+    if (Math.abs(sent - enginePrice) > PRICE_TOLERANCE) {
+      const keepsBillPrice =
+        original &&
+        (original.customerId || null) === (customerId || null) &&
+        original.prices.some((p) => p.unitId === unit.id && Math.abs(p.price - sent) <= PRICE_TOLERANCE);
+      if (actorIsAdmin || keepsBillPrice) {
+        price = round2(sent);
+      } else {
+        const name = db.prepare('SELECT name FROM products WHERE id = ?').get(unit.product_id)?.name || 'an item';
+        changed.push({ productVariantId: variant.id, productUnitId: unit.id, name, sentPrice: sent, price: enginePrice });
+      }
+    }
+    const qty = Number(item.quantity);
+    priced.push({ ...item, unitPrice: price, lineTotal: round2(qty * price) });
+  }
+  return { priced, changed };
+}
+
 function saveSale(payload, editSaleId) {
   const db = getDb();
-  const { saleType, customerId, cashierId, letterheadId, items, discountAmount, paidAmount, paymentMethod } = payload;
+  const { saleType, customerId, cashierId, letterheadId, discountAmount, paidAmount, paymentMethod } = payload;
+  let { items } = payload;
 
   if (!cashierId) return { success: false, reason: 'Missing cashier.' };
   if (!items || items.length === 0) return { success: false, reason: 'Cart is empty.' };
 
   const activation = db.prepare('SELECT * FROM station_config WHERE id = 1').get();
   const stationCode = (activation && activation.station_code) || 'MAIN';
-
-  // Subtotal is recomputed from the lines server-side rather than trusted from
-  // the client, so a stale/tampered total can't slip through.
-  let subtotal = 0;
-  for (const item of items) subtotal += Number(item.lineTotal) || 0;
-
-  const discount = Number(discountAmount) || 0;
-  const taxAmount = 0;
-  const totalAmount = Math.max(0, subtotal - discount + taxAmount);
-  const paid = Number(paidAmount) || 0;
 
   // Server-side checks: the screen already blocks these, but the main process must not trust it.
   for (const item of items) {
@@ -279,6 +311,47 @@ function saveSale(payload, editSaleId) {
     if (!Number.isFinite(price) || price < 0 || !Number.isFinite(line) || line < 0) return { success: false, reason: 'An item has an invalid price.' };
     if (Math.abs(line - qty * price) > 0.02) return { success: false, reason: 'An item total does not match its quantity and price.' };
   }
+
+  const actor = db.prepare('SELECT role FROM users WHERE id = ?').get(cashierId);
+  if (!actor) return { success: false, reason: 'Unknown user.' };
+  const actorIsAdmin = actor.role === 'admin';
+
+  let original = null;
+  if (editSaleId) {
+    const existing = db.prepare('SELECT customer_id FROM sales WHERE id = ?').get(editSaleId);
+    if (existing) {
+      original = {
+        customerId: existing.customer_id,
+        prices: db
+          .prepare('SELECT product_unit_id AS unitId, unit_price AS price FROM sale_items WHERE sale_id = ?')
+          .all(editSaleId),
+      };
+    }
+  }
+  const pricing = priceLines(db, items, { customerId, actorIsAdmin, original });
+  if (pricing.error) return { success: false, reason: pricing.error };
+  if (pricing.changed.length) {
+    const first = pricing.changed[0];
+    const more = pricing.changed.length > 1 ? ` (and ${pricing.changed.length - 1} more)` : '';
+    return {
+      success: false,
+      priceChanged: true,
+      changedLines: pricing.changed,
+      reason: `The price of "${first.name}" is now ${first.price.toFixed(2)}${more}. The bill was not saved — check the new total and save again.`,
+    };
+  }
+  items = pricing.priced;
+
+  // Subtotal is recomputed from the server-priced lines rather than trusted
+  // from the client, so a stale/tampered total can't slip through.
+  let subtotal = 0;
+  for (const item of items) subtotal += item.lineTotal;
+  subtotal = round2(subtotal);
+
+  const discount = Number(discountAmount) || 0;
+  const taxAmount = 0;
+  const totalAmount = Math.max(0, round2(subtotal - discount + taxAmount));
+  const paid = Number(paidAmount) || 0;
   if (!Number.isFinite(Number(discountAmount || 0)) || discount < 0) return { success: false, reason: 'Discount cannot be negative.' };
   if (discount > subtotal + 0.005) return { success: false, reason: 'Discount cannot be more than the bill total.' };
   if (!Number.isFinite(Number(paidAmount || 0)) || paid < 0) return { success: false, reason: 'Amount paid cannot be negative.' };

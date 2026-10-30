@@ -998,6 +998,16 @@ export default function Sale() {
     setCompleting(false);
 
     if (!res.success) {
+      // The server re-checks every price; a price the Admin changed while this
+      // bill was open comes back here — take the new price and let them retry.
+      if (res.priceChanged && Array.isArray(res.changedLines)) {
+        setCartLines((lines) =>
+          lines.map((l) => {
+            const hit = res.changedLines.find((c) => c.productVariantId === l.variantId && c.productUnitId === l.unitId);
+            return hit ? { ...l, unitPrice: hit.price } : l;
+          })
+        );
+      }
       setFinalizeError(res.reason || 'Could not complete sale.');
       return; // cart is preserved on purpose — let the cashier retry
     }

@@ -12,7 +12,8 @@ const GRID = 'minmax(0, 1fr) 128px 84px 76px 104px 104px 36px';
 
 // The item list shared by the quick Sale and quick Purchase forms. A sale shows
 // its resolved price (read-only); a purchase lets the buying price be typed.
-export default function BillLines({ lines, kind, canSeeCost, stockIssues, onUnit, onField, onRemove }) {
+// The Admin may type a different selling price (manual override, checked server-side).
+export default function BillLines({ lines, kind, canSeeCost, canEditPrice, stockIssues, onUnit, onField, onRemove }) {
   const isPurchase = kind === 'purchase';
   return (
     <Card padding="0" style={styles.card}>
@@ -39,6 +40,7 @@ export default function BillLines({ lines, kind, canSeeCost, stockIssues, onUnit
                 line={line}
                 isPurchase={isPurchase}
                 canSeeCost={canSeeCost}
+                canEditPrice={!isPurchase && !!canEditPrice}
                 stockIssue={!!stockIssues[line.key]}
                 onUnit={onUnit}
                 onField={onField}
@@ -52,7 +54,7 @@ export default function BillLines({ lines, kind, canSeeCost, stockIssues, onUnit
   );
 }
 
-const BillRow = memo(function BillRow({ line, isPurchase, canSeeCost, stockIssue, onUnit, onField, onRemove }) {
+const BillRow = memo(function BillRow({ line, isPurchase, canSeeCost, canEditPrice, stockIssue, onUnit, onField, onRemove }) {
   const type = line.variantName && line.variantName !== 'Standard' ? line.variantName : null;
   const qty = Number(line.quantity) || 0;
   const foc = Number(line.focQuantity) || 0;
@@ -103,9 +105,9 @@ const BillRow = memo(function BillRow({ line, isPurchase, canSeeCost, stockIssue
           <span style={{ ...theme.type.body, ...theme.font.numeric, color: c.labelSecondary, textAlign: 'right' }} title="Worked out from the trade price and discounts below">
             {formatCurrency(line.unitPrice)}
           </span>
-        ) : isPurchase ? (
+        ) : isPurchase || canEditPrice ? (
           <NumberInput
-            aria-label={`Buying price for ${line.productName}`}
+            aria-label={`${isPurchase ? 'Buying price' : 'Selling price'} for ${line.productName}`}
             value={line.unitPrice}
             onChange={(e) => onField(line.key, 'unitPrice', e.target.value)}
             onFocus={(e) => e.target.select()}

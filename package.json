@@ -10,6 +10,7 @@
     "dev:cashier": "cross-env NODE_ENV=development electron . --mode=cashier",
     "build:renderer": "vite build",
     "test": "echo \"Error: no test specified\" && exit 1",
+    "test:rules": "cross-env ELECTRON_RUN_AS_NODE=1 electron tests/rules/run.js",
     "dist": "npm run build:renderer && electron-builder --win"
   },
   "keywords": [],
