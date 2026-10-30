@@ -261,6 +261,15 @@ RULE 7 - Duplicate customer phone/mobile = warning
   Stage 3 e2e: add a customer with Ahmed's number typed differently ("+92 300 ...") -> warning names Ahmed;
            Save anyway saves; Go back keeps the form.
 
+RULE 8 - No exchange screen (return + new sale)
+  Verified: no exchange screen or channel exists (grep). Returns success sheet now says "Exchanging? Ring up what
+           the customer takes as a New Sale." (ReturnSuccess.jsx). TEST_PROGRESS item H "exchange pays only the
+           difference" is replaced by: return (credit/cash) + new sale.
+  Checks: R08-01..R08-02 (PASS) - no exchange channel; return 2 pens as account credit + new sale of a book:
+           customer balance, stock and totals add up.
+  Stage 3 e2e: return from a credit customer's bill, then New Sale for the replacement; the customer's ledger
+           shows the return credit used by the new bill.
+
 STAGE 1 DECISIONS
   D1 (rule 1) Editing a saved bill: a cashier may keep the bill's OWN stored price for a pack size (same
      customer only); any other price must match the price engine. Changing the customer re-prices.

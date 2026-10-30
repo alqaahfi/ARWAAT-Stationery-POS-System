@@ -24,6 +24,11 @@ export function ReturnSuccess({ result, named, onDone, onSeeSale }) {
         {named && <Row label="New balance" value={<BalanceChip amount={result.new_balance} />} />}
       </div>
 
+      {/* Rule 8: there is no exchange screen — an exchange is this return plus a new sale. */}
+      <div style={{ ...theme.type.footnote, color: c.labelSecondary, marginTop: theme.spacing.md, textAlign: 'center' }}>
+        Exchanging? Ring up what the customer takes as a New Sale.
+      </div>
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm, marginTop: theme.spacing.lg }}>
         <Button size="lg" fullWidth onClick={onDone} autoFocus>
           Done
