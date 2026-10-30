@@ -43,7 +43,7 @@ function getSalesReport(filters, requestingUserId) {
   const { from, to } = dateRangeParams(filters);
   const tzMod = localOffsetMod();
   const invTzMod = inverseLocalOffsetMod();
-  db.exec('CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales(created_at)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_sales_voided_created ON sales(is_voided, created_at)');
 
   const startUtc = filters?.dateFrom
     ? db.prepare('SELECT datetime(date(?), ?) AS v').get(from, invTzMod)?.v || '0000-01-01 00:00:00'

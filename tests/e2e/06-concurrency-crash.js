@@ -43,8 +43,8 @@ const { check, note, expectEq, q } = H;
     const broken = q(`select s.id from sales s where (select count(*) from sale_items where sale_id=s.id)=0
        or abs(s.subtotal - (select sum(line_total) from sale_items where sale_id=s.id))>0.01`);
     if (broken.length) throw new Error('sales without matching items: ' + broken.length);
-    const mv = q("select (select count(*) from stock_movements where movement_type='sale') m, (select count(*) from sale_items) i")[0];
-    expectEq(mv.m, mv.i, 'sale stock movements vs sale items (voids/edits aside)');
+    const mv = q("select (select count(*) from stock_movements where movement_type='sale' and quantity < 0) m, (select count(*) from sale_items) i")[0];
+    expectEq(mv.m, mv.i, 'outbound sale stock movements vs sale items');
     const stock = q('select stock_qty s from product_variants where id=?', [piano.vid])[0].s;
     const sold = q('select coalesce(sum(si.quantity),0) n from sale_items si where si.product_variant_id=?', [piano.vid])[0].n;
     console.log(`   sales survived the kill: ${q('select count(*) n from sales')[0].n - before}; piano stock ${stock}`);

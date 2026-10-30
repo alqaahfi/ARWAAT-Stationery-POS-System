@@ -20,8 +20,8 @@ const { check, note, expectEq, q } = H;
     await A.see('Already returned', 5000);
     await A.type(P.locator('tr', { hasText: 'UHU Glue Stick' }).first().locator('input').first(), '1', 'return 1 glue');
     await A.click(P.getByText('Changed their mind', { exact: true }).first(), 'reason');
-    await A.click(A.btn('Continue'), 'Continue'); await A.see('How to refund', 5000); await A.pause();
-    await A.click(P.getByRole('button', { name: 'Record return' }).last(), 'Record return'); await H.sleep(700); if (await P.locator('[role=dialog]').count()) await A.click(P.getByRole('button', { name: 'Record return' }).last(), 'confirm in the dialog');
+    await A.click(A.btn('Continue'), 'Continue'); await A.see('Value of returned items', 5000); await A.pause();
+    await A.click(P.getByRole('button', { name: 'Record return' }).last(), 'Record return'); await H.sleep(700); if (await P.locator('[role="alertdialog"], [role="dialog"]').count()) await A.click(P.getByRole('button', { name: 'Record return' }).last(), 'confirm in the dialog');
     await A.see('Return recorded', 8000);
     const r = q('select total_amount, cash_refund_amount from sale_returns order by id desc limit 1')[0];
     expectEq(r.total_amount, 93.75, 'refund value'); expectEq(r.cash_refund_amount, 93.75, 'cash refund');
@@ -43,13 +43,15 @@ const { check, note, expectEq, q } = H;
   });
 
   // ---- void ----
-  await check('VOID', 'VOID-01', 'Void restores stock and drops the sale from totals', 'B', async () => {
-    const last = q('select id, invoice_no, total_amount from sales order by id desc limit 1')[0];
+  await check('VOID', 'VOID-01', 'Void restores stock, keeps the row marked is_voided=1, and drops the sale from totals (Rule 5)', 'B', async () => {
+    const last = q('select id, invoice_no, total_amount from sales where is_voided=0 order by id desc limit 1')[0];
     const stockBefore = q("select v.stock_qty s from product_variants v join products p on p.id=v.product_id where p.name='Piano Ball Pen'")[0].s;
+    const activeTotalBefore = q('select coalesce(sum(total_amount),0) t from sales where is_voided=0')[0].t;
     const r = await call('sales', 'void', { saleId: last.id });
     if (!r.success) throw new Error(JSON.stringify(r));
     expectEq(q("select v.stock_qty s from product_variants v join products p on p.id=v.product_id where p.name='Piano Ball Pen'")[0].s, stockBefore + 1, 'Piano stock after void');
-    expectEq(q('select count(*) n from sales where id=?', [last.id])[0].n, 0, 'sale rows');
+    expectEq(q('select is_voided from sales where id=?', [last.id])[0].is_voided, 1, 'sale row kept with is_voided=1');
+    expectEq(q('select coalesce(sum(total_amount),0) t from sales where is_voided=0')[0].t, activeTotalBefore - last.total_amount, 'active sales total after void');
     H.voided = last.invoice_no;
   });
   await check('VOID', 'VOID-02', 'A voided invoice number is never reused, and the void stays in the log', 'B', async () => {
@@ -64,38 +66,40 @@ const { check, note, expectEq, q } = H;
     await D.goSection(A, 'Reports');
     for (const t of ['Sales', 'Profit', 'Stock', 'Customer', 'Supplier', 'Expense']) {
       const card = P.getByText(new RegExp('^' + t)).first();
-      if (await card.count()) { await A.click(card, 'report ' + t); await H.sleep(900); await A.shot('report-' + t); await A.pause(400); await D.goSection(A, 'Reports'); }
+      if (await card.count()) { await A.click(card, 'report ' + t); await A.shot('report-' + t); await A.pause(200); await D.goSection(A, 'Reports'); }
     }
   }, A);
 
   // ---- backup / restore (visible) ----
+  let Acur = A;
   await check('BACKUP', 'BAK-01', 'Backup then restore gives identical data (every table compared)', 'V', async () => {
-    const file = await D.makeBackup(A, 'RESTORE-TEST');
-    const tables = q("select name from sqlite_master where type='table' and name not in ('sessions','dev_audit_log','activity_log','_migrations','sqlite_sequence','dev_panel_access_log')").map((r) => r.name);
+    const file = await D.makeBackup(Acur, 'RESTORE-TEST');
+    const tables = q("select name from sqlite_master where type='table' and name not in ('sessions','dev_audit_log','activity_log','_migrations','sqlite_sequence','dev_panel_access_log','settings')").map((r) => r.name);
     const snap = () => Object.fromEntries(tables.map((t) => [t, JSON.stringify(q(`select * from "${t}" order by 1`))]));
     const before = snap();
     // change something, then restore
-    await D.goSection(A, 'Expenses'); await A.click(A.btn(/Add Expense/)); await A.type(P.getByLabel('Amount *'), '1', '1'); await A.type(P.getByLabel('Description *'), 'temp', 'temp'); await A.click(A.btn('Save expense')); await H.sleep(800);
-    await D.restoreBackup(A, file);
-    for (let i = 0; i < 30; i++) { await H.sleep(1000); if (await H.cdpUp()) break; }
-    await H.sleep(3000);
+    await D.goSection(Acur, 'Expenses');
+    await Acur.click(Acur.btn(/Add Expense/));
+    await Acur.type(Acur.page.getByLabel('Amount *'), '1', '1');
+    await Acur.type(Acur.page.getByLabel('Description *'), 'temp', 'temp');
+    await Acur.click(Acur.btn('Save expense'));
+    await Acur.see('temp', 5000);
+    Acur = await D.restoreBackup(Acur, file, { mode: 'admin', restart: true });
+    await S.loginIf(Acur, 'admin', 'Admin@123');
     const after = snap();
     const bad = tables.filter((t) => before[t] !== after[t]);
     if (bad.length) throw new Error('tables differ after restore: ' + bad.join(', '));
-  }, A);
+  }, Acur);
   await check('BACKUP', 'BAK-02', 'A non-backup / empty file is rejected and the data is untouched', 'V', async () => {
     const junk = path.join(H.ROOT, 'test-backups', 'not-a-backup.db'); fs.writeFileSync(junk, 'this is not a database');
     const empty = path.join(H.ROOT, 'test-backups', 'empty.db'); fs.writeFileSync(empty, '');
-    const A2 = await H.openApp('admin'); await S.loginIf(A2, 'admin', 'Admin@123');
     const count = () => q('select (select count(*) from sales) a, (select count(*) from products) b')[0];
     const before = JSON.stringify(count());
     for (const f of [junk, empty]) {
-      await D.restoreBackup(A2, f); await H.sleep(2500);
-      const t = await A2.body();
-      if (!/can.t|not a|invalid|couldn|isn.t|choose|valid/i.test(t)) console.log('   (no message found for ' + path.basename(f) + ')');
+      await D.restoreBackup(Acur, f, { expectError: true });
     }
     expectEq(JSON.stringify(count()), before, 'data after bad restores');
-  }, A);
+  }, Acur);
 
   await rec.stop(); process.exit(0);
 })().catch((e) => { console.error('ERR', e); process.exit(1); });

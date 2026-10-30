@@ -4,6 +4,12 @@ const path = require('path');
 const H = require('./h');
 
 async function goSection(ui, name) {
+  for (let i = 0; i < 3; i++) {
+    const dlg = ui.page.locator('[role="alertdialog"], [role="dialog"]');
+    if ((await dlg.count()) === 0) break;
+    await ui.page.keyboard.press('Escape');
+    await H.sleep(150);
+  }
   await ui.click(ui.page.getByRole('button', { name, exact: true }).first(), `sidebar ${name}`);
 }
 

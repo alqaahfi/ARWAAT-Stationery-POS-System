@@ -11,7 +11,7 @@ try {
 fs.writeFileSync(LOCK, String(process.pid));
 process.on('exit', () => { try { fs.unlinkSync(LOCK); } catch { /* ignore */ } });
 
-const ALL = ['00-setup', '01-data', '02-login', '03a-restore', '03-shopday', '03b-shopday-admin', '03c-shopday-verify', '04-checks', '05-ops', '06-concurrency-crash'];
+const ALL = ['00-setup', '01-data', '02-login', '03a-restore', '03-shopday', '03b-shopday-admin', '03c-shopday-verify', '04-checks', '05-ops', '06-concurrency-crash', '07-stage1-ui', '08-bombard-dates-load', '09-screenshots-ui'];
 const list = process.argv.slice(2).length ? process.argv.slice(2) : ALL;
 if (list.includes('00-setup') && !process.env.KEEP_DATA) fs.writeFileSync(path.join(ROOT, 'test-results', 'results.json'), '[]');
 for (const name of list) {

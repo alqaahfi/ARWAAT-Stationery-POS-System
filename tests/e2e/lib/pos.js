@@ -16,7 +16,7 @@ async function startSale(ui, customer) {
   if (customer) {
     await ui.page.keyboard.type(customer, { delay: H.S.keyDelay });
     // wait for the customer result to be listed (debounced search), then choose it
-    await ui.page.getByText(customer, { exact: false }).nth(1).waitFor({ state: 'visible', timeout: 6000 });
+    await ui.page.locator('#pos-customer-list [role="option"]').first().waitFor({ state: 'visible', timeout: 6000 });
     await ui.press('Enter');
   } else {
     await ui.press('Tab');
@@ -46,9 +46,12 @@ async function qtyStage(ui, qty) {
   await ui.press('Enter');
   await ui.see('Add items', 5000);
 }
-async function addByScan(ui, code, qty) {
-  await ui.scan(code);
-  await qtyStage(ui, qty);
+async function addByScan(ui, code, qty = 1) {
+  const n = qty !== undefined ? Number(qty) || 1 : 1;
+  for (let i = 0; i < n; i++) {
+    await ui.scan(code);
+  }
+  await H.sleep(250);
 }
 
 // From the item stage: Tab -> discount (default Percent), Enter -> format, Enter -> payment, Enter -> saved.
@@ -60,16 +63,16 @@ async function discountAndPay(ui, { discount, pay, format } = {}) {
     await ui.page.keyboard.type(String(discount.amount !== undefined ? discount.amount : discount.percent), { delay: H.S.keyDelay });
   }
   await ui.press('Enter');
-  // Either receipt format step or straight to payment step
+  // Either receipt format step or straight to payment step (Rule 9 heading: 'Amount received')
   await Promise.race([
     ui.see('How would you like to print the receipt?', 4000),
-    ui.see('How much did the customer pay?', 4000),
+    ui.see('Amount received', 4000),
   ]).catch(() => {});
   if (await ui.hasText('How would you like to print the receipt?', 300)) {
     if (format) await ui.press(String(format));
     await ui.press('Enter');
   }
-  await ui.see('How much did the customer pay?', 5000);
+  await ui.see('Amount received', 5000);
   if (pay !== undefined && pay !== 'exact') await ui.page.keyboard.type(String(pay), { delay: H.S.keyDelay });
   await ui.press('Enter');
 }
@@ -86,9 +89,9 @@ async function finishSale(ui) {
 
 async function closeDialogs(ui) {
   for (let i = 0; i < 3; i++) {
-    if (!(await ui.page.locator('[role=dialog]').count())) return;
+    if (!(await ui.page.locator('[role=dialog], [role=alertdialog]').count())) return;
     await ui.press('Escape');
-    await ui.page.locator('[role=dialog]').first().waitFor({ state: 'detached', timeout: 1500 }).catch(() => {});
+    await ui.page.locator('[role=dialog], [role=alertdialog]').first().waitFor({ state: 'detached', timeout: 1500 }).catch(() => {});
   }
 }
 

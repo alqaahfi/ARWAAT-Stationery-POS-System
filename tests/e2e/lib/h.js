@@ -245,6 +245,10 @@ function q(sql, params = []) {
   const out = execFileSync('python', ['-I', path.join(__dirname, '..', 'tools', 'q.py'), DB_PATH, sql, JSON.stringify(params)], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   return JSON.parse(out);
 }
+function execSql(sql, params = []) {
+  const out = execFileSync('python', ['-I', path.join(__dirname, '..', 'tools', 'w.py'), DB_PATH, sql, JSON.stringify(params)], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  return JSON.parse(out);
+}
 
 // ---------- screen recording (real screen, so the video is what the owner saw) ----------
 function startRecording(name) {
@@ -256,4 +260,4 @@ function startRecording(name) {
   return { file, stop: () => new Promise((res) => { ff.on('close', res); try { ff.stdin.write('q'); } catch { res(); } setTimeout(res, 4000); }) };
 }
 
-module.exports = { PROC_NAME, DEV, ensureVite, wipeData, setDialogFile, restoreCleanMaster, ROOT, EXE, PORT, DATA_DIR, DB_PATH, S, SPEED_NAME, sleep, log, record, loadResults, openApp, killApp, bringFront, UI, check, note, expectEq, q, startRecording, cdpUp, connect, launchExe, RESULTS_DIR, SHOTS, VIDEOS };
+module.exports = { PROC_NAME, DEV, ensureVite, wipeData, setDialogFile, restoreCleanMaster, ROOT, EXE, PORT, DATA_DIR, DB_PATH, S, SPEED_NAME, sleep, log, record, loadResults, openApp, killApp, bringFront, UI, check, note, expectEq, q, execSql, startRecording, cdpUp, connect, launchExe, RESULTS_DIR, SHOTS, VIDEOS };
