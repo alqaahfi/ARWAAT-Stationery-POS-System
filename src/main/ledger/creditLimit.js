@@ -37,7 +37,7 @@ function creditLimitCheck(db, { customerId, addAmount, excludeSaleId } = {}) {
     balanceAfter,
     customerName: customer.name,
     message: overLimit
-      ? `This puts ${customer.name} at ${money(db, balanceAfter)}, over their credit limit of ${money(db, limit)}.`
+      ? `This puts ${customer.name} at ${money(db, balanceAfter)}, over their credit limit of ${money(db, limit)}. Over by: ${money(db, balanceAfter - limit)}.`
       : null,
   };
 }

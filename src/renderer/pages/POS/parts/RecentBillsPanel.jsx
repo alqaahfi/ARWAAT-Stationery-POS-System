@@ -177,7 +177,7 @@ export default function RecentBillsPanel({ userId, onClose, onEdit, onVoided }) 
                   busy={busy}
                   onEdit={edit}
                   onAskVoid={() => setConfirmVoid(true)}
-                  onVoid={doVoid}
+                  onVoid={() => doVoid()}
                   onKeep={() => setConfirmVoid(false)}
                 />
               )}

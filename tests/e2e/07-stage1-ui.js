@@ -176,11 +176,13 @@ async function resetPosToIdle(C) {
     const lastSale = q('SELECT id, invoice_no FROM sales ORDER BY id DESC LIMIT 1')[0];
     execSql("UPDATE sales SET created_at = datetime('now', '-15 minutes') WHERE id = ?", [lastSale.id]);
 
-    await C.press('F8');
-    await C.see("Today's sales", 5000);
+    await C.press('F2');
+    await C.see("Today's bills", 5000);
     await C.see(lastSale.invoice_no, 5000);
-    await C.click(cp.getByRole('button', { name: /Void bill/i }).first(), 'Void bill');
-    await C.click(cp.getByRole('button', { name: /Confirm void/i }).first(), 'Confirm void');
+    // The backdated bill sorts below today's newer bills: select its row first.
+    await C.click(cp.locator('[role="option"]').filter({ hasText: lastSale.invoice_no }).first(), 'select the old bill');
+    await C.click(cp.getByRole('button', { name: 'Void', exact: true }), 'Void');
+    await C.click(cp.getByRole('button', { name: /^Void bill/ }), 'Void bill');
 
     await C.see('Admin approval', 5000);
     const oldDlg = cp.getByRole('dialog').last();
@@ -336,11 +338,12 @@ async function resetPosToIdle(C) {
     await resetPosToIdle(C);
 
     // Sign-out with open cart holds the bill instead of losing it
+    const heldBefore = Number(((await C.body()).match(/Held \((\d+)\)/) || [])[1] || 0);
     await POS.startSale(C, null);
     await POS.addByScan(C, '1003', 1);
     await C.click(cp.getByRole('button', { name: 'Sign out' }), 'Sign out with open cart');
     await S.loginIf(C, 'cashier1', 'Cash@123');
-    await C.see('Held (1)', 5000);
+    await C.see(`Held (${heldBefore + 1})`, 5000);
   }, C);
 
   await check('STAGE1-UI', 'UI-R99', 'Restore CLEAN-MASTER after Stage 1 UI suite', 'V', async () => {
