@@ -40,6 +40,14 @@ function normalizeVariantsAndUnits(variants, units, standardStartingStock, stand
   for (const v of normalizedVariants) {
     if (wholeQty(v.startingStock, { allowZero: true }) === null) return { error: `Starting stock: ${WHOLE_QTY_MSG}` };
   }
+  for (const u of units) {
+    if (Number(u.retailPrice) < 0 || Number(u.wholesalePrice) < 0 || Number(u.costPrice) < 0) {
+      return { error: 'Prices cannot be negative.' };
+    }
+    if (wholeQty(u.conversionFactor ?? 1) === null) {
+      return { error: `Pack size factor: ${WHOLE_QTY_MSG}` };
+    }
+  }
 
   let normalizedUnits = units;
   if (!normalizedUnits.some((u) => u.isDefaultSaleUnit)) {
@@ -124,7 +132,7 @@ function buildFilteredQuery() {
     FROM products p
     LEFT JOIN categories c ON c.id = p.category_id
     LEFT JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1
-    WHERE (@likeTerm IS NULL OR p.name LIKE @likeTerm OR p.search_alias LIKE @likeTerm OR p.sku LIKE @likeTerm)
+    WHERE (@likeTerm IS NULL OR p.name LIKE @likeTerm OR p.search_alias LIKE @likeTerm OR p.sku LIKE @likeTerm OR pv.barcode LIKE @likeTerm)
       AND (@categoryId IS NULL OR p.category_id = @categoryId)
       AND (
         @activeFilter = 'all'
