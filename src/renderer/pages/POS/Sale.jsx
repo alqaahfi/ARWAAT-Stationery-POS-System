@@ -635,7 +635,7 @@ export default function Sale() {
     clearSaleState();
 
     const { sale } = res;
-    if (res.needsApproval) toast.error('This is an older bill. The Admin will be asked to approve the change when you save.');
+    if (res.needsApproval) toast.error('This bill was saved more than 10 minutes ago. The Admin will be asked to approve the change when you save.');
     // The bill's own stock is given back when saving, so it counts as available while editing.
     const givenBack = {};
     for (const l of res.lines) {

@@ -343,6 +343,15 @@ RULE 12 - Admin approval on the cashier screen + approvals log + Stock to recoun
            Cashiers > Approvals shows it. Cashier sells 5 of an item with 2 -> approval -> stock -3 -> Stock > To recount.
            5 wrong Admin passwords in the box -> "Too many wrong tries". Cashier stays signed in throughout.
 
+RULE 13 - Cashier bill edits/voids: own bills, 10 minutes, then Admin approval
+  Changed: sales.ipc.js billNeedsApproval(): Admin -> never; cashier -> own bills only (refused otherwise, even with
+           an approval); older than 10 minutes since saving (CASHIER_EDIT_MINUTES) -> needs the rule-12 approval
+           (replaces the old "made today" rule). Bills with returns stay locked for everyone (unchanged).
+           Sale.jsx message when an older own bill is opened for edit.
+  Checks: R13-01..R13-07 (PASS).
+  Stage 3 e2e: cashier F2 -> bill saved 11+ minutes ago -> Delete -> approval box; Edit -> save -> approval box;
+           a fresh bill edits/voids without the box.
+
 STAGE 1 DECISIONS
   D1 (rule 1) Editing a saved bill: a cashier may keep the bill's OWN stored price for a pack size (same
      customer only); any other price must match the price engine. Changing the customer re-prices.
@@ -367,3 +376,5 @@ STAGE 1 DECISIONS
      it is bound to the window that asked and expires after 3 minutes. The Admin never needs the box: selling without
      stock as Admin is a plain "Sell anyway?" confirm (still put on Stock to recount, not in the approvals log).
      A cashier can never change another cashier's bill, even with approval (own bills only).
+  D10 (rule 13) The 10 minutes count from the bill's created_at (first save); editing does not restart the window.
+     A computer clock set earlier than the bill counts as inside the window (the wrong-clock banner, rule 15, warns).

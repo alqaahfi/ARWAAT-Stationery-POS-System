@@ -252,9 +252,9 @@ function logApproval(db, { reasons, details, saleId, invoiceNo, cashierId, admin
   ).run(reasons.join(','), details.filter(Boolean).join('; ') || null, saleId || null, invoiceNo || null, cashierId || null, adminId || null, originPc || null);
 }
 
-const localToday = (db) => db.prepare("SELECT date('now','localtime') AS d").get().d;
 
-// Admin may change any bill; a cashier only their own bills. Returns true when
+// Admin may change any bill (rule 13: except bills with returns, checked separately);
+// a cashier only their own bills. Returns true when
 // the bill is past the cashier's time window, so the change needs the Admin's
 // approval (rule 12); false when it may go ahead.
 function billNeedsApproval(db, sale, actorId) {
@@ -262,10 +262,13 @@ function billNeedsApproval(db, sale, actorId) {
   if (!actor) throw new SaleError('Unknown user.');
   if (actor.role === 'admin') return false;
   if (sale.cashier_id !== actorId) throw new SaleError('You can only change your own bills.');
-  const day = db.prepare("SELECT date(?, 'localtime') AS d").get(sale.created_at).d;
-  return day !== localToday(db);
+  // Rule 13: a cashier may change their own bill for 10 minutes after saving it; after that only with
+  // the Admin's approval. (A clock set backwards makes the age negative: still inside the window.)
+  const minutes = db.prepare("SELECT (julianday('now') - julianday(?)) * 1440 AS m").get(sale.created_at).m;
+  return minutes > CASHIER_EDIT_MINUTES;
 }
-const OLD_BILL_MESSAGE = 'This bill is from an earlier day. The Admin must approve changing it.';
+const CASHIER_EDIT_MINUTES = 10;
+const OLD_BILL_MESSAGE = `This bill was saved more than ${CASHIER_EDIT_MINUTES} minutes ago. The Admin must approve changing it.`;
 
 // Rule 5: a voided bill is kept for history but can never be edited, voided again or returned.
 function assertNotVoided(sale) {
