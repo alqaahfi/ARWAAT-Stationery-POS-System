@@ -10,6 +10,7 @@ const { getDb } = require('../db/connection');
 const { applyRecords } = require('./applyIncoming');
 const { buildOutgoingRecords } = require('./syncEngine');
 const { registerCashierAccount } = require('../setup/setupManager');
+const versionGate = require('./versionGate');
 
 let server = null;
 
@@ -72,8 +73,21 @@ function verifySecret(req, res, next) {
 
 function handleExchange(req, res) {
   const db = getDb();
-  const { fromMachineId, fromStationCode, fromRole, sinceOutboxId, callerOutboxWatermark, records } = req.body || {};
+  const { fromMachineId, fromStationCode, fromRole, fromAppVersion, fromMigration, sinceOutboxId, callerOutboxWatermark, records } = req.body || {};
   if (!fromMachineId) return res.status(400).json({ error: 'Missing fromMachineId.' });
+
+  // Different database layout (or a build that doesn't say): apply and send nothing, both ways.
+  const mine = versionGate.selfInfo();
+  if (!versionGate.sameLayout(fromMigration)) {
+    versionGate.noteMismatch({ machineId: fromMachineId, stationCode: fromStationCode, role: fromRole }, { appVersion: fromAppVersion, migration: fromMigration });
+    return res.status(409).json({
+      error: 'version-mismatch',
+      reason: 'The two computers are on different versions.',
+      appVersion: mine.appVersion,
+      migration: mine.migration,
+    });
+  }
+  versionGate.clearMismatch(fromMachineId);
 
   let applyResult;
   try {
@@ -112,7 +126,7 @@ function handleExchange(req, res) {
     received: callerOutboxWatermark || 0,
   });
 
-  res.json({ records: outgoing, newWatermark: watermark });
+  res.json({ records: outgoing, newWatermark: watermark, appVersion: mine.appVersion, migration: mine.migration });
 }
 
 // A counter PC joining the shop from its Setup screen. Same secret check as a
@@ -145,4 +159,4 @@ function stopSyncServer() {
   }
 }
 
-module.exports = { startSyncServer, stopSyncServer };
+module.exports = { startSyncServer, stopSyncServer, handleExchange };

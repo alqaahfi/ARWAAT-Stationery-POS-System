@@ -9,6 +9,7 @@
 const dgram = require('dgram');
 const { getDb } = require('../db/connection');
 const { getStationId } = require('../setup/stationIdentity');
+const versionGate = require('./versionGate');
 
 const UDP_PORT = 41234;
 const BROADCAST_ADDRESS = '255.255.255.255';
@@ -78,8 +79,14 @@ function handleMessage(buf, rinfo) {
     role: msg.role || null,
     ip: rinfo.address,
     tcpPort: msg.tcpPort || null,
+    // What the peer is running (older builds announce nothing: appVersion/migration stay undefined).
+    appVersion: msg.appVersion || null,
+    migration: Number.isInteger(msg.migration) ? msg.migration : null,
     lastSeenAt: Date.now(),
   };
+  // Different database layout -> sync with this peer is paused until both match.
+  if (versionGate.sameLayout(peer.migration)) versionGate.clearMismatch(peer.machineId);
+  else versionGate.noteMismatch(peer, { appVersion: peer.appVersion, migration: peer.migration });
   knownPeers.set(peer.machineId, peer);
   upsertPeerRow(peer);
 }
@@ -89,7 +96,13 @@ function getSelfBroadcastPayload(tcpPort) {
     const db = getDb();
     const activation = db.prepare('SELECT station_code, role FROM station_config WHERE id = 1').get();
     if (!activation) return null; // not set up yet — nothing meaningful to announce, but we still listen
-    return JSON.stringify({ machineId: getStationId(), stationCode: activation.station_code, role: activation.role, tcpPort });
+    return JSON.stringify({
+      machineId: getStationId(),
+      stationCode: activation.station_code,
+      role: activation.role,
+      tcpPort,
+      ...versionGate.selfInfo(),
+    });
   } catch {
     return null;
   }

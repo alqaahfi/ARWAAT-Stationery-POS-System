@@ -32,6 +32,16 @@ contextBridge.exposeInMainWorld('api', {
     mode: APP_MODE,
     openWindow: (data) => invoke('app:open-window', data),
     getClockStatus: () => invoke('app:get-clock-status'),
+    setBusy: (data) => invoke('app:set-busy', data),
+  },
+
+  // Admin only (checked in main): in-app updates.
+  updates: {
+    getState: () => invoke('updates:get-state'),
+    check: () => invoke('updates:check'),
+    download: () => invoke('updates:download'),
+    install: () => invoke('updates:install'),
+    consumeUpdatedNotice: () => invoke('updates:consume-updated-notice'),
   },
 
   setup: {

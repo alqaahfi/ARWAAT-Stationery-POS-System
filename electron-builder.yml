@@ -38,8 +38,22 @@ win:
   target: nsis
   icon: build-resources/icon.ico
 
+# In-app updates (electron-updater). `npm run release` uploads the installer, its
+# blockmap and latest.yml as a DRAFT release on this private repo (needs env GH_TOKEN);
+# the installed app reads published releases with a read-only token (GH_UPDATE_TOKEN,
+# written into src/main/update/updateToken.generated.js at build time).
+publish:
+  provider: github
+  owner: arwaheed
+  repo: arwaat-pos-system
+  private: true
+  releaseType: draft
+
 nsis:
   oneClick: false
+  # The shop's database lives in %APPDATA%\stationary-pos-app: an update or an
+  # uninstall must never delete it.
+  deleteAppDataOnUninstall: false
   allowToChangeInstallationDirectory: true
   # The default single shortcut is replaced by "ARWAAT Admin" + "ARWAAT Cashier"
   # (Desktop and Start Menu), made and removed by build-resources/installer.nsh.

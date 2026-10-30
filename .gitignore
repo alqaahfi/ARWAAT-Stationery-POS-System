@@ -12,3 +12,6 @@ test-backups/
 test-results/
 tests/e2e/.tmp/
 test-backups/antigravity-load-db/
+
+src/main/update/updateToken.generated.js
+test-backups/

@@ -2,12 +2,14 @@ const { ipcMain } = require('electron');
 const { getDb } = require('../db/connection');
 const { getKnownPeers } = require('../sync/discovery');
 const { syncWithAllKnownPeers, syncWithPeer } = require('../sync/syncEngine');
+const versionGate = require('../sync/versionGate');
 
 function getStatus() {
   const db = getDb();
   const activation = db.prepare('SELECT * FROM station_config WHERE id = 1').get();
   const outboxCount = db.prepare('SELECT COUNT(*) AS c FROM sync_outbox').get().c;
   const lastSync = db.prepare('SELECT * FROM sync_log ORDER BY created_at DESC LIMIT 1').get() || null;
+  const onlineIds = new Set(getKnownPeers().filter((p) => p.online).map((p) => p.machineId));
 
   return {
     thisPc: activation
@@ -20,6 +22,9 @@ function getStatus() {
       : null,
     outboxCount,
     lastSync,
+    // Set while a connected computer is on a different version (sync is paused with it).
+    versionPaused: versionGate.firstPausedMessage((id) => onlineIds.has(id)),
+    appVersion: versionGate.selfInfo().appVersion,
   };
 }
 
@@ -49,6 +54,7 @@ function getPeers() {
       online: !!(seen && seen.online),
       lastSeenAt: row.last_seen_at,
       lastSyncSuccessAt: row.last_sync_success_at,
+      versionPaused: (versionGate.getMismatch(row.peer_machine_id) || {}).message || null,
     });
   }
   // A peer discovery has heard from but that has no sync_peer_state row yet
@@ -64,6 +70,7 @@ function getPeers() {
         online: peer.online,
         lastSeenAt: null,
         lastSyncSuccessAt: null,
+        versionPaused: (versionGate.getMismatch(machineId) || {}).message || null,
       });
     }
   }

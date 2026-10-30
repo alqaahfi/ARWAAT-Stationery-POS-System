@@ -17,6 +17,7 @@ const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const sessions = require('./devpanel/sessionTracker');
 const { currentCaller, isAppUrl } = require('./security/ipcGuard');
+const entryBusy = require('./update/entryBusy');
 
 const isDev = process.env.NODE_ENV === 'development';
 const DEV_URL = 'http://localhost:5173';
@@ -116,8 +117,41 @@ function openModeWindow(rawMode) {
     appWindows.delete(mode);
     modeByWebContents.delete(webContentsId);
     sessions.forgetWebContents(webContentsId);
+    entryBusy.clearWindow(webContentsId);
   });
   return win;
+}
+
+// Modes ('admin' / 'cashier') that currently have a window.
+function getOpenModes() {
+  return [...appWindows.entries()].filter(([, win]) => !win.isDestroyed()).map(([mode]) => mode);
+}
+
+// Closes every window (app windows and hidden print windows) and waits for them,
+// forcing any that do not close within a few seconds. Used right before an update installs.
+function closeAllAppWindows() {
+  return Promise.all(
+    BrowserWindow.getAllWindows().map(
+      (win) =>
+        new Promise((resolve) => {
+          if (win.isDestroyed()) return resolve();
+          const force = setTimeout(() => {
+            try {
+              win.destroy();
+            } catch {
+              // already gone
+            }
+            resolve();
+          }, 4000);
+          win.once('closed', () => {
+            clearTimeout(force);
+            resolve();
+          });
+          win.close();
+          return undefined;
+        })
+    )
+  );
 }
 
 function closeModeWindow(mode) {
@@ -186,6 +220,8 @@ module.exports = {
   modeFromArgv,
   openModeWindow,
   closeModeWindow,
+  getOpenModes,
+  closeAllAppWindows,
   reloadOtherAppWindows,
   relaunchApp,
   getModeForWebContents,

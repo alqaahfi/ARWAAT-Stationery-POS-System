@@ -11,6 +11,7 @@ const { SYNC_TABLES } = require('./syncSchema');
 const { encodeRow } = require('./recordCodec');
 const { applyRecords } = require('./applyIncoming');
 const { getKnownPeers } = require('./discovery');
+const versionGate = require('./versionGate');
 
 const DEFAULT_SYNC_PORT = 4000;
 const DEBOUNCE_MS = 4000; // "immediately, debounced to every few seconds" after a local write
@@ -103,6 +104,17 @@ function upsertPeerState(db, peer, { pushedThrough, pulledThrough, ip }) {
   });
 }
 
+// Marks the peer as paused for a version difference and returns the error to throw.
+// Logged once per pause (not on every 25-second tick).
+function pausedForVersion(db, peer, theirs) {
+  const first = versionGate.noteMismatch(peer, theirs);
+  const message = versionGate.getMismatch(peer.machineId).message;
+  if (first) logSyncResult(db, peer, 'failed', message);
+  const err = new Error(message);
+  err.versionPaused = true;
+  return err;
+}
+
 // One combined push-and-pull round trip with a single peer. Throws on
 // failure (network error, bad response, non-2xx) — callers decide whether
 // to tolerate that; syncWithAllKnownPeers does, so one unreachable peer
@@ -117,6 +129,12 @@ async function syncWithPeer(peer) {
     last_received_outbox_id: 0,
   };
 
+  // Different database layout (heard from the peer's broadcast): send and apply nothing.
+  // The outbox is untouched, so everything goes across once both computers match.
+  if (peer.migration !== undefined && !versionGate.sameLayout(peer.migration)) {
+    throw pausedForVersion(db, peer, { appVersion: peer.appVersion, migration: peer.migration });
+  }
+
   const { records, watermark } = buildOutgoingRecords(db, peerRow.last_synced_outbox_id);
   const port = peer.tcpPort || DEFAULT_SYNC_PORT;
   const url = `http://${peer.ip}:${port}/sync/exchange`;
@@ -130,19 +148,29 @@ async function syncWithPeer(peer) {
         fromMachineId: getStationId(),
         fromStationCode: activation.station_code,
         fromRole: activation.role,
+        fromAppVersion: versionGate.selfInfo().appVersion,
+        fromMigration: versionGate.selfInfo().migration,
         sinceOutboxId: peerRow.last_received_outbox_id,
         callerOutboxWatermark: watermark,
         records,
       }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
+    if (res.status === 409) {
+      const body = await res.json().catch(() => ({}));
+      if (body && body.error === 'version-mismatch') throw pausedForVersion(db, peer, { appVersion: body.appVersion, migration: body.migration });
+    }
     if (!res.ok) throw new Error(`Peer responded with HTTP ${res.status}`);
     payload = await res.json();
+    // A peer that doesn't report a matching layout gets nothing applied from it.
+    if (!versionGate.sameLayout(payload.migration)) throw pausedForVersion(db, peer, { appVersion: payload.appVersion, migration: payload.migration });
   } catch (err) {
+    if (err && err.versionPaused) throw err;
     logSyncResult(db, peer, 'failed', err.message || String(err));
     throw err;
   }
 
+  versionGate.clearMismatch(peer.machineId);
   const applyResult = applyRecords(db, payload.records || []);
   upsertPeerState(db, peer, { pushedThrough: watermark, pulledThrough: payload.newWatermark || 0, ip: peer.ip });
 

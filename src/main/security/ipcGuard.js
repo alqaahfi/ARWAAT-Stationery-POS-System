@@ -67,6 +67,7 @@ const ADMIN_PREFIXES = [
   'backup:',
   'system:',
   'global:',
+  'updates:',
 ];
 
 const ADMIN_CHANNELS = new Set([

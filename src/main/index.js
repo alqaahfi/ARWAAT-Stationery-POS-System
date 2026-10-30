@@ -1,5 +1,5 @@
 const { app, ipcMain } = require('electron');
-const { initDatabase } = require('./db/connection');
+const { initDatabase, getDb, StartupProblem } = require('./db/connection');
 const { registerSetupIpc } = require('./ipc/setup.ipc');
 const { registerUsersIpc, seedDummyCashier } = require('./ipc/users.ipc');
 const { registerDashboardIpc } = require('./ipc/dashboard.ipc');
@@ -35,6 +35,10 @@ const { registerAppIpc } = require('./ipc/app.ipc');
 const { registerApprovalsIpc } = require('./ipc/approvals.ipc');
 const { startAutoBackup, stopAutoBackup } = require('./backup/autoBackup');
 const { modeFromArgv, openModeWindow, installWebContentsHardening } = require('./windows');
+const { registerUpdatesIpc } = require('./ipc/updates.ipc');
+const updater = require('./update/updater');
+const { readPending, clearPending } = require('./update/pendingUpdate');
+const { showRecoveryWindow } = require('./update/recovery');
 
 // One process serves both apps (Admin and Cashier windows) so only one copy
 // ever owns the DB, the sync server port and UDP discovery. A second launch
@@ -50,9 +54,45 @@ if (!gotLock) {
   app.whenReady().then(boot);
 }
 
-function boot() {
+// Start-up checks happen BEFORE any window or service: integrity check, downgrade
+// guard, every pending migration (each in its own transaction). If the data can't be
+// opened safely, only the recovery screen is shown — never the app on a half-migrated database.
+function openDatabaseOrNull() {
   try {
     initDatabase();
+    return null;
+  } catch (err) {
+    console.error('Failed to initialize database:', err);
+    return err instanceof StartupProblem
+      ? err
+      : new StartupProblem('integrity', 'The database could not be opened.', err && err.message ? err.message : String(err));
+  }
+}
+
+// After a successful start: an update that was installed is now finished.
+// Returns the windows (modes) that were open when the update began.
+function finishPendingUpdate() {
+  const pending = readPending();
+  if (!pending) return [];
+  try {
+    const finished = pending.to === app.getVersion();
+    if (finished) updater.noteUpdated(pending.to); // one-time "Updated to version X" on Home
+    clearPending(getDb());
+    return finished && Array.isArray(pending.windows) ? pending.windows : [];
+  } catch (err) {
+    console.error('Could not clear the pending update record:', err);
+    return [];
+  }
+}
+
+function boot() {
+  const problem = openDatabaseOrNull();
+  if (problem) {
+    showRecoveryWindow({ kind: problem.kind, detail: problem.detail });
+    return;
+  }
+  const reopenWindows = finishPendingUpdate();
+  try {
       // Must run before any register*Ipc() call below — it patches
       // ipcMain.handle in place so every channel every module registers
       // (including the ones below) gets audited with no per-module changes.
@@ -92,6 +132,7 @@ function boot() {
       registerDevPanelIpc();
       registerAppIpc();
       registerApprovalsIpc();
+      registerUpdatesIpc();
       // Demo login for development only — never created in an installed build.
       if (!app.isPackaged) seedDummyCashier();
       // Catches up any recurring expenses (daily/weekly/monthly/annually)
@@ -109,6 +150,8 @@ function boot() {
       startPeriodicSync();
       // Rule 16: today's automatic backup (if not done yet), then every midnight.
       startAutoBackup();
+      // Quiet update check shortly after start and every 24 h (installed app only).
+      updater.start();
     console.log('Database initialized successfully at startup.');
   } catch (err) {
     console.error('Failed to initialize database:', err);
@@ -116,11 +159,16 @@ function boot() {
 
   ipcMain.handle('ping', () => 'pong');
 
-  openModeWindow(modeFromArgv(process.argv));
+  const mainMode = modeFromArgv(process.argv);
+  openModeWindow(mainMode);
+  // After an update: bring back the other window that was open when it began.
+  for (const mode of reopenWindows) if (mode !== mainMode) openModeWindow(mode);
 }
 
 // Closing one window leaves the other running; the app quits with the last one.
 app.on('window-all-closed', () => {
+  // While an update is being installed the updater shuts everything down itself.
+  if (updater.isInstalling()) return;
   stopSyncTimers();
   stopAutoBackup();
   stopDiscovery();
