@@ -193,6 +193,15 @@ RULE 3 - Whole numbers only for every quantity
   Stage 3 e2e: type "1.5", "-2", "1e3", "abc" into each quantity box -> only digits remain; paste "2.5" -> "25"?
            NOTE: pasting "2.5" leaves "25" (dot stripped) - the e2e should check the value shown, not assume "2".
 
+RULE 4 - Barcodes stay per product/Type; a scan adds 1 of the default pack size
+  Already true in the POS (Sale.jsx handleItemSearchEnter: scan -> that Type, defaultUnitId, quantity 1).
+  Fixed: the quick Sale/Purchase form (BillItemSearch -> QuickBillForm.addItem) opened the several-Types panel
+         when the scanned item had several Types; a scan now adds that one Type, 1 of the default pack size.
+  Checks: R04-01..R04-05 (PASS) - no barcode on pack sizes, scan finds the Type, default pack size, duplicate
+          barcode refused, one scan of a Box default = 10 pieces out of stock.
+  Stage 3 e2e: in the quick Sale overlay scan a Type barcode of a several-Types product -> 1 line, qty 1,
+          default pack size, no Types panel.
+
 STAGE 1 DECISIONS
   D1 (rule 1) Editing a saved bill: a cashier may keep the bill's OWN stored price for a pack size (same
      customer only); any other price must match the price engine. Changing the customer re-prices.

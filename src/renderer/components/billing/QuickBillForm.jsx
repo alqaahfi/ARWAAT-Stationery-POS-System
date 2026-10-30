@@ -141,7 +141,9 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
   }, [isPurchase, party, formatTouched]);
 
   // ---------------- items ----------------
-  async function addItem(variantId) {
+  // A scanned barcode (opts.scanned) is one specific Type: it adds 1 of the default pack size
+  // straight away and never opens the several-Types panel (rule 4).
+  async function addItem(variantId, opts = {}) {
     setError('');
     let detail;
     try {
@@ -160,7 +162,7 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
 
     // A product with several Types: ask for every Type's quantity at once.
     const types = (await window.api.sales.getProductTypes({ productId: detail.product.id }).catch(() => [])) || [];
-    if (types.length > 1) {
+    if (types.length > 1 && !opts.scanned) {
       setMultiValues({});
       setMultiError('');
       setMulti({ detail, unit, price, types });

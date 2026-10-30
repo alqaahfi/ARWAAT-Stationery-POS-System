@@ -46,10 +46,11 @@ export default function BillItemSearch({ onPick, disabled, autoFocus = true, inp
     setMessage('');
   }
 
-  async function pick(row) {
+  // `scanned`: an exact barcode — that one Type, 1 of its default pack size (rule 4).
+  async function pick(row, scanned = false) {
     if (!row) return;
     reset();
-    await onPick(row.variantId);
+    await onPick(row.variantId, { scanned });
   }
 
   async function onEnter() {
@@ -60,7 +61,7 @@ export default function BillItemSearch({ onPick, disabled, autoFocus = true, inp
       // A scanned barcode is an exact match and skips the list.
       const exact = await window.api.sales.getVariantByBarcode({ barcode: text });
       if (exact) {
-        await pick(exact);
+        await pick(exact, true);
         return;
       }
       if (results[active]) await pick(results[active]);
