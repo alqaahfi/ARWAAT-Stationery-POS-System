@@ -967,8 +967,9 @@ Special pricing rules set per customer for a specific product or specific pack s
 | customer_id | INTEGER | NOT NULL |  | FK → customers (ON DELETE CASCADE) |
 | product_id | INTEGER | NOT NULL |  | FK → products (ON DELETE CASCADE) |
 | product_unit_id | INTEGER |  | NULL | FK → product_units (ON DELETE CASCADE); NULL = applies to all pack sizes |
-| price_type | TEXT | NOT NULL |  | 'fixed' (Rs.), 'discount_percent' (% off standard price), 'margin_percent' (% over cost) |
-| price_value | REAL | NOT NULL |  | Amount or percentage |
+| pricing_type | TEXT | NOT NULL |  | 'fixed', 'discount_percent', 'margin_percent' |
+| price | REAL |  | NULL | Fixed price in Rs (when pricing_type = 'fixed') |
+| percentage | REAL |  | NULL | Percentage discount or margin (when pricing_type != 'fixed') |
 | created_at | TEXT | NOT NULL | datetime('now') |  |
 | updated_at | TEXT | NOT NULL | datetime('now') |  |
 | uuid | TEXT |  |  |  |

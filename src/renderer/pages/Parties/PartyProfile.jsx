@@ -206,6 +206,8 @@ export default function PartyProfile({ party, partyId, onNavigate }) {
         </div>
       </div>
 
+      {isCustomer && <SpecialPricingCard customerId={partyId} />}
+
       <QuickPaymentModal
         open={paymentOpen}
         party={party}
