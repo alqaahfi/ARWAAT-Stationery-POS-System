@@ -53,6 +53,8 @@ contextBridge.exposeInMainWorld('api', {
   users: {
     login: (data) => invoke('users:login', data),
     validateSession: (data) => invoke('users:validate-session', data),
+    getRecoveryAccounts: () => invoke('users:get-recovery-accounts'),
+    recoverPassword: (data) => invoke('users:recover-password', data),
     logout: (data) => invoke('users:logout', data),
     verifyPassword: (data) => invoke('users:verify-password', data),
     getPermissions: (data) => invoke('users:get-permissions', data),
@@ -155,6 +157,9 @@ contextBridge.exposeInMainWorld('api', {
     getNextId: () => invoke('customers:get-next-id'),
     creditCheck: (data) => invoke('customers:credit-check', data),
     checkDuplicatePhone: (data) => invoke('customers:check-duplicate-phone', data),
+    getSpecialPrices: (data) => invoke('customers:get-special-prices', data),
+    saveSpecialPrice: (data) => invoke('customers:save-special-price', data),
+    deleteSpecialPrice: (data) => invoke('customers:delete-special-price', data),
   },
 
   ledgers: {
@@ -180,6 +185,7 @@ contextBridge.exposeInMainWorld('api', {
     create: (data) => invoke('letterheads:create', data),
     update: (data) => invoke('letterheads:update', data),
     delete: (data) => invoke('letterheads:delete', data),
+    downloadTemplate: () => invoke('letterheads:download-template'),
   },
 
   settings: {

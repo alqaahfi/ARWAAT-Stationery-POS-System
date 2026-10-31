@@ -13,6 +13,7 @@ import { TypeBadge } from '../Customers/parts/CustomerListParts';
 import { PartyHeader, contactLine } from './PartyHeader';
 import { RecentActivityCard } from './RecentActivityCard';
 import { RestrictedNotice } from './PartyParts';
+import SpecialPricingCard from '../Customers/parts/SpecialPricingCard';
 import useDeletePayment from '../../utils/useDeletePayment';
 
 const c = theme.colors;

@@ -1,5 +1,5 @@
 import React, { useId } from 'react';
-import { FileText, FileUp, Pencil, Star, Trash2 } from 'lucide-react';
+import { Download, FileText, FileUp, Pencil, Star, Trash2 } from 'lucide-react';
 import theme from '../../../config/theme';
 import glossary from '../../../config/glossary';
 import { Badge, Banner, Button, Card, EmptyState, Field, IconTile, Modal, NumberInput, Skeleton, Spinner, TextInput, Toggle } from '../../../components/ui';
@@ -18,6 +18,37 @@ function toFileUrl(p) {
 export const letterheadGrid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: theme.spacing.md };
 
 // Dashed "drop zone" look; clicking opens the existing file picker.
+
+export function DownloadTemplateButton({ onClick, busy }) {
+  const { hovered, handlers } = useInteraction(busy);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      {...handlers}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: theme.spacing.sm,
+        padding: `${theme.spacing.sm} ${theme.spacing.md}`,
+        border: `1px solid ${hovered ? c.accent : c.separatorStrong}`,
+        borderRadius: theme.radius.md,
+        backgroundColor: hovered ? c.surfaceAlt : c.surface,
+        color: hovered ? c.accent : c.label,
+        fontFamily: theme.font.family,
+        ...theme.type.subheadline,
+        cursor: busy ? 'progress' : 'pointer',
+        transition: `all ${theme.motion.fast} ease`,
+      }}
+    >
+      {busy ? <Spinner size={16} /> : <Download size={16} aria-hidden="true" />}
+      {busy ? 'Preparing template…' : 'Download Template (A4 PDF)'}
+    </button>
+  );
+}
+
 export function UploadButton({ onClick, busy }) {
   const { hovered, handlers } = useInteraction(busy);
   return (

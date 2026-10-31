@@ -259,6 +259,69 @@ function getLedger(customerId) {
   };
 }
 
+
+function getSpecialPrices(customerId) {
+  const db = getDb();
+  if (!customerId) return [];
+  return db
+    .prepare(
+      `SELECT sp.*, p.name AS product_name, p.sku AS product_sku, pu.unit_name
+       FROM customer_special_prices sp
+       JOIN products p ON p.id = sp.product_id
+       LEFT JOIN product_units pu ON pu.id = sp.product_unit_id
+       WHERE sp.customer_id = ?
+       ORDER BY sp.id DESC`
+    )
+    .all(customerId);
+}
+
+function saveSpecialPrice({ id, customerId, productId, productUnitId, pricingType, price, percentage } = {}) {
+  const db = getDb();
+  if (!customerId) return { success: false, reason: 'Customer is required.' };
+  if (!productId) return { success: false, reason: 'Product is required.' };
+  if (!['fixed', 'discount_percent', 'margin_percent'].includes(pricingType)) {
+    return { success: false, reason: 'Invalid pricing type.' };
+  }
+
+  const numPrice = price !== undefined && price !== null && price !== '' ? Number(price) : null;
+  const numPercent = percentage !== undefined && percentage !== null && percentage !== '' ? Number(percentage) : null;
+
+  if (pricingType === 'fixed' && (numPrice === null || isNaN(numPrice) || numPrice < 0)) {
+    return { success: false, reason: 'Please enter a valid price.' };
+  }
+  if ((pricingType === 'discount_percent' || pricingType === 'margin_percent') && (numPercent === null || isNaN(numPercent) || numPercent < 0)) {
+    return { success: false, reason: 'Please enter a valid percentage.' };
+  }
+
+  const targetUnitId = productUnitId ? Number(productUnitId) : null;
+
+  try {
+    if (id) {
+      db.prepare(
+        `UPDATE customer_special_prices
+         SET product_id = ?, product_unit_id = ?, pricing_type = ?, price = ?, percentage = ?, updated_at = datetime('now')
+         WHERE id = ? AND customer_id = ?`
+      ).run(productId, targetUnitId, pricingType, numPrice, numPercent, id, customerId);
+      return { success: true, id };
+    } else {
+      const res = db.prepare(
+        `INSERT INTO customer_special_prices (customer_id, product_id, product_unit_id, pricing_type, price, percentage)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).run(customerId, productId, targetUnitId, pricingType, numPrice, numPercent);
+      return { success: true, id: res.lastInsertRowid };
+    }
+  } catch (err) {
+    return { success: false, reason: err.message || 'Could not save special price.' };
+  }
+}
+
+function deleteSpecialPrice({ id } = {}) {
+  const db = getDb();
+  if (!id) return { success: false, reason: 'Missing id.' };
+  db.prepare('DELETE FROM customer_special_prices WHERE id = ?').run(id);
+  return { success: true };
+}
+
 function registerCustomersIpc() {
   ipcMain.handle('customers:list', (event, payload) => list(payload || {}));
   ipcMain.handle('customers:get-by-id', (event, { id } = {}) => getById(id));
@@ -271,6 +334,9 @@ function registerCustomersIpc() {
   // Rule 2: credit limit is a warning only (asked by the sale screens before saving; never blocks).
   ipcMain.handle('customers:check-duplicate-phone', (event, payload) => findDuplicatePhones(payload || {}));
   ipcMain.handle('customers:credit-check', (event, payload) => creditLimitCheck(getDb(), payload || {}));
+  ipcMain.handle('customers:get-special-prices', (event, { customerId } = {}) => getSpecialPrices(customerId));
+  ipcMain.handle('customers:save-special-price', (event, payload) => saveSpecialPrice(payload || {}));
+  ipcMain.handle('customers:delete-special-price', (event, payload) => deleteSpecialPrice(payload || {}));
 
 }
 

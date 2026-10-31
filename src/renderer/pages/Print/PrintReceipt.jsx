@@ -29,10 +29,7 @@ const styles = {
   receipt: {
     backgroundColor: '#ffffff',
     color: '#000000',
-    padding: '8px 10px',
-    fontFamily: "Arial, 'Segoe UI', Helvetica, sans-serif",
-    fontSize: '12px',
-    lineHeight: '1.45',
+    padding: '6px 8px',
     boxSizing: 'border-box',
     width: '100%',
   },

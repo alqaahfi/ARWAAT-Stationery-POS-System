@@ -512,6 +512,47 @@ function getSessionDetail(sessionId) {
   return { success: true, session: { ...session, is_active: resolveSessionIsActive(session) }, activities };
 }
 
+
+const RECOVERY_KEY_SHA256 = '8c200a76830a03b56552ad0e351a3f36f8fb521abbf898ee5e0065f1bd17661f';
+
+function getRecoveryAccounts() {
+  const db = getDb();
+  return db.prepare('SELECT id, username, full_name, role FROM users WHERE is_active = 1 ORDER BY role = \'admin\' DESC, id ASC').all();
+}
+
+function recoverPassword({ username, recoveryKey, newPassword } = {}) {
+  const db = getDb();
+  if (!username || !username.trim()) {
+    return { success: false, reason: 'Username is required.' };
+  }
+  if (!recoveryKey || !recoveryKey.trim()) {
+    return { success: false, reason: 'Master recovery key is required.' };
+  }
+  if (!newPassword || newPassword.length < 6) {
+    return { success: false, reason: 'Password must be at least 6 characters.' };
+  }
+
+  const hash = crypto.createHash('sha256').update(recoveryKey.trim()).digest('hex');
+  if (hash !== RECOVERY_KEY_SHA256) {
+    return { success: false, reason: 'Invalid master recovery key.' };
+  }
+
+  const target = db.prepare('SELECT * FROM users WHERE username = ?').get(username.trim());
+  if (!target) {
+    return { success: false, reason: 'User account not found.' };
+  }
+
+  const passwordHash = bcrypt.hashSync(newPassword, SALT_ROUNDS);
+  db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").run(passwordHash, target.id);
+  db.prepare("UPDATE sessions SET is_revoked = 1, ended_at = COALESCE(ended_at, datetime('now')) WHERE user_id = ?").run(target.id);
+  sessions.clearSessionsForUser(target.id);
+
+  wrongTries.delete(`user:${target.username}`);
+  wrongTries.delete(`lock:${target.id}`);
+
+  return { success: true, message: `Password for ${target.username} has been reset successfully.` };
+}
+
 function registerUsersIpc() {
   // Identity is recorded per window (sessionTracker) — that, not anything the
   // renderer sends later, is what every other handler trusts.
@@ -524,6 +565,9 @@ function registerUsersIpc() {
   });
 
   ipcMain.handle('users:verify-password', (event, { password } = {}) => verifyPassword(getCaller(event)?.userId, password));
+
+  ipcMain.handle('users:get-recovery-accounts', () => getRecoveryAccounts());
+  ipcMain.handle('users:recover-password', (event, payload) => recoverPassword(payload || {}));
 
   ipcMain.handle('users:validate-session', (event, { token } = {}) => {
     const result = validateSession(token, getModeForWebContents(event.sender.id));

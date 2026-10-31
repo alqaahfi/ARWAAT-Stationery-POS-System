@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, ReceiptText } from 'lucide-react';
+import { Ban, FileText, ReceiptText } from 'lucide-react';
 import theme from '../../../config/theme';
 import { IconTile, Kbd } from '../../../components/ui';
 import { PanelTitle, c, keepFocus } from './common';
@@ -7,12 +7,13 @@ import { PanelTitle, c, keepFocus } from './common';
 const OPTIONS = [
   { value: 'wholesale-a4', key: '1', icon: FileText, color: 'blue', title: 'A4 invoice', note: 'For wholesale customers' },
   { value: 'retail-thermal', key: '2', icon: ReceiptText, color: 'orange', title: 'Small receipt', note: 'Thermal printer, for retail customers' },
+  { value: 'none', key: '3', icon: Ban, color: 'gray', title: 'No Receipt', note: 'Save sale without printing' },
 ];
 
 export default function FormatPanel({ value, onChoose }) {
   return (
     <>
-      <PanelTitle title="How would you like to print the receipt?" hint="Press 1 or 2 (or ← →) to choose, then Enter." />
+      <PanelTitle title="How would you like to print the receipt?" hint="Press 1, 2 or 3 (or ← →) to choose, then Enter." />
       <div role="radiogroup" aria-label="Receipt type" style={styles.grid} onMouseDown={keepFocus}>
         {OPTIONS.map((o) => {
           const selected = value === o.value;
@@ -45,7 +46,7 @@ export default function FormatPanel({ value, onChoose }) {
 }
 
 const styles = {
-  grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: theme.spacing.smd },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: theme.spacing.smd },
   card: {
     display: 'flex',
     alignItems: 'center',

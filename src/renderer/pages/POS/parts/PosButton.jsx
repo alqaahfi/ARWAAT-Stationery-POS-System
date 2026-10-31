@@ -47,7 +47,7 @@ export default function PosButton({ label, shortcut, tone = 'neutral', icon: Ico
         cursor: disabled ? 'not-allowed' : 'pointer',
       }}
     >
-      {IconCmp && <IconCmp size={18} aria-hidden="true" />}
+      {IconCmp && <IconCmp size={16} aria-hidden="true" />}
       <span>{label}</span>
       {shortcut && <span style={{ ...styles.key, backgroundColor: t.keyBg, color: t.keyText }}>{shortcut}</span>}
     </button>
@@ -59,22 +59,23 @@ const styles = {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '8px',
-    height: '44px',
-    padding: '0 16px',
+    gap: '6px',
+    height: '40px',
+    padding: '0 12px',
     boxSizing: 'border-box',
     borderRadius: theme.radius.md,
     fontFamily: theme.font.family,
-    fontSize: theme.type.headline.fontSize,
+    fontSize: theme.type.body.fontSize,
     fontWeight: theme.font.weightSemibold,
     lineHeight: 1,
     whiteSpace: 'nowrap',
+    flexShrink: 0,
     transition: `transform ${theme.motion.fast} ease, box-shadow ${theme.motion.fast} ease`,
   },
   key: {
-    padding: '3px 7px',
+    padding: '2px 6px',
     borderRadius: theme.radius.sm,
-    fontSize: theme.type.footnote.fontSize,
+    fontSize: '11px',
     fontWeight: theme.font.weightBold,
     letterSpacing: '0.02em',
   },

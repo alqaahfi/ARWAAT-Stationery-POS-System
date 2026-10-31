@@ -239,11 +239,11 @@ module.exports = async (t, check) => {
     const wrong = await t.invoke('devpanel:verify-password', { password: 'nope-nope' });
     assert.strictEqual(wrong.success, false);
     assert.strictEqual((await t.invoke('devpanel:change-password', { currentPassword: 'x', newPassword: 'abcdefgh1' })).success, false, 'locked panel refuses');
-    assert.ok((await t.invoke('devpanel:verify-password', { password: 'abdulrehmandev@241980028' })).success, 'default password from migration 042');
+    assert.ok((await t.invoke('devpanel:verify-password', { password: '34y25879423s39e87$%&rtf7b87ve545$#&%rvT%$&^RYT' })).success, 'default password from migration 042');
     assert.strictEqual((await t.invoke('devpanel:change-password', { currentPassword: 'wrong-one', newPassword: 'abcdefgh1' })).success, false);
-    assert.strictEqual((await t.invoke('devpanel:change-password', { currentPassword: 'abdulrehmandev@241980028', newPassword: 'short' })).success, false);
-    assert.ok((await t.invoke('devpanel:change-password', { currentPassword: 'abdulrehmandev@241980028', newPassword: 'a-brand-new-pass' })).success);
-    assert.strictEqual((await t.invoke('devpanel:verify-password', { password: 'abdulrehmandev@241980028' })).success, false, 'old password no longer works');
+    assert.strictEqual((await t.invoke('devpanel:change-password', { currentPassword: '34y25879423s39e87$%&rtf7b87ve545$#&%rvT%$&^RYT', newPassword: 'short' })).success, false);
+    assert.ok((await t.invoke('devpanel:change-password', { currentPassword: '34y25879423s39e87$%&rtf7b87ve545$#&%rvT%$&^RYT', newPassword: 'a-brand-new-pass' })).success);
+    assert.strictEqual((await t.invoke('devpanel:verify-password', { password: '34y25879423s39e87$%&rtf7b87ve545$#&%rvT%$&^RYT' })).success, false, 'old password no longer works');
     assert.ok((await t.invoke('devpanel:verify-password', { password: 'a-brand-new-pass' })).success);
     const stored = t.db().prepare('SELECT password_hash FROM dev_panel_config WHERE id = 1').get().password_hash;
     assert.ok(stored.startsWith('$2') && !stored.includes('a-brand-new-pass'), 'only a hash is stored');

@@ -15,6 +15,7 @@ export default function PrinterSettings() {
   const [installedPrinters, setInstalledPrinters] = useState([]);
   const [printerName, setPrinterName] = useState('');
   const [paperWidth, setPaperWidth] = useState('58mm');
+  const [fontStyle, setFontStyle] = useState('monospace');
   const [initial, setInitial] = useState(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -31,9 +32,11 @@ export default function PrinterSettings() {
       .then((s) => {
         const name = s.thermal_printer_name || '';
         const width = s.thermal_paper_width || '58mm';
+        const font = s.thermal_font_style || 'monospace';
         setPrinterName(name);
         setPaperWidth(width);
-        setInitial({ name, width });
+        setFontStyle(font);
+        setInitial({ name, width, font });
       })
       .catch(() => setLoadFailed(true));
   }, []);
@@ -48,13 +51,14 @@ export default function PrinterSettings() {
       const res = await window.api.settings.setMany({
         thermal_printer_name: printerName,
         thermal_paper_width: paperWidth,
+        thermal_font_style: fontStyle,
       });
       if (!res.success) {
         toast.error(res.reason || 'Could not save printer settings.');
         return;
       }
-      setInitial({ name: printerName, width: paperWidth });
-      toast.success('Printer saved');
+      setInitial({ name: printerName, width: paperWidth, font: fontStyle });
+      toast.success('Printer settings saved');
     } catch {
       toast.error('Could not save printer settings. Please try again.');
     } finally {
@@ -79,7 +83,7 @@ export default function PrinterSettings() {
   if (loadFailed) return <LoadError message="Printer settings couldn't be loaded." onRetry={load} />;
   if (!initial) return <SettingsSkeleton />;
 
-  const dirty = printerName !== initial.name || paperWidth !== initial.width;
+  const dirty = printerName !== initial.name || paperWidth !== initial.width || fontStyle !== initial.font;
 
   return (
     <div style={settingsColumn}>
@@ -89,6 +93,8 @@ export default function PrinterSettings() {
         onPrinterName={setPrinterName}
         paperWidth={paperWidth}
         onPaperWidth={setPaperWidth}
+        fontStyle={fontStyle}
+        onFontStyle={setFontStyle}
         dirty={dirty}
         saving={saving}
         onSave={handleSave}

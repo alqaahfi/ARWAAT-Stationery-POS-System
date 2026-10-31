@@ -13,12 +13,26 @@ export default function CancelSaleDialog({ onKeep, onConfirm }) {
         <div id="pos-cancel-title" style={{ ...theme.type.title2, color: c.label, marginTop: theme.spacing.smd }}>
           Cancel this sale?
         </div>
-        <div style={{ ...theme.type.body, color: c.labelSecondary, marginTop: '4px' }}>Everything you've entered will be cleared.</div>
+        <div style={{ ...theme.type.body, color: c.labelSecondary, marginTop: '4px' }}>
+          Everything you've entered will be cleared.
+        </div>
         <div style={styles.actions} onMouseDown={keepFocus}>
-          <Button variant="secondary" size="lg" fullWidth tabIndex={-1} onClick={onKeep}>
+          <Button
+            variant="secondary"
+            size="lg"
+            tabIndex={-1}
+            onClick={onKeep}
+            style={{ flex: 1, margin: 0, height: '44px' }}
+          >
             Keep working <Kbd>Esc</Kbd>
           </Button>
-          <Button variant="dangerFilled" size="lg" fullWidth tabIndex={-1} onClick={onConfirm}>
+          <Button
+            variant="dangerFilled"
+            size="lg"
+            tabIndex={-1}
+            onClick={onConfirm}
+            style={{ flex: 1, margin: 0, height: '44px' }}
+          >
             Cancel sale <Kbd>Enter</Kbd>
           </Button>
         </div>
@@ -40,5 +54,13 @@ const styles = {
     borderRadius: theme.radius.xl,
     boxShadow: theme.shadow.modal,
   },
-  actions: { display: 'flex', gap: theme.spacing.sm, width: '100%', marginTop: theme.spacing.lg },
+  actions: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.sm,
+    width: '100%',
+    marginTop: theme.spacing.lg,
+    boxSizing: 'border-box',
+  },
 };

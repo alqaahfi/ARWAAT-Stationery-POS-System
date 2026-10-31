@@ -33,6 +33,7 @@ const TABLES_TO_CLEAR = [
   'suppliers',
   'letterheads',
   'percentage_pricing_rules',
+  'customer_special_prices',
   'expenses',
   'recurring_expenses',
   'ledger_adjustments',

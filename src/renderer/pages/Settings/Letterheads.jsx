@@ -8,6 +8,7 @@ import {
   LetterheadFormModal,
   LetterheadSkeletons,
   NoLetterheads,
+  DownloadTemplateButton,
   UploadButton,
   letterheadGrid,
 } from './parts/LetterheadParts';
@@ -44,6 +45,7 @@ export default function Letterheads() {
   const [saving, setSaving] = useState(false);
   const [listError, setListError] = useState('');
   const [busyId, setBusyId] = useState(null);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
 
   const load = useCallback(async () => {
     setLoadFailed(false);
@@ -155,6 +157,23 @@ export default function Letterheads() {
     }
   }
 
+
+  async function handleDownloadTemplate() {
+    setDownloadingTemplate(true);
+    try {
+      const res = await window.api.letterheads.downloadTemplate();
+      if (res && res.success) {
+        toast.success('Letterhead design template saved');
+      } else if (res && res.reason) {
+        toast.error(res.reason);
+      }
+    } catch {
+      toast.error('Could not download template.');
+    } finally {
+      setDownloadingTemplate(false);
+    }
+  }
+
   // Same update call the edit sheet makes, with is_default switched on.
   async function handleSetDefault(l) {
     setListError('');
@@ -230,7 +249,12 @@ export default function Letterheads() {
 
   return (
     <div style={{ ...settingsColumn, maxWidth: '960px' }}>
-      <PageIntro>PDF pages your A4 invoices are printed on — your own logo, address and borders.</PageIntro>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ flex: 1, minWidth: '240px' }}>
+          <PageIntro>PDF pages your A4 invoices are printed on — your own logo, address and borders.</PageIntro>
+        </div>
+        <DownloadTemplateButton onClick={handleDownloadTemplate} busy={downloadingTemplate} />
+      </div>
       <UploadButton onClick={handleUpload} busy={picking && editingId === null} />
       <Banner style={{ marginTop: 0 }}>{listError}</Banner>
       {list}

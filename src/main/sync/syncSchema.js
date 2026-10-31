@@ -90,6 +90,15 @@ const SYNC_TABLES = {
       customer_id: { table: 'customers', nullable: true },
     },
   },
+  customer_special_prices: {
+    kind: 'upsert',
+    deletable: true,
+    fks: {
+      customer_id: { table: 'customers' },
+      product_id: { table: 'products' },
+      product_unit_id: { table: 'product_units', nullable: true },
+    },
+  },
   sales: {
     kind: 'upsert',
     deletable: true, // bills can be edited (030); since 036 a void is an update (is_voided, voided_at, voided_by)

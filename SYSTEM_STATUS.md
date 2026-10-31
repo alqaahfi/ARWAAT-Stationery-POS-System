@@ -52,7 +52,7 @@ Covers: what the app is, who uses it, current version, state and what is unfinis
 
 **What:** ARWAAT Stationery Systems — an **offline-first POS and back-office app for ONE stationery/book shop in Pakistan** (Rs, UTC+5, English UI in plain words, Urdu product names). Used by the owner (Admin) and cashiers on Windows PCs with mouse + keyboard (+ barcode scanner, thermal receipt printer, A4 printer). **Electron 44** main process (Node, **better-sqlite3**, one SQLite file per PC) + **React 19** renderer built by **Vite 8**. PCs in the shop sync peer-to-peer over the LAN. No cloud, no central server, no CDN assets. The only network features: Urdu-name button (Google endpoints), in-app updates from a private GitHub repo.
 
-**Current version:** `1.1.0` (package.json). Draft release v1.1.0 is on GitHub (private repo `arwaheed/arwaat-pos-system`); not yet published at the time of writing. Migrations: **42** (`001`–`042`). The 1.1.0 installer was built **before** migration 042 (Dev Panel default password).
+**Current version:** `1.1.0` (package.json). Draft release v1.1.0 is on GitHub (private repo `arwaheed/arwaat-pos-system`); not yet published at the time of writing. Migrations: **43** (`001`–`043`). Migration 043 added customer special pricing, updated the default dev panel password, and added thermal receipt font configuration.
 
 **Current state (10 bullets)**
 1. Business rules 1–17 + counter anomalies are implemented and proven: `npm run test:rules` = **139/139** checks (R01–R19).
@@ -73,7 +73,7 @@ Covers: what the app is, who uses it, current version, state and what is unfinis
 4. Counter (cashier-only) PCs have no update UI; they must be updated by running the installer by hand.
 5. Known small gaps: `sync:get-status` has no `pendingCount` (sync chip text), no inactive filter on customer/supplier lists, expenses/settings do not sync (§14).
 
-**Counts verified against the code when this file was written (2026-10-30):** 35 tables (34 + `_migrations`), 44 triggers, 55 indexes, 22 synced tables, **180 IPC channels** (177 in `preload.js` + 3 `recovery:*`), 59 `case` routes in the Admin switch (58 pages + `/dev/design-gallery`), 10 Cashier routes (7 menu + 3 hidden), 8 permission keys, 42 migrations, 19 static settings keys (+ dynamic `last_invoice_seq:*`), 8 static + 2 per-station localStorage keys, 139 rules checks, 453 tracked files mapped in §3.8 (excluding the generated `dist`).
+**Counts verified against the code when this file was written (2026-10-30):** 36 tables (35 + `_migrations`), 47 triggers, 55 indexes, 23 synced tables, **186 IPC channels** (183 in `preload.js` + 3 `recovery:*`), 59 `case` routes in the Admin switch (58 pages + `/dev/design-gallery`), 10 Cashier routes (7 menu + 3 hidden), 8 permission keys, 43 migrations, 20 static settings keys (+ dynamic `last_invoice_seq:*`), 8 static + 2 per-station localStorage keys, 139 rules checks, 453 tracked files mapped in §3.8 (excluding the generated `dist`).
 
 ---
 
@@ -958,6 +958,25 @@ Product categories, one parent level. Synced.
 - triggers: trg_categories_ai, trg_categories_au
 - sync: {"kind":"upsert","deletable":false}
 
+#### `customer_special_prices`
+Special pricing rules set per customer for a specific product or specific pack size (Rule 1). Takes highest precedence in priceEngine. Synced.
+
+| column | type | null | default | meaning |
+|---|---|---|---|---|
+| id | INTEGER |  |  | PK |
+| customer_id | INTEGER | NOT NULL |  | FK → customers (ON DELETE CASCADE) |
+| product_id | INTEGER | NOT NULL |  | FK → products (ON DELETE CASCADE) |
+| product_unit_id | INTEGER |  | NULL | FK → product_units (ON DELETE CASCADE); NULL = applies to all pack sizes |
+| price_type | TEXT | NOT NULL |  | 'fixed' (Rs.), 'discount_percent' (% off standard price), 'margin_percent' (% over cost) |
+| price_value | REAL | NOT NULL |  | Amount or percentage |
+| created_at | TEXT | NOT NULL | datetime('now') |  |
+| updated_at | TEXT | NOT NULL | datetime('now') |  |
+| uuid | TEXT |  |  |  |
+
+- indexes: idx_customer_special_prices_lookup(customer_id, product_id, product_unit_id); idx_customer_special_prices_uuid(uuid) unique
+- triggers: trg_customer_special_prices_ai, trg_customer_special_prices_au, trg_customer_special_prices_ad
+- sync: {"kind":"upsert","deletable":true}
+
 #### `customers`
 Customers. Balance is never stored (see balanceEngine). Synced.
 
@@ -1731,6 +1750,7 @@ Admin implicitly has every permission (`hasPermission` short-circuits on role; d
 | `customers:get-ledger` | customers.ipc.js | Signed in | Customer account timeline (sales, payments, returns, corrections) + balance |
 | `customers:get-next-id` | customers.ipc.js | Admin | Preview of the next customer id (create form) |
 | `customers:list` | customers.ipc.js | Admin | Customer list with derived balances, filters, sort |
+| `customers:save-special-price` | customers.ipc.js | Admin | Save/update a customer special pricing rule |
 | `customers:search-minimal` | customers.ipc.js | Signed in | Name/phone search for pickers (POS customer step, Receive Payment) |
 | `customers:set-active` | customers.ipc.js | Admin | Activate / deactivate a customer |
 | `customers:update` | customers.ipc.js | Admin | Edit a customer |
@@ -1897,6 +1917,7 @@ Covers: how money, stock, prices and bills behave, each with the file/function t
 
 ### 6.1 Pricing engine — `main/pricing/priceEngine.js` `resolveUnitPrice({db, productUnitId, customerId})`
 First match wins, rounded to 2 dp; `productId` comes from the unit row, never the caller:
+0. Customer Special Price (`customer_special_prices`): pack-size specific match first (`product_unit_id`), then product-wide fallback (`product_unit_id IS NULL`). Supports `fixed` (Rs.), `discount_percent` (% off standard price), and `margin_percent` (% over cost_price).
 1. The unit's `net_rate_c{tier}` for the customer's tier (C1–C5) if set.
 2. Product `pricing_type='percentage'` → `cost × (1 + default_percentage/100)`.
 3. `wholesale_price` for wholesale customers, else `retail_price` (walk-in = retail).
@@ -2374,6 +2395,8 @@ Covers: one line each — date, commit, what was wrong, file(s). (Earlier phases
 | 2026-10-30 | d6abb80 | `npm run release` split the commit message on Windows (unquoted args) | `scripts/release.js` |
 | 2026-10-30 | 0977270 | electron-builder created two half-filled draft releases → consolidated automatically | `scripts/consolidate-draft.js` |
 | 2026-10-30 | ec601b3 | Fresh installs had no Dev Panel password (panel unusable) → default seeded by migration 042 + change-password tab | `042_*.sql`, `devpanel.ipc.js` |
+| 2026-10-31 | — | Cancel sale dialog button misalignment: fixed flex and container layout so "Keep working" and "Cancel sale" match in height and vertical baseline | `CancelSaleDialog.jsx` |
+| 2026-10-31 | — | Cancel sale button right-edge clipping on compact screens: reduced horizontal padding and height on top header action buttons and tightened step divider spacing | `PosButton.jsx`, `StepStrip.jsx` |
 Earlier phases (no hashes recorded): Phase 11 — UTC vs local day in Reports/Home/Sales History (all use `date(x,'localtime')`), returns netted out everywhere (Sales Report, P&L, Cashier Performance, Home, chart), Home "Customers Owe You" now equals the Ledgers total receivable. Phase 13 — currency symbol read from settings (`Rs.` fallback), POS "Only N left" uses each product's warn-below, brand on Product List rows, server-side Special Margin checks (feature since removed), focus-ring fix. Don't "fix" these again.
 
 ---
@@ -2382,6 +2405,15 @@ Earlier phases (no hashes recorded): Phase 11 — UTC vs local day in Reports/Ho
 
 Covers: one entry per work session, newest first (seeded from `git log`, 92 commits). Format: date · agent/model · what · commits.
 
+- **2026-10-31 · Antigravity · Customer Special Pricing, Master Recovery, Thermal Fonts, Direct Printing & UI Fixes:**
+  - Customer Special Pricing (migration 043): `customer_special_prices` table with sync triggers, `priceEngine.js` priority rule 0 (pack-specific or product-wide fixed/discount%/margin%), IPC channels, and full management UI in Customer Profile (`SpecialPricingCard.jsx`).
+  - Master Key Password Recovery: Added "Forgot password?" dialog on Login screen for Admin and Cashier accounts, verified against SHA-256 hash of developer master key.
+  - POS Direct Printing & "No Receipt": Checkout format selection includes "No Receipt" (key 3) for both sales and purchases; completing a sale directly prints to physical printer without blocking modal preview; clear warnings and status displayed if no physical printer is connected.
+  - Thermal Print Font & Layout Overhaul: Added printer font configuration (`monospace` vs `modern`) in Settings → Printers, and redesigned receipt layout for clean, professional presentation.
+  - Letterhead Template Download: Added "Download Template" button in Settings → Letterheads generating an A4 design specification PDF (40mm header safe zone, 25mm footer safe zone).
+  - Admin Void Anywhere: Admin can void any sale across sales history directly from `SaleDetailSheet.jsx` regardless of cashier ownership or sale age (as long as no returns exist).
+  - Dev Panel Password: Updated baked default password hash in migration 043 and test suite.
+  - UI Bug Fixes: Aligned "Keep working" and "Cancel sale" buttons in `CancelSaleDialog.jsx`; eliminated right-edge clipping of top POS action buttons on compact screens (`PosButton.jsx`, `StepStrip.jsx`).
 - **2026-10-30 · Claude (Sonnet 5.5) · Docs consolidation:** this file rebuilt as the single project memory (§0–§16) from the code; `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` replaced by a one-line pointer; `BRIEF.md`, `FINAL-TEST.md`, `TEST_PROGRESS.txt` moved to `docs/archive/` (`git mv`). Also: README commit on `arwaheed/arwaat-pos-system` (so the draft can be published). Commit "docs: single project memory in SYSTEM_STATUS.md".
 - **2026-10-30 · Claude (Sonnet 5.5) · Dev Panel password:** migration 042 (default hash), `devpanel:change-password`, Password tab, check R19-11. `ec601b3`.
 - **2026-10-30 · Claude (Sonnet 5.5) · Finish-up run (freeze, dialogs, updater, release):** aging-report freeze fixed + migration 041 (`ba8a3b5`); Void-bill click bug, credit-limit "Over by", e2e test fixes, `07-stage1-ui` 11/11 (`2411a45`); safe start-up migrations + recovery + pre-update backup + version-gated sync + release scripts (`95afe25`); Updates tab, Home alert/toast, busy flags, R19 checks (`e101159`); updater 404 → up to date, docs (`8cbd623`); release script fixes and draft consolidation (`d6abb80`, `f36c09d`, `6033fff` Release v1.1.0, `0977270`). Draft v1.1.0 uploaded.

@@ -239,6 +239,7 @@ export default function SalesHistory({ onNavigate, saleId: initialSaleId }) {
           onOpenCustomer={openCustomer}
           onReturnItems={isAdmin ? (id) => goToReturns({ saleId: id }) : undefined}
           onOpenReturn={isAdmin ? (id) => goToReturns({ returnId: id }) : undefined}
+          onVoided={() => load()}
         />
       )}
     </div>

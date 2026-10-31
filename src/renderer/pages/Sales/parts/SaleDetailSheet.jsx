@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CircleAlert, Printer, SearchX, Undo2 } from 'lucide-react';
+import { Ban, CircleAlert, Printer, SearchX, Undo2 } from 'lucide-react';
 import theme from '../../../config/theme';
 import glossary from '../../../config/glossary';
-import { Avatar, Badge, Button, Checkbox, DataTable, EmptyState, Icon, Modal, Skeleton } from '../../../components/ui';
+import { Avatar, Badge, Button, Checkbox, DataTable, EmptyState, Icon, Modal, Skeleton, useConfirm, useToast } from '../../../components/ui';
 import { formatCurrencyExact, formatDateTime } from '../../../utils/format';
 import { methodLabel } from '../../Ledgers/parts/ledgerUtils';
 import PrintPreviewModal from '../../../components/receipt/PrintPreviewModal';
@@ -12,10 +12,41 @@ const c = theme.colors;
 
 // Read-only view of one sale, with reprint. No void/edit here; an Admin can
 // start a return, which happens on the Returns page.
-export function SaleDetailSheet({ saleId, userId, isAdmin, onClose, onOpenCustomer, onReturnItems, onOpenReturn }) {
+export function SaleDetailSheet({ saleId, userId, isAdmin, onClose, onOpenCustomer, onReturnItems, onOpenReturn, onVoided }) {
   const [state, setState] = useState({ loading: true, error: null, data: null });
   const [showDues, setShowDues] = useState(false);
   const [preview, setPreview] = useState(null); // { printType } while the print preview is open
+  const confirm = useConfirm();
+  const toast = useToast();
+  const [voiding, setVoiding] = useState(false);
+
+  async function handleVoid() {
+    if (!sale || voiding) return;
+    const ok = await confirm({
+      title: `Void sale ${sale.invoice_no}?`,
+      message:
+        'Items will be returned to stock, payments marked voided, and the customer balance corrected. This bill will be kept in history marked Voided and count as zero everywhere.',
+      confirmLabel: 'Void sale',
+      destructive: true,
+    });
+    if (!ok) return;
+
+    setVoiding(true);
+    try {
+      const res = await window.api.sales.void({ saleId: sale.id, userId });
+      if (!res?.success) {
+        toast.error(res?.reason || 'Could not void this sale.');
+        return;
+      }
+      toast.success(`Sale ${sale.invoice_no} voided`);
+      load();
+      if (onVoided) onVoided(sale.id);
+    } catch {
+      toast.error('Could not void this sale.');
+    } finally {
+      setVoiding(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setState({ loading: true, error: null, data: null });

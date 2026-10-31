@@ -1,8 +1,9 @@
 const { ipcMain, app } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { PDFDocument, PageSizes, StandardFonts, rgb } = require('pdf-lib');
 const { getDb } = require('../db/connection');
-const { showOpenDialog } = require('../system/fileDialog');
+const { showOpenDialog, showSaveDialog } = require('../system/fileDialog');
 
 function letterheadsDir() {
   const dir = path.join(app.getPath('userData'), 'letterheads');
@@ -130,6 +131,147 @@ function remove(id) {
   return { success: true };
 }
 
+async function generateLetterheadTemplatePdf() {
+  const doc = await PDFDocument.create();
+  const page = doc.addPage(PageSizes.A4);
+  const { width, height } = page.getSize();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
+
+  const MM_TO_PT = 2.83465;
+  const mm = (n) => n * MM_TO_PT;
+
+  const headerHeight = mm(40);
+  const footerHeight = mm(25);
+  const marginSide = mm(20);
+
+  // 1. Header Safe Zone (top 40 mm)
+  page.drawRectangle({
+    x: 0,
+    y: height - headerHeight,
+    width,
+    height: headerHeight,
+    color: rgb(0.93, 0.96, 1.0),
+    borderColor: rgb(0.2, 0.45, 0.8),
+    borderWidth: 1.5,
+  });
+
+  page.drawText('HEADER ZONE (Top 40 mm)', {
+    x: marginSide,
+    y: height - mm(12),
+    size: 13,
+    font: fontBold,
+    color: rgb(0.1, 0.3, 0.65),
+  });
+  page.drawText('Design your shop logo, shop name, address, contact numbers, and header graphics here.', {
+    x: marginSide,
+    y: height - mm(19),
+    size: 9,
+    font,
+    color: rgb(0.2, 0.25, 0.35),
+  });
+  page.drawText('Default top content margin in settings: 40 mm (invoice text starts below this line).', {
+    x: marginSide,
+    y: height - mm(26),
+    size: 8.5,
+    font,
+    color: rgb(0.3, 0.4, 0.5),
+  });
+  page.drawText('[ Tip: You can adjust the top margin in Settings > Letterheads if your header is taller or shorter ]', {
+    x: marginSide,
+    y: height - mm(33),
+    size: 8,
+    font,
+    color: rgb(0.25, 0.45, 0.7),
+  });
+
+  // 2. Middle Content Zone (~232 mm)
+  const contentHeight = height - headerHeight - footerHeight;
+  page.drawRectangle({
+    x: 0,
+    y: footerHeight,
+    width,
+    height: contentHeight,
+    color: rgb(0.99, 0.99, 0.99),
+    borderColor: rgb(0.75, 0.75, 0.8),
+    borderWidth: 1,
+  });
+
+  const centerText = (str, yPos, size, isBold, color) => {
+    const f = isBold ? fontBold : font;
+    const w = f.widthOfTextAtSize(str, size);
+    page.drawText(str, {
+      x: (width - w) / 2,
+      y: yPos,
+      size,
+      font: f,
+      color,
+    });
+  };
+
+  const midY = footerHeight + contentHeight / 2;
+  centerText('INVOICE CONTENT ZONE (~232 mm)', midY + mm(24), 14, true, rgb(0.2, 0.25, 0.35));
+  centerText('LEAVE THIS MIDDLE AREA BLANK / WHITE IN YOUR PRE-PRINTED DESIGN', midY + mm(16), 10, true, rgb(0.4, 0.45, 0.55));
+  centerText('The ARWAAT POS print engine will dynamically stamp invoice data here:', midY + mm(7), 9, false, rgb(0.3, 0.35, 0.45));
+  centerText('* Customer name, phone, invoice number, date, time & cashier name', midY - mm(1), 8.5, false, rgb(0.4, 0.45, 0.5));
+  centerText('* Item table: Product name, pack size, quantity, unit price & line total', midY - mm(8), 8.5, false, rgb(0.4, 0.45, 0.5));
+  centerText('* Financial summary: Subtotal, item discounts, bill discount, tax & grand total', midY - mm(15), 8.5, false, rgb(0.4, 0.45, 0.5));
+  centerText('* Payment breakdown: Cash received, change returned, and remaining customer dues', midY - mm(22), 8.5, false, rgb(0.4, 0.45, 0.5));
+  centerText('Side margins used during printing: 20 mm left and right', midY - mm(30), 8, true, rgb(0.5, 0.55, 0.65));
+
+  // 3. Footer Zone (bottom 25 mm)
+  page.drawRectangle({
+    x: 0,
+    y: 0,
+    width,
+    height: footerHeight,
+    color: rgb(0.94, 0.97, 0.94),
+    borderColor: rgb(0.25, 0.6, 0.3),
+    borderWidth: 1.5,
+  });
+
+  page.drawText('FOOTER ZONE (Bottom 25 mm)', {
+    x: marginSide,
+    y: footerHeight - mm(8),
+    size: 13,
+    font: fontBold,
+    color: rgb(0.12, 0.42, 0.18),
+  });
+  page.drawText('Place bank account details, payment terms, return policy, and signatures here.', {
+    x: marginSide,
+    y: footerHeight - mm(14),
+    size: 9,
+    font,
+    color: rgb(0.2, 0.3, 0.25),
+  });
+  page.drawText('NOTICE: The bottom 12 mm carries the system credit line (Powered by ARWAAT POS System). Keep essential text above 12 mm.', {
+    x: marginSide,
+    y: footerHeight - mm(20),
+    size: 7.5,
+    font: fontBold,
+    color: rgb(0.55, 0.2, 0.2),
+  });
+
+  return await doc.save();
+}
+
+async function downloadTemplate() {
+  const result = await showSaveDialog({
+    title: 'Download Letterhead A4 Design Template',
+    defaultPath: 'ARWAAT-Letterhead-A4-Template.pdf',
+    filters: [{ name: 'PDF Document', extensions: ['pdf'] }],
+  });
+  if (result.canceled || !result.filePath) return { canceled: true };
+
+  try {
+    const pdfBytes = await generateLetterheadTemplatePdf();
+    fs.writeFileSync(result.filePath, Buffer.from(pdfBytes));
+    return { success: true, filePath: result.filePath };
+  } catch (err) {
+    return { success: false, reason: `Could not save template: ${err.message}` };
+  }
+}
+
 function registerLetterheadsIpc() {
   ipcMain.handle('letterheads:list', () => list());
   ipcMain.handle('letterheads:get-by-id', (event, { id } = {}) => getById(id));
@@ -137,6 +279,7 @@ function registerLetterheadsIpc() {
   ipcMain.handle('letterheads:create', (event, payload) => create(payload || {}));
   ipcMain.handle('letterheads:update', (event, payload) => update(payload || {}));
   ipcMain.handle('letterheads:delete', (event, { id } = {}) => remove(id));
+  ipcMain.handle('letterheads:download-template', () => downloadTemplate());
 }
 
 module.exports = { registerLetterheadsIpc };

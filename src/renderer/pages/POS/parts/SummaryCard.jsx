@@ -5,7 +5,7 @@ import { formatCurrency } from '../../../utils/format';
 import { Badge, Card } from '../../../components/ui';
 import { InlineMessage, Money, c } from './common';
 
-const FORMAT_LABELS = { 'wholesale-a4': 'A4 invoice', 'retail-thermal': 'Small receipt' };
+const FORMAT_LABELS = { 'wholesale-a4': 'A4 invoice', 'retail-thermal': 'Small receipt', 'none': 'No receipt' };
 
 export default function SummaryCard({
   customer,

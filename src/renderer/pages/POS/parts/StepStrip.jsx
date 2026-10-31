@@ -53,7 +53,7 @@ export default function StepStrip({ stage, showCancel, onCancel, heldCount = 0, 
           );
         })}
       </ol>
-      <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing.smd }}>
+      <div style={styles.actions}>
         {stage !== 'confirm' && (
           <>
             <PosButton label="Today's sales" shortcut="F2" icon={ListChecks} onClick={onRecent} />
@@ -69,19 +69,44 @@ export default function StepStrip({ stage, showCancel, onCancel, heldCount = 0, 
 }
 
 const styles = {
-  bar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing.md, minHeight: '52px', flexShrink: 0 },
-  list: { display: 'flex', alignItems: 'center', gap: theme.spacing.sm, listStyle: 'none', margin: 0, padding: 0 },
-  item: { display: 'flex', alignItems: 'center', gap: theme.spacing.sm },
-  line: { width: '32px', height: '2px', borderRadius: theme.radius.pill },
+  bar: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+    minHeight: '48px',
+    flexShrink: 0,
+    width: '100%',
+    boxSizing: 'border-box',
+    overflow: 'hidden',
+  },
+  list: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    listStyle: 'none',
+    margin: 0,
+    padding: 0,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  item: { display: 'flex', alignItems: 'center', gap: '6px' },
+  line: { width: '16px', height: '2px', borderRadius: theme.radius.pill, flexShrink: 0 },
   dot: {
-    width: '22px',
-    height: '22px',
+    width: '20px',
+    height: '20px',
     borderRadius: theme.radius.pill,
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
     ...theme.type.caption,
     fontWeight: theme.font.weightBold,
+    flexShrink: 0,
+  },
+  actions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
     flexShrink: 0,
   },
   srOnly: { position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)' },

@@ -39,6 +39,8 @@ const PUBLIC_CHANNELS = new Set([
   'users:validate-session',
   'users:logout',
   'devpanel:verify-password',
+  'users:get-recovery-accounts',
+  'users:recover-password',
 ]);
 
 // Public only while this PC has not been set up yet (the Setup screen).
@@ -109,6 +111,9 @@ const ADMIN_CHANNELS = new Set([
   'customers:set-active',
   'customers:get-next-id',
   'customers:check-duplicate-phone',
+  'customers:get-special-prices',
+  'customers:save-special-price',
+  'customers:delete-special-price',
   'users:list',
   'users:create-cashier',
   'users:update',
@@ -123,6 +128,7 @@ const ADMIN_CHANNELS = new Set([
   'letterheads:update',
   'letterheads:delete',
   'letterheads:pick-pdf',
+  'letterheads:download-template',
   'sync:get-secret',
   'sync:get-log',
   'sync:get-peers',

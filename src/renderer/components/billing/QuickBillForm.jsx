@@ -47,7 +47,7 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
   const [discountInput, setDiscountInput] = useState('');
   const [paidInput, setPaidInput] = useState('');
   const [method, setMethod] = useState('cash');
-  const [printFormat, setPrintFormat] = useState('retail-thermal');
+  const [printFormat, setPrintFormat] = useState(kind === 'purchase' ? 'wholesale-a4' : 'retail-thermal');
   const [formatTouched, setFormatTouched] = useState(false);
   const [showDues, setShowDues] = useState(false);
   const [duesTouched, setDuesTouched] = useState(false);

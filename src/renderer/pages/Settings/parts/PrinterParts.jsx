@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, Printer } from 'lucide-react';
+import { FileText, Printer, Type } from 'lucide-react';
 import theme from '../../../config/theme';
 import glossary from '../../../config/glossary';
 import { Button, Card, ChipGroup, Field, IconTile, Select } from '../../../components/ui';
@@ -9,6 +9,11 @@ const c = theme.colors;
 const WIDTH_OPTIONS = [
   { value: '58mm', label: '58 mm (narrow)' },
   { value: '80mm', label: '80 mm (wide)' },
+];
+
+const FONT_OPTIONS = [
+  { value: 'monospace', label: 'Classic POS Monospace' },
+  { value: 'modern', label: 'Modern Sans-Serif' },
 ];
 
 function CardHead({ icon, color, title, subtitle }) {
@@ -23,7 +28,20 @@ function CardHead({ icon, color, title, subtitle }) {
   );
 }
 
-export function ReceiptPrinterCard({ printers, printerName, onPrinterName, paperWidth, onPaperWidth, dirty, saving, onSave, testing, onTest }) {
+export function ReceiptPrinterCard({
+  printers,
+  printerName,
+  onPrinterName,
+  paperWidth,
+  onPaperWidth,
+  fontStyle = 'monospace',
+  onFontStyle,
+  dirty,
+  saving,
+  onSave,
+  testing,
+  onTest,
+}) {
   const canTest = !!printerName && !dirty;
   return (
     <Card
@@ -53,10 +71,16 @@ export function ReceiptPrinterCard({ printers, printerName, onPrinterName, paper
           ))}
         </Select>
       </Field>
+
       <div style={{ ...theme.type.subhead, fontWeight: theme.font.weightMedium, color: c.label, marginBottom: '6px' }}>
         Paper width
       </div>
       <ChipGroup aria-label="Paper width" options={WIDTH_OPTIONS} value={paperWidth} onChange={onPaperWidth} />
+
+      <div style={{ ...theme.type.subhead, fontWeight: theme.font.weightMedium, color: c.label, marginTop: theme.spacing.md, marginBottom: '6px' }}>
+        Thermal Print Font Style
+      </div>
+      <ChipGroup aria-label="Thermal print font" options={FONT_OPTIONS} value={fontStyle} onChange={onFontStyle} />
     </Card>
   );
 }
