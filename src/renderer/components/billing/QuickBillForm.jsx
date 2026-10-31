@@ -351,8 +351,18 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
     }
     toast.success('Purchase saved');
     onSaved?.(res);
-    if (res.purchaseId) setPurchasePreviewId(res.purchaseId);
-    else onClose?.();
+    // Straight to the printer (no preview window); "No receipt" skips it. The purchase is
+    // already saved, so a missing printer is only a warning.
+    if (res.purchaseId && printFormat !== 'none') {
+      try {
+        const pr = await window.api.printing.printPurchase({ purchaseId: res.purchaseId });
+        if (pr?.success) toast.success('Sent to the printer');
+        else toast.error(`${pr?.reason || 'No printer was ready.'} The purchase is saved.`);
+      } catch {
+        toast.error('No printer was ready. The purchase is saved.');
+      }
+    }
+    onClose?.();
   }
 
   async function saveSale(opts = {}) {
@@ -451,9 +461,9 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
     onSaved?.(res);
 
     const effectiveShowDues = showDues && !!party;
-    // Nothing goes to the printer automatically: the print preview opens
-    // first and its Print button does the physical print. The sale is already
-    // saved, so closing the preview never affects it.
+    // The sale is saved: print straight to the real printer (no preview window);
+    // "No receipt" skips the printer. A missing printer is only a warning.
+    const printResult = printFormat === 'none' ? { printSuccess: null, printReason: null, pdfPath: null } : await physicalPrint(res.saleId, printFormat, effectiveShowDues);
     setDone({
       invoiceNo: res.invoiceNo,
       saleId: res.saleId,
@@ -462,11 +472,30 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
       balanceDue: totals.balanceDue,
       printType: printFormat,
       showDues: effectiveShowDues,
-      printSuccess: null,
-      printReason: null,
-      pdfPath: null,
+      printSuccess: printResult.printSuccess,
+      printReason: printResult.printReason,
+      pdfPath: printResult.pdfPath,
     });
-    setShowPreview(true);
+  }
+
+  async function physicalPrint(saleId, printType, showDuesFlag) {
+    try {
+      const pr = await window.api.printing.printSale({ saleId, printType, showDues: showDuesFlag });
+      if (pr?.success) return { printSuccess: true, printReason: null, pdfPath: pr.pdfPath || null };
+      return { printSuccess: false, printReason: pr?.reason || 'No printer was ready. The sale is saved.', pdfPath: null };
+    } catch (err) {
+      return { printSuccess: false, printReason: err?.message || 'No printer was ready. The sale is saved.', pdfPath: null };
+    }
+  }
+
+  async function retryPrint() {
+    if (!done) return;
+    if (done.printType === 'none') {
+      setShowPreview(true);
+      return;
+    }
+    const result = await physicalPrint(done.saleId, done.printType, done.showDues);
+    setDone((d) => (d ? { ...d, ...result, pdfPath: result.pdfPath || d.pdfPath } : d));
   }
 
   function onPrinted(res) {
@@ -517,9 +546,9 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
       if (e.key === 'Enter' || e.key === 'Escape') {
         e.preventDefault();
         onClose?.();
-      } else if ((e.key === 'r' || e.key === 'R') && !done.printSuccess) {
+      } else if (e.key === 'r' || e.key === 'R') {
         e.preventDefault();
-        setShowPreview(true);
+        retryPrint();
       }
       return;
     }
@@ -635,7 +664,7 @@ export default function QuickBillForm({ kind, presetParty = null, onSaved, onClo
         <SaleCompleteSheet
           data={done}
           receiptPreview={receiptPreview}
-          onRetry={() => setShowPreview(true)}
+          onRetry={retryPrint}
           onClose={() => onClose?.()}
           closeLabel="Done"
         />

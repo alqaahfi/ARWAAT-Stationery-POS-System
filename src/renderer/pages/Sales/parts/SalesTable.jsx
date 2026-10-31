@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
-import { ChevronRight, Undo2 } from 'lucide-react';
+import { Ban, ChevronRight, Undo2 } from 'lucide-react';
 import theme from '../../../config/theme';
 import glossary from '../../../config/glossary';
-import { Badge, Card, DataTable, Icon } from '../../../components/ui';
+import { Badge, Button, Card, DataTable, Icon } from '../../../components/ui';
 import { formatCount, formatCurrencyExact, formatDateTime } from '../../../utils/format';
 import { RETURN_STATUS, SALE_TYPE, STATUS } from './saleLabels';
 
@@ -21,7 +21,7 @@ export function SummaryStrip({ total, totals }) {
   );
 }
 
-export function SalesTable({ rows, isAdmin, loading, onOpen }) {
+export function SalesTable({ rows, isAdmin, loading, onOpen, onVoid }) {
   const columns = useMemo(
     () =>
       [
@@ -83,6 +83,25 @@ export function SalesTable({ rows, isAdmin, loading, onOpen }) {
             );
           },
         },
+        onVoid && {
+          key: 'void',
+          label: <span style={styles.srOnly}>Void</span>,
+          width: '96px',
+          render: (r) =>
+            r.is_voided || r.return_status !== 'none' ? null : (
+              <Button
+                size="sm"
+                variant="danger"
+                icon={Ban}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onVoid(r);
+                }}
+              >
+                Void
+              </Button>
+            ),
+        },
         {
           key: 'chevron',
           label: <span style={styles.srOnly}>Open</span>,
@@ -90,7 +109,7 @@ export function SalesTable({ rows, isAdmin, loading, onOpen }) {
           render: () => <Icon icon={ChevronRight} size={16} style={{ color: c.labelTertiary, display: 'block' }} />,
         },
       ].filter(Boolean),
-    [isAdmin]
+    [isAdmin, onVoid]
   );
 
   return (

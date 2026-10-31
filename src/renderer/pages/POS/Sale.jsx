@@ -175,7 +175,7 @@ export default function Sale() {
   const [discountInput, setDiscountInput] = useState(0);
   const [amountTendered, setAmountTendered] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
-  const [printFormat, setPrintFormat] = useState('retail-thermal'); // 'wholesale-a4' | 'retail-thermal'
+  const [printFormat, setPrintFormat] = useState('retail-thermal'); // 'wholesale-a4' | 'retail-thermal' | 'none'
   const [discountCap, setDiscountCap] = useState(null);
 
   // ---------------- show outstanding balance toggle ----------------
@@ -235,6 +235,7 @@ export default function Sale() {
   const [completing, setCompleting] = useState(false);
   const [confirmData, setConfirmData] = useState(null);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [draftPreview, setDraftPreview] = useState(null); // { payload, printType } while the unsaved-bill preview is open
   // The on-screen receipt/invoice preview shown alongside the confirmation —
   // always fetched and shown regardless of whether the physical print
   // succeeded, via the same buildReceiptData() shape the print paths use.
@@ -1088,8 +1089,65 @@ export default function Sale() {
     setStage('format');
   }
 
-  function toggleFormat(explicit) {
-    setPrintFormat(explicit || (printFormat === 'wholesale-a4' ? 'retail-thermal' : 'wholesale-a4'));
+  const FORMAT_ORDER = ['wholesale-a4', 'retail-thermal', 'none'];
+  function toggleFormat(explicit, dir = 1) {
+    if (explicit) {
+      setPrintFormat(explicit);
+      return;
+    }
+    const at = FORMAT_ORDER.indexOf(printFormat);
+    setPrintFormat(FORMAT_ORDER[(at + dir + FORMAT_ORDER.length) % FORMAT_ORDER.length]);
+  }
+
+  // Preview: shows the receipt of the bill as it is now, WITHOUT saving it (no invoice number,
+  // no stock change). Nothing is written; the real save still re-checks every price.
+  function openDraftPreview() {
+    if (cartLines.length === 0) {
+      toast.error('Add at least one item to preview the bill.');
+      return;
+    }
+    const printType = printFormat === 'none' ? (saleType === 'wholesale' ? 'wholesale-a4' : 'retail-thermal') : printFormat;
+    setDraftPreview({
+      printType,
+      payload: {
+        saleType,
+        customerId: customer?.id || null,
+        letterheadId,
+        discountAmount,
+        paidAmount,
+        lines: cartLines.map((l) => ({
+          productId: l.productId,
+          unitId: l.unitId,
+          productName: l.productName,
+          variantName: l.variantName && l.variantName !== 'Standard' ? l.variantName : '',
+          unitName: (l.units || []).find((u) => u.id === l.unitId)?.unitName || l.baseUnitName || '',
+          quantity: Number(l.quantity) || 0,
+          unitPrice: Number(l.unitPrice) || 0,
+        })),
+      },
+    });
+  }
+
+  // Sends the saved sale straight to the real printer (no preview window). Never throws:
+  // the sale is already saved, so a missing printer only shows a plain warning.
+  async function physicalPrint(saleId, printType, showDuesFlag) {
+    try {
+      const pr = await window.api.printing.printSale({ saleId, printType, showDues: showDuesFlag });
+      if (pr?.success) return { printSuccess: true, printReason: null, pdfPath: pr.pdfPath || null };
+      return { printSuccess: false, printReason: pr?.reason || 'No printer was ready. The sale is saved.', pdfPath: null };
+    } catch (err) {
+      return { printSuccess: false, printReason: err?.message || 'No printer was ready. The sale is saved.', pdfPath: null };
+    }
+  }
+
+  async function retryPrint() {
+    if (!confirmData) return;
+    if (confirmData.printType === 'none') {
+      setShowPrintPreview(true); // "No receipt" sales can still be looked at on screen
+      return;
+    }
+    const result = await physicalPrint(confirmData.saleId, confirmData.printType, confirmData.showDues);
+    setConfirmData((d) => (d ? { ...d, ...result, pdfPath: result.pdfPath || d.pdfPath } : d));
   }
 
   // ---------------- stage 7/8: payment / finalize ----------------
@@ -1204,9 +1262,8 @@ export default function Sale() {
       window.dispatchEvent(new CustomEvent(SALE_COMPLETED_EVENT));
 
       const effectiveShowDues = showDues && !!customer;
-      // Nothing goes to the printer automatically: the print preview opens
-      // first and its Print button does the physical print. The sale is already
-      // saved, so closing the preview never affects it.
+      // The sale is saved. Print straight to the real printer (no preview window in the way);
+      // "No receipt" skips the printer entirely. A missing printer is only a warning.
       const finishedTotal = totalAmount;
       const finishedChange = changeDue;
       const finishedBalance = balanceDue;
@@ -1214,6 +1271,7 @@ export default function Sale() {
       savedOk = true;
       clearDraft();
       clearSaleState();
+      const printResult = printFormat === 'none' ? { printSuccess: null, printReason: null, pdfPath: null } : await physicalPrint(res.saleId, printFormat, effectiveShowDues);
       setConfirmData({
         invoiceNo: res.invoiceNo,
         saleId: res.saleId,
@@ -1222,14 +1280,13 @@ export default function Sale() {
         balanceDue: finishedBalance,
         printType: printFormat,
         showDues: effectiveShowDues,
-        printSuccess: null,
-        printReason: null,
+        printSuccess: printResult.printSuccess,
+        printReason: printResult.printReason,
         // Set once the A4 invoice is physically printed (printInvoice returns
         // the merged PDF's path); the confirm sheet embeds it from then on.
-        pdfPath: null,
+        pdfPath: printResult.pdfPath,
       });
       setStage('confirm');
-      setShowPrintPreview(true);
     } finally {
       if (!savedOk) {
         completingRef.current = false;
@@ -1299,7 +1356,7 @@ export default function Sale() {
 
   function handleKeyDown(e) {
     // The print preview window owns the keyboard while it is open, and so does a confirm dialog.
-    if (showPrintPreview || dialogOpenRef.current) return;
+    if (showPrintPreview || draftPreview || dialogOpenRef.current) return;
 
     // The Today's bills and Held bills panels run their own keys while open (and so does the add-item dialog).
     if (showRecent || showRecall || showReturn || quickAdd || approval) return;
@@ -1318,6 +1375,13 @@ export default function Sale() {
       else if (e.key === 'F3') setShowRecall(true);
       else if (e.key === 'F6') setShowReturn(true);
       else if (stage !== 'idle') holdAndClear();
+      return;
+    }
+
+    // F8: preview the bill as a receipt without saving it.
+    if (e.key === 'F8' && (stage === 'discount' || stage === 'format' || stage === 'payment') && !showCancelConfirm) {
+      e.preventDefault();
+      openDraftPreview();
       return;
     }
 
@@ -1346,9 +1410,9 @@ export default function Sale() {
       if (e.key === 'Enter' || e.key === 'Escape') {
         e.preventDefault();
         dismissConfirm();
-      } else if ((e.key === 'r' || e.key === 'R') && confirmData && !confirmData.printSuccess) {
+      } else if ((e.key === 'r' || e.key === 'R') && confirmData) {
         e.preventDefault();
-        setShowPrintPreview(true);
+        retryPrint();
       }
       return;
     }
@@ -1525,13 +1589,16 @@ export default function Sale() {
         requestCancelSale();
       } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         e.preventDefault();
-        toggleFormat();
+        toggleFormat(null, e.key === 'ArrowRight' ? 1 : -1);
       } else if (e.key === '1') {
         e.preventDefault();
         setPrintFormat('wholesale-a4');
       } else if (e.key === '2') {
         e.preventDefault();
         setPrintFormat('retail-thermal');
+      } else if (e.key === '3') {
+        e.preventDefault();
+        setPrintFormat('none');
       } else if (e.key === 'Tab' || e.key === 'Enter') {
         e.preventDefault();
         setStage('payment');
@@ -1813,6 +1880,7 @@ export default function Sale() {
               previousBalance={previousBalance}
               newBalance={newBalance}
               editingInvoiceNo={editingSale?.invoiceNo}
+              onPreview={openDraftPreview}
             />
           </>
         ) : (
@@ -1886,9 +1954,13 @@ export default function Sale() {
         <SaleCompleteSheet
           data={confirmData}
           receiptPreview={receiptPreview}
-          onRetry={() => setShowPrintPreview(true)}
+          onRetry={retryPrint}
           onClose={dismissConfirm}
         />
+      )}
+
+      {draftPreview && (
+        <PrintPreviewModal draft={draftPreview.payload} printType={draftPreview.printType} onClose={() => setDraftPreview(null)} />
       )}
 
       {stage === 'confirm' && confirmData && showPrintPreview && (

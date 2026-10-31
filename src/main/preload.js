@@ -186,6 +186,7 @@ contextBridge.exposeInMainWorld('api', {
     update: (data) => invoke('letterheads:update', data),
     delete: (data) => invoke('letterheads:delete', data),
     downloadTemplate: () => invoke('letterheads:download-template'),
+    downloadWordTemplate: () => invoke('letterheads:download-word-template'),
   },
 
   settings: {
@@ -249,6 +250,7 @@ contextBridge.exposeInMainWorld('api', {
     getSaleDetail: (data) => invoke('sales:get-sale-detail', data),
     getProductTypes: (data) => invoke('sales:get-product-types', data),
     getReceiptData: (data) => invoke('sales:get-receipt-data', data),
+    getDraftReceipt: (data) => invoke('sales:get-draft-receipt', data),
     list: (data) => invoke('sales:list', data),
     getDetail: (data) => invoke('sales:get-detail', data),
   },
@@ -266,6 +268,7 @@ contextBridge.exposeInMainWorld('api', {
   printing: {
     printSale: (data) => invoke('printing:print-sale', data),
     previewSale: (data) => invoke('printing:preview-sale', data),
+    previewDraft: (data) => invoke('printing:preview-draft', data),
     previewPurchase: (data) => invoke('printing:preview-purchase', data),
     printPurchase: (data) => invoke('printing:print-purchase', data),
     savePdf: (data) => invoke('printing:save-pdf', data),

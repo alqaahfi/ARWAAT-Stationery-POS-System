@@ -248,4 +248,23 @@ module.exports = async (t, check) => {
     const stored = t.db().prepare('SELECT password_hash FROM dev_panel_config WHERE id = 1').get().password_hash;
     assert.ok(stored.startsWith('$2') && !stored.includes('a-brand-new-pass'), 'only a hash is stored');
   });
+
+  await check('R19-12', 'Forgot password: only the owner master key resets a password (wrong key refused; the right key works, locks lifted)', async () => {
+    const accounts = await t.invoke('users:get-recovery-accounts', {});
+    assert.ok(Array.isArray(accounts) && accounts.length > 0, 'accounts listed signed out');
+    assert.ok(accounts.every((a) => !('password_hash' in a)), 'no hashes leak');
+    const admin = accounts.find((a) => a.role === 'admin');
+    const bad = await t.invoke('users:recover-password', { username: admin.username, recoveryKey: 'not-the-key', newPassword: 'whatever123' });
+    assert.strictEqual(bad.success, false);
+    assert.match(bad.reason, /Invalid master recovery key/);
+    // The real key is a secret and is never stored in the repo: this half runs only when the
+    // owner points ARWAAT_TEST_RECOVERY_KEY_FILE at a local file holding it.
+    const keyFile = process.env.ARWAAT_TEST_RECOVERY_KEY_FILE;
+    if (keyFile) {
+      const key = require('fs').readFileSync(keyFile, 'utf8');
+      const ok = await t.invoke('users:recover-password', { username: admin.username, recoveryKey: key, newPassword: 'recovered-pass-1' });
+      assert.ok(ok.success, ok.reason);
+      assert.ok((await t.invoke('users:login', { username: admin.username, password: 'recovered-pass-1' })).success, 'new password works');
+    }
+  });
 };

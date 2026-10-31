@@ -6,14 +6,15 @@ import ThermalContent from '../../components/receipt/ThermalContent';
 // the paper roll — that PDF is what the Print Preview window shows. Plain
 // black-on-white, full width of the page, no chrome. The receipt body itself is
 // ThermalContent, shared with the on-screen post-checkout receipt in Sale.jsx.
-export default function PrintReceipt({ saleId, showDues }) {
+export default function PrintReceipt({ saleId, draft, showDues }) {
   const [data, setData] = useState(null);
   const [settings, setSettings] = useState(null);
 
   useEffect(() => {
-    window.api.sales.getReceiptData({ saleId: Number(saleId), showDues: !!showDues }).then(setData);
+    const request = draft ? window.api.sales.getDraftReceipt({ token: draft }) : window.api.sales.getReceiptData({ saleId: Number(saleId), showDues: !!showDues });
+    request.then((res) => setData(res || { sale: null }));
     window.api.settings.getAll().then(setSettings);
-  }, [saleId, showDues]);
+  }, [saleId, draft, showDues]);
 
   if (!data || !settings) return <div style={styles.receipt}>Loading…</div>;
   if (!data.sale) return <div style={styles.receipt}>Sale not found.</div>;

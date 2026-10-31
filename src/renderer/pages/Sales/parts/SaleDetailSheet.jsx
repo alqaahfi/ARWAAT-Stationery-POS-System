@@ -114,6 +114,11 @@ export function SaleDetailSheet({ saleId, userId, isAdmin, onClose, onOpenCustom
           {glossary.returnItems}
         </Button>
       )}
+      {sale && !sale.is_voided && isAdmin && (
+        <Button variant="danger" icon={Ban} onClick={handleVoid} disabled={voiding}>
+          {voiding ? 'Voiding…' : 'Void sale'}
+        </Button>
+      )}
       {sale && (
         <>
           <Button

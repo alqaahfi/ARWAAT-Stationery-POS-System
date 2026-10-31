@@ -97,11 +97,13 @@ export default function LoginForgotPasswordModal({ mode = 'admin', initialUserna
       <form onSubmit={handleReset} style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.md }}>
         {accounts.length > 0 ? (
           <Field label="Account to Reset" required>
-            <Select
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              options={accountOptions}
-            />
+            <Select value={username} onChange={(e) => setUsername(e.target.value)}>
+              {accountOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
           </Field>
         ) : (
           <Field label="Username" required>

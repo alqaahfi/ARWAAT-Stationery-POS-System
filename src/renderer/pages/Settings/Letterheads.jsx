@@ -46,6 +46,7 @@ export default function Letterheads() {
   const [listError, setListError] = useState('');
   const [busyId, setBusyId] = useState(null);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+  const [downloadingWord, setDownloadingWord] = useState(false);
 
   const load = useCallback(async () => {
     setLoadFailed(false);
@@ -158,6 +159,19 @@ export default function Letterheads() {
   }
 
 
+  async function handleDownloadWordTemplate() {
+    setDownloadingWord(true);
+    try {
+      const res = await window.api.letterheads.downloadWordTemplate();
+      if (res && res.success) toast.success('Word template saved');
+      else if (res && res.reason) toast.error(res.reason);
+    } catch {
+      toast.error('Could not download template.');
+    } finally {
+      setDownloadingWord(false);
+    }
+  }
+
   async function handleDownloadTemplate() {
     setDownloadingTemplate(true);
     try {
@@ -253,7 +267,10 @@ export default function Letterheads() {
         <div style={{ flex: 1, minWidth: '240px' }}>
           <PageIntro>PDF pages your A4 invoices are printed on — your own logo, address and borders.</PageIntro>
         </div>
-        <DownloadTemplateButton onClick={handleDownloadTemplate} busy={downloadingTemplate} />
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <DownloadTemplateButton onClick={handleDownloadWordTemplate} busy={downloadingWord} label="Word template (.docx)" />
+          <DownloadTemplateButton onClick={handleDownloadTemplate} busy={downloadingTemplate} label="PDF guide" />
+        </div>
       </div>
       <UploadButton onClick={handleUpload} busy={picking && editingId === null} />
       <Banner style={{ marginTop: 0 }}>{listError}</Banner>

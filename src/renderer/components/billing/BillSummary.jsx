@@ -12,6 +12,11 @@ const DISCOUNT_MODES = [
 const FORMATS = [
   { value: 'retail-thermal', label: 'Small receipt' },
   { value: 'wholesale-a4', label: 'A4 invoice' },
+  { value: 'none', label: 'No receipt' },
+];
+const PURCHASE_FORMATS = [
+  { value: 'wholesale-a4', label: 'A4 receipt' },
+  { value: 'none', label: 'No receipt' },
 ];
 
 // The right-hand side of both quick bills: discount, live totals, payment and
@@ -122,12 +127,11 @@ export default function BillSummary({
         </div>
       )}
 
-      {!isPurchase && (
-        <>
-          <div style={styles.divider} />
-          <div style={styles.label}>Print</div>
-          <SegmentedControl label="Receipt format" value={printFormat} onChange={onPrintFormat} fullWidth options={FORMATS} />
-          {showDuesOption && (
+      <>
+        <div style={styles.divider} />
+        <div style={styles.label}>Print</div>
+        <SegmentedControl label="Receipt format" value={printFormat} onChange={onPrintFormat} fullWidth options={isPurchase ? PURCHASE_FORMATS : FORMATS} />
+        {!isPurchase && showDuesOption && (
             <Checkbox
               label="Show outstanding balance on the receipt"
               checked={showDues}
@@ -135,8 +139,7 @@ export default function BillSummary({
               style={{ marginTop: theme.spacing.sm }}
             />
           )}
-        </>
-      )}
+      </>
 
       {error && <Banner style={{ marginTop: theme.spacing.smd }}>{error}</Banner>}
 

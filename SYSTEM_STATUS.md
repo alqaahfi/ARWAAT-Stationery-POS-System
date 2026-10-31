@@ -34,7 +34,7 @@ Covers: how to use this file, what you must do before finishing any task, and th
 5. **Hard rules**
    - Styling: **inline styles from `src/renderer/config/theme.js` tokens only**. No CSS files (only `components/GlobalStyles.jsx` may hold keyframes/focus rings), no raw hex/rgb in components (print views and the Dev Panel are the documented exceptions).
    - No new dependencies without a reason (and say why in the change log). Dev dependencies only for test tools.
-   - **Migrations:** next free number (`src/main/db/migrations/NNN_name.sql`, currently next = **043**). Each runs in its own transaction at start-up, so write idempotent, self-contained SQL. Any new/changed synced column or table must be registered in `src/main/sync/syncSchema.js` (+ triggers, see §9). Any new business table must be added to `TABLES_TO_CLEAR` in `src/main/ipc/system.ipc.js` (factory reset). Never edit an applied migration.
+   - **Migrations:** next free number (`src/main/db/migrations/NNN_name.sql`, currently next = **044**). Each runs in its own transaction at start-up, so write idempotent, self-contained SQL. Any new/changed synced column or table must be registered in `src/main/sync/syncSchema.js` (+ triggers, see §9). Any new business table must be added to `TABLES_TO_CLEAR` in `src/main/ipc/system.ipc.js` (factory reset). Never edit an applied migration.
    - **Never change `package.json` `name`** (`stationary-pos-app`): it decides the userData folder (`%APPDATA%\stationary-pos-app`), so renaming makes the shop's data "disappear". Also never change `appId`, `productName`, or the Admin/Cashier shortcut setup (`build-resources/installer.nsh`).
    - **Server-side checks** for anything about money, stock, permissions or identity. The renderer is never trusted; the caller's identity comes only from the main process (§5/§11).
    - **Every money / stock / balance change needs a check** in `tests/rules/checks/` that proves it. Never weaken a check or a business rule; never add sleeps to hide a timing bug.
@@ -54,8 +54,10 @@ Covers: what the app is, who uses it, current version, state and what is unfinis
 
 **Current version:** `1.1.0` (package.json). Draft release v1.1.0 is on GitHub (private repo `arwaheed/arwaat-pos-system`); not yet published at the time of writing. Migrations: **43** (`001`–`043`). Migration 043 added customer special pricing, updated the default dev panel password, and added thermal receipt font configuration.
 
+**Added 2026-10-31/11-01 (v1.1.x work, see §16):** customer Special Pricing, owner master-key "Forgot password?", thermal font choice + new receipt layout, Word/PDF letterhead templates, Admin void from Sales History, POS "No receipt" + direct printing + unsaved-bill Preview (F8).
+
 **Current state (10 bullets)**
-1. Business rules 1–17 + counter anomalies are implemented and proven: `npm run test:rules` = **139/139** checks (R01–R19).
+1. Business rules 1–17 + counter anomalies are implemented and proven: `npm run test:rules` = **140/140** checks (R01–R19).
 2. One process, two windows (Admin, Cashier) with separate sign-ins and storage partitions; single-instance lock; one shared DB; optional LAN sync (UDP discovery 41234, Express 4000, secret-protected).
 3. Voids are kept (count as zero everywhere), cash-only payments, whole-number quantities, server re-prices every sale line, Admin approval box on the cashier screen, quick-add of missing items with Admin review, no-bill returns, duplicate-copy reprints, wrong-clock banner, automatic daily backup.
 4. Stage 1 UI dialogs verified with the e2e script `07-stage1-ui` (11/11).
@@ -73,7 +75,7 @@ Covers: what the app is, who uses it, current version, state and what is unfinis
 4. Counter (cashier-only) PCs have no update UI; they must be updated by running the installer by hand.
 5. Known small gaps: `sync:get-status` has no `pendingCount` (sync chip text), no inactive filter on customer/supplier lists, expenses/settings do not sync (§14).
 
-**Counts verified against the code when this file was written (2026-10-30):** 36 tables (35 + `_migrations`), 47 triggers, 55 indexes, 23 synced tables, **186 IPC channels** (183 in `preload.js` + 3 `recovery:*`), 59 `case` routes in the Admin switch (58 pages + `/dev/design-gallery`), 10 Cashier routes (7 menu + 3 hidden), 8 permission keys, 43 migrations, 20 static settings keys (+ dynamic `last_invoice_seq:*`), 8 static + 2 per-station localStorage keys, 139 rules checks, 453 tracked files mapped in §3.8 (excluding the generated `dist`).
+**Counts verified against the code when this file was written (2026-10-30):** 36 tables (35 + `_migrations`), 47 triggers, 55 indexes, 23 synced tables, **190 IPC channels** (187 in `preload.js` + 3 `recovery:*`), 59 `case` routes in the Admin switch (58 pages + `/dev/design-gallery`), 10 Cashier routes (7 menu + 3 hidden), 8 permission keys, 43 migrations, 20 static settings keys (+ dynamic `last_invoice_seq:*`), 8 static + 2 per-station localStorage keys, 140 rules checks, 458 tracked files mapped in §3.8 (excluding the generated `dist`).
 
 ---
 
@@ -87,7 +89,7 @@ Covers: exact commands, environment variables, where data lives, new-PC setup an
 | `npm run dev` | Vite (5173, `strictPort`) + Electron admin window (`NODE_ENV=development electron . --mode=admin`) |
 | `npm run dev:cashier` | While `npm run dev` runs: `electron . --mode=cashier`; the single-instance lock hands it to the running app (opens the Cashier window) |
 | `npm run build:renderer` | `vite build` → `src/renderer/dist` |
-| `npm run test:rules` | Stage 1 rules checks (no GUI), `ELECTRON_RUN_AS_NODE=1 electron tests/rules/run.js [r01 r05 …]`; prints PASS/FAIL per ID; **all must pass** (139) |
+| `npm run test:rules` | Stage 1 rules checks (no GUI), `ELECTRON_RUN_AS_NODE=1 electron tests/rules/run.js [r01 r05 …]`; prints PASS/FAIL per ID; **all must pass** (140) |
 | `node tests/e2e/run-all.js [scripts]` | Playwright-over-CDP e2e in **dev mode** (needs Vite on 5173; the harness starts one and leaves it running — stop it before `npm run dev`) |
 | `node tests/e2e/report.js` | Builds `test-results/TEST_RESULTS.txt` from `results.json` + `meta.json` |
 | `node tests/e2e/tools/app-shot.js <label>` | Screenshot of the app window only |
@@ -1652,6 +1654,7 @@ With FK enforcement off in one transaction it empties: `approvals, stock_recount
 | 040 | no_bill_returns | Rule 17: `sale_returns.sale_id` nullable; `sale_return_items.sale_item_id` nullable + `product_variant_id/product_unit_id` (table rebuild) |
 | 041 | perf_indexes | `idx_sales_voided_created(is_voided, created_at)` (moved out of the Sales Report) |
 | 042 | dev_panel_default_password | Seeds the default Dev Panel password hash if none exists (hash only) |
+| 043 | special_pricing_and_dev_password | `customer_special_prices` (+ sync triggers), default `thermal_font_style` setting, new Dev Panel default password hash |
 
 **Removed / superseded — don't go looking for these:** `customer_categories`, `product_category_prices`, `customers.category_id`, `percentage_pricing_rules.customer_category_id` (018); `expense_categories`, `expenses.category_id` (021); `sync_queue` (006 → 022); `letterheads.image_path` no longer written; licensing (`license_keys`, `license_activation` renamed `station_config`, `license:*` IPC, `node-machine-id`, activation screens — 035). `percentage_pricing_rules` is dormant (Special Margins removed).
 
@@ -1663,6 +1666,7 @@ With FK enforcement off in one transaction it empties: `approvals, stock_recount
 | `default_low_stock_alert` | Default "warn below" in the product form (blank = none) | Preferences |
 | `auto_lock_minutes` | Idle lock; default 15, 0 = never | Preferences |
 | `receipt_header_text`, `receipt_footer_text` | Free text on thermal receipts (footer thermal only) | Settings → Receipt Header & Footer |
+| `thermal_font_style` | Thermal receipt font: `monospace` (Classic POS, default) or `modern` (Sans-Serif) | Settings → Printers |
 | `thermal_printer_name`, `thermal_paper_width` | Receipt printer and `58mm`/`80mm` (80mm → 42 chars/line, else 32) | Settings → Printers |
 | `station_id` | This PC's random sync identity (UUID); minted on first use; dropped on a normal restore | `setup/stationIdentity.js` |
 | `last_invoice_seq:{station}:{YYYYMMDD}` | Highest invoice number ever issued that day (so voided numbers are never reused) | `sales.ipc.js` |
@@ -1746,6 +1750,8 @@ Admin implicitly has every permission (`hasPermission` short-circuits on role; d
 | `categories:update` | categories.ipc.js | Admin | Rename / re-parent a category |
 | `customers:check-duplicate-phone` | customers.ipc.js | Admin | Rule 7: other customers with the same phone/mobile (digits compared) |
 | `customers:create` | customers.ipc.js | Admin | Create a customer |
+| `customers:delete-special-price` | customers.ipc.js | Admin | Remove a customer special-price rule |
+| `customers:get-special-prices` | customers.ipc.js | Admin | A customer's special-price rules (with product/pack names) |
 | `customers:credit-check` | customers.ipc.js | Signed in | Rule 2: would this credit sale put the customer over their limit? (numbers + message) |
 | `customers:get-by-id` | customers.ipc.js | Signed in | One customer with derived balance |
 | `customers:get-ledger` | customers.ipc.js | Signed in | Customer account timeline (sales, payments, returns, corrections) + balance |
@@ -1753,6 +1759,7 @@ Admin implicitly has every permission (`hasPermission` short-circuits on role; d
 | `customers:list` | customers.ipc.js | Admin | Customer list with derived balances, filters, sort |
 | `customers:save-special-price` | customers.ipc.js | Admin | Save/update a customer special pricing rule |
 | `customers:search-minimal` | customers.ipc.js | Signed in | Name/phone search for pickers (POS customer step, Receive Payment) |
+| `customers:save-special-price` | customers.ipc.js | Admin | Add/edit a special-price rule (fixed Rs, % off standard, or % margin over cost; whole product or one pack size) |
 | `customers:set-active` | customers.ipc.js | Admin | Activate / deactivate a customer |
 | `customers:update` | customers.ipc.js | Admin | Edit a customer |
 | `dashboard:get-active-sessions` | dashboard.ipc.js | Admin | Sessions signed in on this PC (Home card) |
@@ -1783,6 +1790,8 @@ Admin implicitly has every permission (`hasPermission` short-circuits on role; d
 | `ledgers:list-adjustments` | ledgers.ipc.js | Admin | Balance corrections list |
 | `letterheads:create` | letterheads.ipc.js | Admin | Add a letterhead (PDF template copied into userData/letterheads) |
 | `letterheads:delete` | letterheads.ipc.js | Admin | Delete a letterhead (blocked while assigned) |
+| `letterheads:download-template` | letterheads.ipc.js | Admin | Save the A4 PDF design guide (header 40 mm, footer 25 mm, reserved 12 mm) |
+| `letterheads:download-word-template` | letterheads.ipc.js | Admin | Save the editable Word (.docx) letterhead template (docxTemplate.js, no extra dependency) |
 | `letterheads:get-by-id` | letterheads.ipc.js | Signed in | One letterhead |
 | `letterheads:list` | letterheads.ipc.js | Signed in | List letterheads |
 | `letterheads:pick-pdf` | letterheads.ipc.js | Admin | Native PDF picker for a letterhead |
@@ -1850,6 +1859,7 @@ Admin implicitly has every permission (`hasPermission` short-circuits on role; d
 | `sales:get-next-invoice-no` | sales.ipc.js | Signed in | Preview of the next invoice number |
 | `sales:get-product-types` | sales.ipc.js | Signed in | Active Types of a product (bulk Type entry) |
 | `sales:get-receipt-data` | sales.ipc.js | Signed in (+ print windows) | Receipt data for print views |
+| `sales:get-draft-receipt` | sales.ipc.js | Print windows | Short-lived in-memory unsaved bill for the POS Preview print view |
 | `sales:get-sale-detail` | sales.ipc.js | Signed in | Lines of one sale (Today's bills pane) |
 | `sales:get-variant-by-barcode` | sales.ipc.js | Signed in | Barcode lookup (trimmed, case-insensitive) |
 | `sales:get-variant-for-cart` | sales.ipc.js | Signed in | Cart-ready variant info: units, stock, trade fields, needsReview |
@@ -1899,6 +1909,8 @@ Admin implicitly has every permission (`hasPermission` short-circuits on role; d
 | `users:check-username-unique` | users.ipc.js | Admin | Live username check |
 | `users:create-cashier` | users.ipc.js | Admin | Create a cashier (no permissions until granted) |
 | `users:get-permissions` | users.ipc.js | Signed in | The caller's own permissions |
+| `users:get-recovery-accounts` | users.ipc.js | Public | Active accounts for the Forgot-password list (id, username, name, role only) |
+| `users:recover-password` | users.ipc.js | Public | Reset a password with the owner master key (SHA-256 compared; revokes sessions, clears lockout) |
 | `users:list` | users.ipc.js | Admin | Cashier list |
 | `users:login` | users.ipc.js | Public | Sign in (window-mode role check, lockout, 12 h session) |
 | `users:logout` | users.ipc.js | Public | Sign out / revoke session |
@@ -1919,6 +1931,7 @@ Covers: how money, stock, prices and bills behave, each with the file/function t
 ### 6.1 Pricing engine — `main/pricing/priceEngine.js` `resolveUnitPrice({db, productUnitId, customerId})`
 First match wins, rounded to 2 dp; `productId` comes from the unit row, never the caller:
 0. Customer Special Price (`customer_special_prices`): pack-size specific match first (`product_unit_id`), then product-wide fallback (`product_unit_id IS NULL`). Supports `fixed` (Rs.), `discount_percent` (% off standard price), and `margin_percent` (% over cost_price).
+0. **Customer special price** (`customer_special_prices`, set in Customer Profile → Special Pricing): a rule for the exact pack size wins, else the whole-product rule (`product_unit_id` NULL). Types: `fixed` (Rs), `discount_percent` (off retail/wholesale), `margin_percent` (over `cost_price`). Beats everything below.
 1. The unit's `net_rate_c{tier}` for the customer's tier (C1–C5) if set.
 2. Product `pricing_type='percentage'` → `cost × (1 + default_percentage/100)`.
 3. `wholesale_price` for wholesale customers, else `retail_price` (walk-in = retail).
@@ -2011,6 +2024,22 @@ One-time or repeating (daily/weekly/monthly/annually) with payee, description, a
 
 ### 6.18 Quantities, rounding and formats
 Whole positive numbers only for sale, FOC, return, purchase, stock add/remove/fix and quick-add (`validation/quantity.js wholeQty`, `WHOLE_QTY_MSG`; boxes strip everything but digits as typed/pasted via `renderer/utils/quantity.js`). Old saved decimal quantities still display and count (D3). Money on screen shows the exact amount with thousands separators and paisa when present (`utils/format.js formatCurrency`); the compact K/M form (`formatCurrencyCompact`) is only for Home tiles, the Home chart total and report summary cards.
+
+
+### 6.19 Owner password recovery (Login → Forgot password?)
+Both the Admin and the Cashier login have "Forgot password?". The owner picks the account and types the **master recovery key**; `users.ipc.js recoverPassword` compares its SHA-256 with `RECOVERY_KEY_SHA256` (only the hash is in the code; the key itself is never stored anywhere). Right key → new password (≥ 6 chars) is hashed, the user's sessions are revoked and lockouts cleared. Wrong key → "Invalid master recovery key." Checked by R19-12 (the positive half runs only when `ARWAAT_TEST_RECOVERY_KEY_FILE` points at a local file holding the key). To change the key, replace the hash constant (`node -e` SHA-256 of the exact text, trimmed).
+
+### 6.20 Admin voids from Sales History
+`SaleDetailSheet` (red "Void sale") and a red "Void" button on every list row (Admin only, hidden when the bill is voided or has returns). Same `sales:void` as before: the Admin may void any bill at any age; the server still refuses bills with returns. Stock goes back, payments are voided, balance corrected, the bill stays marked Voided.
+
+### 6.21 Printing at the counter (POS, Quick Sale, Quick Purchase)
+- Receipt choices: A4 invoice (1), Small receipt (2), **No receipt** (3). Purchases: A4 receipt or No receipt.
+- On "Complete sale" the bill is saved and then sent **straight to the printer** (no preview window). The completion sheet says "Receipt Printed", "No receipt printed", or "Not printed: <reason>" (sale stays saved when no printer is ready). `R` reprints/retries (for No receipt it opens an on-screen preview).
+- **Preview (F8 or the "Preview bill" button, discount/format/payment steps):** `printing:preview-draft` renders the *unsaved* cart as the chosen receipt (thermal or A4 on the letterhead) from an in-memory token (`printing/draftPreview.js`, 2 min, deleted after use). It writes nothing: no invoice number, no stock, no print record; the banner says "PREVIEW ONLY". Prices come from the cart the POS priced with the server engine; the real save still re-checks them.
+- Thermal font: Settings → Printers (`thermal_font_style`).
+
+### 6.22 Letterhead templates
+Settings → Letterheads → "Download Word template (.docx)" (A4, top margin 40 mm, bottom margin 25 mm, footer area ends 12 mm above the page edge) and "Download PDF guide". The owner designs in Word, saves as PDF and uploads it. The bottom 12 mm of every A4 page is reserved for the fixed ARWAAT credit line stamped by `pdfInvoiceMerge.js`.
 
 
 ## 7. Screens
@@ -2332,6 +2361,9 @@ Counter anomalies to handle: draft recovery after crash, held bill on close, sam
 
 ---
 
+- **2026-11-01 · Master key is stored as SHA-256 only.** The owner can verify it but nobody reading the code or database can recover it. Costs: it cannot be shown again; keep it safe. Alternative rejected: plain text in code.
+- **2026-11-01 · POS Preview is built from the cart, not the database.** Saving then rolling back would hold a transaction open across async rendering and block other windows; an in-memory token is safe and writes nothing.
+
 ## 14. Known gaps and open problems
 
 Covers: everything unresolved, untested areas and the manual-only checks.
@@ -2398,14 +2430,19 @@ Covers: one line each — date, commit, what was wrong, file(s). (Earlier phases
 | 2026-10-30 | ec601b3 | Fresh installs had no Dev Panel password (panel unusable) → default seeded by migration 042 + change-password tab | `042_*.sql`, `devpanel.ipc.js` |
 | 2026-10-31 | — | Cancel sale dialog button misalignment: fixed flex and container layout so "Keep working" and "Cancel sale" match in height and vertical baseline | `CancelSaleDialog.jsx` |
 | 2026-10-31 | — | Cancel sale button right-edge clipping on compact screens: reduced horizontal padding and height on top header action buttons and tightened step divider spacing | `PosButton.jsx`, `StepStrip.jsx` |
+| 2026-11-01 | — | **Add Special Price = blank white screen:** `products:list` returns `{rows, counts}` but the modal called `.map` on the object; the shared `Select` takes `<option>` children, not an `options` prop (also why the Forgot-password account list was empty) | `SpecialPricingCard.jsx`, `LoginForgotPasswordModal.jsx` |
+| 2026-11-01 | — | **Correct master key rejected:** the stored hash had been computed from a mangled copy of the key → recomputed from the exact key; R19-12 added | `users.ipc.js` |
+| 2026-11-01 | — | **Void button never shown:** the earlier edit silently did nothing (CRLF file); added to the sheet and the list rows. Same cause: POS No receipt key 3 / direct printing and Quick Bill No receipt had not been applied; now applied | `SaleDetailSheet.jsx`, `SalesTable.jsx`, `Sale.jsx`, `QuickBillForm.jsx`, `BillSummary.jsx` |
 Earlier phases (no hashes recorded): Phase 11 — UTC vs local day in Reports/Home/Sales History (all use `date(x,'localtime')`), returns netted out everywhere (Sales Report, P&L, Cashier Performance, Home, chart), Home "Customers Owe You" now equals the Ledgers total receivable. Phase 13 — currency symbol read from settings (`Rs.` fallback), POS "Only N left" uses each product's warn-below, brand on Product List rows, server-side Special Margin checks (feature since removed), focus-ring fix. Don't "fix" these again.
 
 ---
 
 ## 16. Change log
 
+
 Covers: one entry per work session, newest first (seeded from `git log`, 92 commits). Format: date · agent/model · what · commits.
 
+- **2026-11-01 · Antigravity · Fix run:** Add Special Price crash and empty dropdowns fixed; master key hash corrected (+R19-12); Admin Void button (sheet + list rows); POS Preview of the unsaved bill (F8, `draftPreview.js`, `printing:preview-draft`, `sales:get-draft-receipt`); No receipt + direct printing finally wired in POS, Quick Sale and Quick Purchase; editable Word letterhead template (`docxTemplate.js`, `letterheads:download-word-template`) and reserved 12 mm band on the PDF guide. Rule: the file-edit scripts now fail loudly when an anchor is missing (CRLF files).
 - **2026-10-31 · Antigravity · Customer Special Pricing, Master Recovery, Thermal Fonts, Direct Printing & UI Fixes:**
   - Customer Special Pricing (migration 043): `customer_special_prices` table with sync triggers, `priceEngine.js` priority rule 0 (pack-specific or product-wide fixed/discount%/margin%), IPC channels, and full management UI in Customer Profile (`SpecialPricingCard.jsx`).
   - Master Key Password Recovery: Added "Forgot password?" dialog on Login screen for Admin and Cashier accounts, verified against SHA-256 hash of developer master key.

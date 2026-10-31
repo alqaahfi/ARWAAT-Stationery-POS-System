@@ -19,7 +19,7 @@ export const letterheadGrid = { display: 'grid', gridTemplateColumns: 'repeat(au
 
 // Dashed "drop zone" look; clicking opens the existing file picker.
 
-export function DownloadTemplateButton({ onClick, busy }) {
+export function DownloadTemplateButton({ onClick, busy, label = 'Download Template (A4 PDF)' }) {
   const { hovered, handlers } = useInteraction(busy);
   return (
     <button
@@ -44,7 +44,7 @@ export function DownloadTemplateButton({ onClick, busy }) {
       }}
     >
       {busy ? <Spinner size={16} /> : <Download size={16} aria-hidden="true" />}
-      {busy ? 'Preparing template…' : 'Download Template (A4 PDF)'}
+      {busy ? 'Preparing template…' : `Download ${label}`}
     </button>
   );
 }

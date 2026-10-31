@@ -161,6 +161,14 @@ export default function SpecialPricingCard({ customerId }) {
   );
 }
 
+function Options({ options }) {
+  return options.map((o) => (
+    <option key={o.value} value={o.value}>
+      {o.label}
+    </option>
+  ));
+}
+
 function SpecialPriceModal({ customerId, rule, onClose, onSaved }) {
   const toast = useToast();
   const [products, setProducts] = useState([]);
@@ -175,8 +183,9 @@ function SpecialPriceModal({ customerId, rule, onClose, onSaved }) {
 
   // Load products list for dropdown
   useEffect(() => {
-    window.api.products.list({ limit: 500, activeOnly: true }).then((res) => {
-      setProducts(res?.products || res || []);
+    window.api.products.list({ activeFilter: 'active' }).then((res) => {
+      const rows = Array.isArray(res) ? res : res?.rows;
+      setProducts(Array.isArray(rows) ? rows : []);
     }).catch(() => setProducts([]));
   }, []);
 
@@ -187,7 +196,7 @@ function SpecialPriceModal({ customerId, rule, onClose, onSaved }) {
       return;
     }
     window.api.products.getById({ id: Number(selectedProductId) }).then((p) => {
-      setPackSizes(p?.units || []);
+      setPackSizes(Array.isArray(p?.units) ? p.units : []);
     }).catch(() => setPackSizes([]));
   }, [selectedProductId]);
 
@@ -277,61 +286,35 @@ function SpecialPriceModal({ customerId, rule, onClose, onSaved }) {
               setSelectedProductId(e.target.value);
               setSelectedUnitId('');
             }}
-            options={[{ value: '', label: 'Select a product…' }, ...productOptions]}
             disabled={!!rule}
-          />
+          >
+            <Options options={[{ value: '', label: 'Select a product…' }, ...productOptions]} />
+          </Select>
         </Field>
 
         <Field label="Pack Size / Unit Scope" hint="Apply to all pack sizes or a specific one">
-          <Select
-            value={selectedUnitId}
-            onChange={(e) => setSelectedUnitId(e.target.value)}
-            options={unitOptions}
-            disabled={!selectedProductId}
-          />
+          <Select value={selectedUnitId} onChange={(e) => setSelectedUnitId(e.target.value)} disabled={!selectedProductId}>
+            <Options options={unitOptions} />
+          </Select>
         </Field>
 
         <Field label="Special Pricing Method" required>
-          <Select
-            value={pricingType}
-            onChange={(e) => setPricingType(e.target.value)}
-            options={typeOptions}
-          />
+          <Select value={pricingType} onChange={(e) => setPricingType(e.target.value)}>
+            <Options options={typeOptions} />
+          </Select>
         </Field>
 
         {pricingType === 'fixed' ? (
           <Field label="Special Selling Price (Rs.)" required hint="The exact unit price charged to this customer">
-            <NumberInput
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              placeholder="e.g. 150"
-              min={0}
-              step="any"
-              autoFocus
-            />
+            <NumberInput value={price} onChange={(e) => setPrice(e.target.value)} placeholder="e.g. 150" />
           </Field>
         ) : pricingType === 'discount_percent' ? (
           <Field label="Special Discount Percentage (%)" required hint="Subtracted from the standard retail or wholesale price">
-            <NumberInput
-              value={percentage}
-              onChange={(e) => setPercentage(e.target.value)}
-              placeholder="e.g. 10 for 10% off"
-              min={0}
-              max={100}
-              step="any"
-              autoFocus
-            />
+            <NumberInput value={percentage} onChange={(e) => setPercentage(e.target.value)} placeholder="e.g. 10 for 10% off" />
           </Field>
         ) : (
           <Field label="Special Margin Percentage (%)" required hint="Added on top of unit buying cost: cost × (1 + %/100)">
-            <NumberInput
-              value={percentage}
-              onChange={(e) => setPercentage(e.target.value)}
-              placeholder="e.g. 15 for 15% margin"
-              min={0}
-              step="any"
-              autoFocus
-            />
+            <NumberInput value={percentage} onChange={(e) => setPercentage(e.target.value)} placeholder="e.g. 15 for 15% margin" />
           </Field>
         )}
 

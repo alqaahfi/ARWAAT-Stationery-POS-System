@@ -3,6 +3,7 @@ const fs = require('fs');
 const thermalReceipt = require('../printing/thermalReceipt');
 const { printInvoice, printPaymentReceipt: printPaymentReceiptA4, printPurchaseReceipt } = require('../printing/printA4Invoice');
 const { previewSale, previewPurchase } = require('../printing/previewDocument');
+const { previewDraft } = require('../printing/draftPreview');
 const { recordSalePrint } = require('../printing/receiptData');
 const { getCaller } = require('../security/ipcGuard');
 const { showSaveDialog } = require('../system/fileDialog');
@@ -63,6 +64,8 @@ function registerPrintingIpc() {
   ipcMain.handle('printing:print-sale', (event, { saleId, printType, showDues } = {}) => printSale(saleId, printType, showDues, getCaller(event)?.userId));
   ipcMain.handle('printing:print-payment-receipt', (event, { paymentId, format } = {}) => printPaymentReceipt(paymentId, format));
   ipcMain.handle('printing:preview-sale', (event, { saleId, printType, showDues } = {}) => previewSale({ saleId, printType, showDues }));
+  // POS Preview: the unsaved bill as a receipt. Writes nothing.
+  ipcMain.handle('printing:preview-draft', (event, payload) => previewDraft(payload || {}, getCaller(event)?.userId));
   ipcMain.handle('printing:preview-purchase', (event, { purchaseId } = {}) => previewPurchase({ purchaseId }));
   ipcMain.handle('printing:print-purchase', (event, { purchaseId } = {}) => (purchaseId ? printPurchaseReceipt({ purchaseId }) : { success: false, reason: 'Missing purchase id.' }));
   ipcMain.handle('printing:save-pdf', (event, data) => savePdf(event, data));

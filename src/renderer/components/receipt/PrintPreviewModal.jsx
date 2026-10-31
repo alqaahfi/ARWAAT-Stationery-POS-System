@@ -18,7 +18,8 @@ function base64ToBlobUrl(base64) {
 // opens, so nothing here ever voids, deletes or edits it.
 //   printType: 'wholesale-a4' | 'retail-thermal'
 //   onPrinted(result): called after a successful physical print
-export default function PrintPreviewModal({ saleId, purchaseId, printType, showDues, onClose, onPrinted }) {
+//   draft: { ...cart payload } previews a bill that is NOT saved (view only: no Print/Save)
+export default function PrintPreviewModal({ saleId, purchaseId, printType, showDues, draft, onClose, onPrinted }) {
   const isPurchase = !!purchaseId; // supplier purchase receipt: always an A4 letterhead page
   const toast = useToast();
   const [state, setState] = useState({ loading: true, error: null, doc: null });
@@ -30,9 +31,11 @@ export default function PrintPreviewModal({ saleId, purchaseId, printType, showD
     let cancelled = false;
     let objectUrl = null;
     setState({ loading: true, error: null, doc: null });
-    const request = isPurchase
-      ? window.api.printing.previewPurchase({ purchaseId })
-      : window.api.printing.previewSale({ saleId, printType, showDues });
+    const request = draft
+      ? window.api.printing.previewDraft({ payload: draft, printType })
+      : isPurchase
+        ? window.api.printing.previewPurchase({ purchaseId })
+        : window.api.printing.previewSale({ saleId, printType, showDues });
     request
       .then((res) => {
         if (cancelled) return;
@@ -51,7 +54,7 @@ export default function PrintPreviewModal({ saleId, purchaseId, printType, showD
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [saleId, purchaseId, isPurchase, printType, showDues]);
+  }, [saleId, purchaseId, isPurchase, printType, showDues, draft]);
 
   const { doc } = state;
   const isThermal = !isPurchase && printType !== 'wholesale-a4';
@@ -99,20 +102,24 @@ export default function PrintPreviewModal({ saleId, purchaseId, printType, showD
       open
       onClose={busy ? undefined : onClose}
       dismissible={!busy}
-      title="Print preview"
+      title={draft ? 'Preview (not saved)' : 'Print preview'}
       subtitle={isThermal ? 'Receipt' : isPurchase ? 'A4 purchase receipt' : 'A4 invoice'}
       width={isThermal ? 440 : 860}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose} disabled={!!busy}>
-            Cancel
+          <Button variant={draft ? 'primary' : 'ghost'} onClick={onClose} disabled={!!busy}>
+            {draft ? 'Close' : 'Cancel'}
           </Button>
-          <Button variant="secondary" icon={Download} onClick={handleSave} disabled={!ready} loading={busy === 'save'}>
-            Save
-          </Button>
-          <Button icon={Printer} onClick={handlePrint} disabled={!ready} loading={busy === 'print'}>
-            Print
-          </Button>
+          {!draft && (
+            <Button variant="secondary" icon={Download} onClick={handleSave} disabled={!ready} loading={busy === 'save'}>
+              Save
+            </Button>
+          )}
+          {!draft && (
+            <Button icon={Printer} onClick={handlePrint} disabled={!ready} loading={busy === 'print'}>
+              Print
+            </Button>
+          )}
         </>
       }
     >

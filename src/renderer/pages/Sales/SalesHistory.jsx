@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import theme from '../../config/theme';
 import appIcons from '../../config/appIcons';
 import glossary from '../../config/glossary';
-import { Button, Card, EmptyState, Icon } from '../../components/ui';
+import { Button, Card, EmptyState, Icon, useConfirm, useToast } from '../../components/ui';
 import { computeRange } from '../Reports/components/DateRangePicker';
 import { SalesToolbar } from './parts/SalesToolbar';
 import { SalesTable, SummaryStrip } from './parts/SalesTable';
@@ -24,6 +24,8 @@ export default function SalesHistory({ onNavigate, saleId: initialSaleId }) {
   const { user, hasPermission } = useAuth();
   const isAdmin = user.role === 'admin';
   const canSell = hasPermission('make_sale');
+  const confirm = useConfirm();
+  const toast = useToast();
 
   const [searchInput, setSearchInput] = useRememberedState('salesHistory.searchInput', '');
   const [search, setSearch] = useRememberedState('salesHistory.search', '');
@@ -50,6 +52,28 @@ export default function SalesHistory({ onNavigate, saleId: initialSaleId }) {
     if (isAdmin) window.api.users.list().then((rows) => setCashiers((rows || []).filter((r) => r.role === 'cashier'))).catch(() => {});
     return () => clearTimeout(debounceRef.current);
   }, [isAdmin]);
+
+  // Admin: void any bill straight from the list (server re-checks everything).
+  async function voidFromRow(row) {
+    const ok = await confirm({
+      title: `Void sale ${row.invoice_no}?`,
+      message: 'Items go back to stock and the customer balance is corrected. The bill stays in history marked Voided and counts as zero everywhere.',
+      confirmLabel: 'Void sale',
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      const res = await window.api.sales.void({ saleId: row.id, userId: user.id });
+      if (res?.success) {
+        toast.success(`Sale ${row.invoice_no} voided`);
+        load();
+      } else {
+        toast.error(res?.reason || 'Could not void this sale.');
+      }
+    } catch {
+      toast.error('Could not void this sale.');
+    }
+  }
 
   function onSearch(value) {
     setSearchInput(value);
@@ -183,7 +207,7 @@ export default function SalesHistory({ onNavigate, saleId: initialSaleId }) {
     content = (
       <>
         {!loading && <SummaryStrip total={result.total} totals={result.totals} />}
-        <SalesTable rows={rows} isAdmin={isAdmin} loading={loading} onOpen={(r) => setOpenSaleId(r.id)} />
+        <SalesTable rows={rows} isAdmin={isAdmin} loading={loading} onOpen={(r) => setOpenSaleId(r.id)} onVoid={isAdmin ? voidFromRow : undefined} />
         {!loading && result.hasMore && !capped && (
           <div style={styles.more}>
             <Button variant="plain" onClick={loadMore} loading={loadingMore}>

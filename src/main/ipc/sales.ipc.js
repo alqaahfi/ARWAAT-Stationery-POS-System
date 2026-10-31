@@ -6,6 +6,7 @@ const { getSaleDetail, buildReceiptData } = require('../printing/receiptData');
 const { logActivity } = require('../activity/activityLog');
 const { wholeQty, WHOLE_QTY_MSG } = require('../validation/quantity');
 const { peekApproval, consumeApproval } = require('../security/approvals');
+const { getDraftReceipt } = require('../printing/draftPreview');
 
 // ---------- product search / barcode (feed the cart) ----------
 
@@ -783,6 +784,7 @@ function registerSalesIpc() {
   ipcMain.handle('sales:list-recent', (event, payload) => listRecent(withCallerId(event, payload, 'userId')));
   ipcMain.handle('sales:get-for-edit', (event, payload) => getForEdit(withCallerId(event, payload, 'userId')));
   ipcMain.handle('sales:get-sale-detail', (event, { saleId } = {}) => getSaleDetail(saleId));
+  ipcMain.handle('sales:get-draft-receipt', (event, { token } = {}) => getDraftReceipt(token));
   ipcMain.handle('sales:get-receipt-data', (event, { saleId, showDues } = {}) => buildReceiptData(saleId, { showDues }));
 }
 

@@ -86,4 +86,4 @@ async function previewPurchase({ purchaseId }) {
   }
 }
 
-module.exports = { previewSale, previewPurchase };
+module.exports = { previewSale, previewPurchase, renderViewToPdf, thermalWidthMm };

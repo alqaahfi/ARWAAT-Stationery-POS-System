@@ -2,8 +2,9 @@ import React from 'react';
 import theme from '../../../config/theme';
 import glossary from '../../../config/glossary';
 import { formatCurrency } from '../../../utils/format';
-import { Badge, Card } from '../../../components/ui';
-import { InlineMessage, Money, c } from './common';
+import { Eye } from 'lucide-react';
+import { Badge, Button, Card, Kbd } from '../../../components/ui';
+import { InlineMessage, Money, c, keepFocus } from './common';
 
 const FORMAT_LABELS = { 'wholesale-a4': 'A4 invoice', 'retail-thermal': 'Small receipt', 'none': 'No receipt' };
 
@@ -23,6 +24,7 @@ export default function SummaryCard({
   previousBalance,
   newBalance,
   editingInvoiceNo,
+  onPreview,
 }) {
   const saleType = customer ? customer.customer_type : 'retail';
   const paying = stage === 'format' || stage === 'payment';
@@ -62,6 +64,14 @@ export default function SummaryCard({
       <div style={styles.divider} />
       <div style={styles.label}>Total</div>
       <Money value={formatCurrency(total)} style={styles.total} />
+
+      {onPreview && (stage === 'discount' || paying) && itemCount > 0 && (
+        <div style={{ marginTop: theme.spacing.md }} onMouseDown={keepFocus}>
+          <Button variant="secondary" fullWidth icon={Eye} tabIndex={-1} onClick={onPreview}>
+            Preview bill (not saved) <Kbd>F8</Kbd>
+          </Button>
+        </div>
+      )}
 
       {paying && (
         <>

@@ -9,7 +9,7 @@ import { formatCurrencyExact, formatDateTime } from '../../utils/format';
 // BrowserWindow + webContents.print() pattern as PrintPaymentReceipt.jsx.
 // Plain-text header from receipt_header_text stands in for the letterhead
 // image. A4 invoices carry no footer text (removed on the merged path too).
-export default function PrintInvoice({ saleId, purchaseId, showDues }) {
+export default function PrintInvoice({ saleId, purchaseId, draft, showDues }) {
   const [data, setData] = useState(null);
   const [settings, setSettings] = useState(null);
   const [notFound, setNotFound] = useState(false);
@@ -18,13 +18,15 @@ export default function PrintInvoice({ saleId, purchaseId, showDues }) {
     // The same page prints a supplier purchase receipt when given a purchaseId.
     const request = purchaseId
       ? window.api.purchases.getReceiptData({ purchaseId: Number(purchaseId) })
-      : window.api.sales.getReceiptData({ saleId: Number(saleId), showDues: !!showDues });
+      : draft
+        ? window.api.sales.getDraftReceipt({ token: draft })
+        : window.api.sales.getReceiptData({ saleId: Number(saleId), showDues: !!showDues });
     request.then((res) => {
       if (res && res.sale) setData(res);
       else setNotFound(true);
     });
     window.api.settings.getAll().then(setSettings);
-  }, [saleId, purchaseId, showDues]);
+  }, [saleId, purchaseId, draft, showDues]);
 
   if (notFound) return <div style={styles.page}>Sale not found.</div>;
   if (!data || !settings) return <div style={styles.page}>Loading…</div>;

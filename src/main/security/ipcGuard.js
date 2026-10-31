@@ -53,6 +53,7 @@ const FIRST_SYNC_CHANNELS = new Set(['sync:get-peers', 'sync:trigger-now']);
 // The only reads the ?print=1 views make (pages/Print/*).
 const PRINT_WINDOW_CHANNELS = new Set([
   'sales:get-receipt-data',
+  'sales:get-draft-receipt',
   'purchases:get-receipt-data',
   'ledgers:get-payment-by-id',
   'settings:get-all',
@@ -129,6 +130,7 @@ const ADMIN_CHANNELS = new Set([
   'letterheads:delete',
   'letterheads:pick-pdf',
   'letterheads:download-template',
+  'letterheads:download-word-template',
   'sync:get-secret',
   'sync:get-log',
   'sync:get-peers',
@@ -148,6 +150,7 @@ const PERMISSION_CHANNELS = {
   'sales:update': 'make_sale',
   'sales:void': 'make_sale',
   'sales:list-recent': 'make_sale',
+  'printing:preview-draft': 'make_sale',
   'sales:get-for-edit': 'make_sale',
   'payments:create-standalone': 'record_payment',
   'sales:list': 'view_sales_history',

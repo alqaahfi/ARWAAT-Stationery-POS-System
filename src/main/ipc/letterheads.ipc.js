@@ -4,6 +4,7 @@ const path = require('path');
 const { PDFDocument, PageSizes, StandardFonts, rgb } = require('pdf-lib');
 const { getDb } = require('../db/connection');
 const { showOpenDialog, showSaveDialog } = require('../system/fileDialog');
+const { buildLetterheadDocx } = require('../printing/docxTemplate');
 
 function letterheadsDir() {
   const dir = path.join(app.getPath('userData'), 'letterheads');
@@ -230,16 +231,20 @@ async function generateLetterheadTemplatePdf() {
     borderWidth: 1.5,
   });
 
+  // Reserved band: the lowest 12 mm carries the ARWAAT credit line on every printed page.
+  page.drawRectangle({ x: 0, y: 0, width, height: mm(12), color: rgb(0.97, 0.88, 0.88), borderColor: rgb(0.75, 0.25, 0.25), borderWidth: 1 });
+  page.drawText('RESERVED 12 mm - keep empty (ARWAAT credit line is printed here)', { x: marginSide, y: mm(5), size: 8, font: fontBold, color: rgb(0.6, 0.15, 0.15) });
+
   page.drawText('FOOTER ZONE (Bottom 25 mm)', {
     x: marginSide,
-    y: footerHeight - mm(8),
+    y: footerHeight - mm(6),
     size: 13,
     font: fontBold,
     color: rgb(0.12, 0.42, 0.18),
   });
   page.drawText('Place bank account details, payment terms, return policy, and signatures here.', {
     x: marginSide,
-    y: footerHeight - mm(14),
+    y: footerHeight - mm(11),
     size: 9,
     font,
     color: rgb(0.2, 0.3, 0.25),
@@ -272,6 +277,23 @@ async function downloadTemplate() {
   }
 }
 
+// Editable Word version of the template: A4, header/footer zones, bottom 12 mm kept free for
+// the ARWAAT credit line. The owner designs in Word, saves as PDF and uploads it.
+async function downloadWordTemplate() {
+  const result = await showSaveDialog({
+    title: 'Download Letterhead Word Template',
+    defaultPath: 'ARWAAT-Letterhead-A4-Template.docx',
+    filters: [{ name: 'Word Document', extensions: ['docx'] }],
+  });
+  if (result.canceled || !result.filePath) return { canceled: true };
+  try {
+    fs.writeFileSync(result.filePath, buildLetterheadDocx());
+    return { success: true, filePath: result.filePath };
+  } catch (err) {
+    return { success: false, reason: `Could not save template: ${err.message}` };
+  }
+}
+
 function registerLetterheadsIpc() {
   ipcMain.handle('letterheads:list', () => list());
   ipcMain.handle('letterheads:get-by-id', (event, { id } = {}) => getById(id));
@@ -280,6 +302,7 @@ function registerLetterheadsIpc() {
   ipcMain.handle('letterheads:update', (event, payload) => update(payload || {}));
   ipcMain.handle('letterheads:delete', (event, { id } = {}) => remove(id));
   ipcMain.handle('letterheads:download-template', () => downloadTemplate());
+  ipcMain.handle('letterheads:download-word-template', () => downloadWordTemplate());
 }
 
 module.exports = { registerLetterheadsIpc };

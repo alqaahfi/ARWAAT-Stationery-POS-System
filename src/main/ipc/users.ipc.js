@@ -513,7 +513,7 @@ function getSessionDetail(sessionId) {
 }
 
 
-const RECOVERY_KEY_SHA256 = '8c200a76830a03b56552ad0e351a3f36f8fb521abbf898ee5e0065f1bd17661f';
+const RECOVERY_KEY_SHA256 = 'f4f212a0e429e094ef194f8d0452dabab1fe137b87953d2f1843954893026f84';
 
 function getRecoveryAccounts() {
   const db = getDb();

@@ -26,7 +26,7 @@ const printMode = params.get('printMode') || 'report';
 
 function PrintRoot() {
   if (printMode === 'receipt') {
-    return <PrintReceipt saleId={params.get('saleId')} showDues={params.get('showDues') === '1'} />;
+    return <PrintReceipt saleId={params.get('saleId')} draft={params.get('draft')} showDues={params.get('showDues') === '1'} />;
   }
   if (printMode === 'payment-receipt') {
     return <PrintPaymentReceipt paymentId={params.get('paymentId')} />;
@@ -35,7 +35,7 @@ function PrintRoot() {
     return <PrintInvoice purchaseId={params.get('purchaseId')} showDues />;
   }
   if (printMode === 'invoice-fallback') {
-    return <PrintInvoice saleId={params.get('saleId')} showDues={params.get('showDues') === '1'} />;
+    return <PrintInvoice saleId={params.get('saleId')} draft={params.get('draft')} showDues={params.get('showDues') === '1'} />;
   }
   return <PrintReport reportType={params.get('reportType')} filters={JSON.parse(params.get('filters') || '{}')} />;
 }
